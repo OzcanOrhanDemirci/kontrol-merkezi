@@ -23,6 +23,7 @@
     <Reference Include="System.Drawing" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Management" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="LibreHardwareMonitorLib">
       <HintPath>lib\LibreHardwareMonitorLib.dll</HintPath>
     </Reference>

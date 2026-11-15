@@ -31,7 +31,9 @@ static class Program
         {
             switch (mode)
             {
-                case "": return 0;
+                case "": return Pencere.PencereUygulamasi.Run();
+                case "servis": return Servis.ServisUygulamasi.Run();
+                case "oku": return Oku.Calistir(args.Skip(1).ToArray());
                 case "rgb-dene": return Rgb.RgbDeneme.Calistir(args.Skip(1).ToArray());
                 default:
                     Log("Bilinmeyen komut: " + mode);
