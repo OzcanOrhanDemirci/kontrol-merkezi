@@ -104,7 +104,15 @@ sealed class GpuFan
         finally { Marshal.FreeHGlobal(mem); }
     }
 
+    // The sensor, fan and shutdown threads all call in: one driver call sequence at a time.
+    readonly object _io = new();
+
     public Durum Oku()
+    {
+        lock (_io) return OkuKilitli();
+    }
+
+    Durum OkuKilitli()
     {
         var st = Call(_getStatus, StatusSize);
         var ct = Call(_getControl, ControlSize);
@@ -130,6 +138,11 @@ sealed class GpuFan
     public void Oto() => Yaz(manual: false);
 
     void Yaz(bool manual)
+    {
+        lock (_io) YazKilitli(manual);
+    }
+
+    void YazKilitli(bool manual)
     {
         var ct = Call(_getControl, ControlSize);
         int n = Math.Min(BitConverter.ToInt32(ct, 8), 32);

@@ -16,11 +16,14 @@ sealed class BoruSunucu : IDisposable
 {
     public const string Name = "KontrolMerkezi";
 
+    // Each client has its own bounded queue and writer thread: the light, sensor and fan threads only enqueue and
+    // never touch a pipe, so a client that stops reading cannot stall the service. A full queue drops that client.
     sealed class Istemci
     {
         public NamedPipeServerStream Pipe;
         public StreamWriter Writer;
-        public readonly object Lock = new();
+        public readonly System.Collections.Concurrent.BlockingCollection<string> Queue = new(256);
+        public volatile bool Dead;
     }
 
     readonly List<Istemci> _clients = new();
@@ -59,7 +62,8 @@ sealed class BoruSunucu : IDisposable
                 pipe.WaitForConnection();
                 var c = new Istemci { Pipe = pipe, Writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = false, NewLine = "\n" } };
                 lock (_clients) _clients.Add(c);
-                Send(c, _hello());
+                c.Queue.TryAdd(_hello());
+                new Thread(() => WriteLoop(c)) { IsBackground = true, Name = "boru-yaz" }.Start();
                 new Thread(() => ReadLoop(c)) { IsBackground = true, Name = "boru-oku" }.Start();
             }
             catch (Exception ex)
@@ -89,33 +93,44 @@ sealed class BoruSunucu : IDisposable
         Drop(c);
     }
 
-    void Drop(Istemci c)
+    void WriteLoop(Istemci c)
     {
-        lock (_clients) _clients.Remove(c);
-        try { c.Pipe.Dispose(); } catch { }
-    }
-
-    static bool Send(Istemci c, string line)
-    {
-        lock (c.Lock)
+        try
         {
-            try
+            foreach (var line in c.Queue.GetConsumingEnumerable())
             {
                 c.Writer.Write(line);
                 c.Writer.Write('\n');
                 c.Writer.Flush();
-                return true;
             }
-            catch { return false; }
         }
+        catch { }
+        Drop(c);
     }
 
+    void Drop(Istemci c)
+    {
+        c.Dead = true;
+        lock (_clients) _clients.Remove(c);
+        try { c.Queue.CompleteAdding(); } catch { }
+        try { c.Pipe.Dispose(); } catch { }
+    }
+
+    /// <summary>Never blocks: a client whose queue is full (it stopped reading) is dropped.</summary>
     public void Broadcast(string line)
     {
         Istemci[] list;
         lock (_clients) list = _clients.ToArray();
         foreach (var c in list)
-            if (!Send(c, line)) Drop(c);
+        {
+            bool ok;
+            try { ok = !c.Dead && c.Queue.TryAdd(line); } catch { ok = false; }
+            if (!ok && !c.Dead)
+            {
+                Program.Log("boru: okumayan istemci bırakıldı");
+                Drop(c);
+            }
+        }
     }
 
     public void Dispose()

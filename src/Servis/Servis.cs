@@ -75,6 +75,7 @@ sealed class Servis : IDisposable
     GpuFan.Durum _gpuSnap;
     bool _rgbAcik;
     readonly BlockingCollection<string> _fanQueue = new();
+    Thread _fanThread;
 
     volatile bool _stop;
     volatile bool _uyku;            // between suspend and resume: no device writes
@@ -100,7 +101,8 @@ sealed class Servis : IDisposable
         _jarvis = new JarvisIzleyici();
         _jarvis.Degisti += () => { var g = _girdi; _girdi = With(g, j: _jarvis.Durum); Publish(); };
 
-        new Thread(FanWorker) { IsBackground = true, Name = "fan" }.Start();
+        _fanThread = new Thread(FanWorker) { IsBackground = true, Name = "fan" };
+        _fanThread.Start();
         new Thread(SensorLoop) { IsBackground = true, Name = "sensor", Priority = ThreadPriority.AboveNormal }.Start();
         new Thread(LightLoop) { IsBackground = true, Name = "isik", Priority = ThreadPriority.Highest }.Start();
     }
@@ -146,7 +148,9 @@ sealed class Servis : IDisposable
 
     // ---------------------------------------------------------------- persisted targets
 
-    static DateTime BootTime() => DateTime.Now - TimeSpan.FromMilliseconds(GetTickCount64());
+    // UTC, so a DST change or clock correction does not make one boot look like another
+    static DateTime BootTime() => DateTime.UtcNow - TimeSpan.FromMilliseconds(GetTickCount64());
+    static readonly object SaveLock = new();
 
     void LoadState()
     {
@@ -157,7 +161,7 @@ sealed class Servis : IDisposable
             {
                 var d = Json.Parse(File.ReadAllText(StatePath, Encoding.UTF8));
                 if (d != null && d.TryGetValue("acilis", out var b) && DateTime.TryParse(b as string, Inv, DateTimeStyles.RoundtripKind, out var boot))
-                    sameBoot = Math.Abs((boot - BootTime()).TotalMinutes) < 2;
+                    sameBoot = Math.Abs((boot.ToUniversalTime() - BootTime()).TotalMinutes) < 2;
                 gpuMax = Json.B(d, "gpuMax") == true;
                 rgbOn = Json.B(d, "rgbAcik") == true;
             }
@@ -181,19 +185,25 @@ sealed class Servis : IDisposable
             string text;
             lock (_lock)
                 text = new Json().Obj().Str("acilis", BootTime().ToString("o", Inv)).Bool("gpuMax", _gpuHedef == "max" && _gpuBizim).Bool("rgbAcik", _rgbAcik).End().ToString();
-            var tmp = StatePath + ".yeni";
-            File.WriteAllText(tmp, text, new UTF8Encoding(false));
-            if (File.Exists(StatePath)) File.Delete(StatePath);
-            File.Move(tmp, StatePath);
+            lock (SaveLock)
+            {
+                var tmp = StatePath + ".yeni";
+                File.WriteAllText(tmp, text, new UTF8Encoding(false));
+                if (File.Exists(StatePath)) File.Replace(tmp, StatePath, null);
+                else File.Move(tmp, StatePath);
+            }
         }
         catch (Exception ex) { Program.Log("durum kaydedilemedi: " + ex.Message); }
     }
 
     // ---------------------------------------------------------------- commands
 
+    readonly object _cmdLock = new();
+
     void OnCommand(string line)
     {
         var d = Json.Parse(line);
+        lock (_cmdLock)   // several clients: commands are applied one at a time
         switch (Json.S(d, "komut"))
         {
             case "kapat":
@@ -219,15 +229,17 @@ sealed class Servis : IDisposable
             case "ayar-yukle":
             {
                 var a = Ayarlar.Yukle();
-                var m = new RenkMotoru(a) { Acik = _motor.Acik };
+                bool acik;
+                lock (_lock) acik = _rgbAcik;
+                var m = new RenkMotoru(a) { Acik = acik };
                 _ayar = a;
                 _motor = m;
                 Program.Log("ayarlar yeniden yüklendi");
                 Publish();
                 break;
             }
-            case "fan-kasa": _fanQueue.Add("kasa"); break;
-            case "fan-gpu": _fanQueue.Add("gpu"); break;
+            case "fan-kasa": if (!_fanQueue.IsAddingCompleted) _fanQueue.Add("kasa"); break;
+            case "fan-gpu": if (!_fanQueue.IsAddingCompleted) _fanQueue.Add("gpu"); break;
             case "rgb":
                 bool on = Json.B(d, "acik") == true;
                 lock (_lock) _rgbAcik = on;
@@ -275,7 +287,14 @@ sealed class Servis : IDisposable
         Program.Log("kasa fanları: geçiş başladı | önce: " + before);
         if (!before.IsMax)
         {
-            FanCipi.SaveState(before);
+            // An unarchived record of our own means an earlier switch did not finish cleanly (a failed verify): the chip
+            // may be half-way and must not overwrite the genuine BIOS bytes recorded then.
+            FanSnap own = null;
+            if (File.Exists(FanCipi.StatePath)) { own = FanCipi.LoadState(out var s0); if (s0 != FanCipi.StatePath) own = null; }
+            if (own != null && own.Mode != before.Mode)
+                Program.Log("kasa fanları: çip temiz BIOS durumunda değil, önceki kayıt korunuyor (" + own.RegText() + ")");
+            else
+                FanCipi.SaveState(before);
             _fan.ApplyMax();
             var after = _fan.Snapshot();
             Program.Log("kasa fanları: MAX yazıldı | sonra: " + after + (after.IsMax ? "" : "  !! doğrulama BAŞARISIZ"));
@@ -297,6 +316,13 @@ sealed class Servis : IDisposable
             bool ok = after.MatchesSaved(saved);
             Program.Log("kasa fanları: BIOS geri yazıldı (" + src + ") | sonra: " + after + (ok ? "" : "  !! kayıtla EŞLEŞMEDİ"));
             if (ok && src == FanCipi.StatePath) FanCipi.ArchiveState();
+            if (!ok)
+            {
+                // half-restored: go back to MAX so the chip matches the target (the safe side)
+                _fan.ApplyMax();
+                after = _fan.Snapshot();
+                Program.Log("kasa fanları: dönüş doğrulanamadı, MAX yeniden yazıldı | " + after);
+            }
             lock (_lock) { _kasaSnap = after; _kasaHedef = ok ? "bios" : "max"; }
             Event("fan-kasa", ok, ok ? "Fanlar BIOS ayarına döndü" : "BIOS'a dönüş doğrulanamadı; ayrıntı günlükte");
         }
@@ -601,22 +627,32 @@ sealed class Servis : IDisposable
 
     // ---------------------------------------------------------------- power and shutdown
 
+    /// <summary>Before sleep: every device dark and released, waiting up to a second each (Windows allows ~2 s).</summary>
     public void OnSuspend()
     {
         Program.Log("uyku: ışıklar karartılıyor");
         _uyku = true;
-        foreach (var w in _yazicilar) w.Birak();
+        foreach (var w in _yazicilar)
+            if (!w.Uyu(TimeSpan.FromMilliseconds(1000))) Program.Log("uyku: " + w.Cihaz.Ad + " bir saniyede kararmadı");
         _karanlik = true;
     }
+
+    System.Threading.Timer _wakeTimer;
 
     public void OnResume()
     {
         Program.Log("uyanış");
-        // USB devices re-enumerate on wake: the writers re-open on the next frame (handles were released at suspend).
-        foreach (var w in _yazicilar) w.Birak();
+        foreach (var w in _yazicilar) w.Uyan();
         _karanlik = true;
         _uyku = false;
-        _fanQueue.Add("uyanis");
+        // Fans: check right after wake and once more later, in case the EC or the driver resets after a delay.
+        try
+        {
+            _fanQueue.Add("uyanis");
+            _wakeTimer?.Dispose();
+            _wakeTimer = new System.Threading.Timer(_ => { try { _fanQueue.Add("uyanis"); } catch { } }, null, 20000, Timeout.Infinite);
+        }
+        catch (InvalidOperationException) { /* shutting down */ }
     }
 
     int _shutdown;
@@ -628,10 +664,15 @@ sealed class Servis : IDisposable
         if (Interlocked.Exchange(ref _shutdown, 1) == 1) return;
         Program.Log("servis kapanıyor: " + why);
         _stop = true;
+        // Let a fan switch in progress finish (a chip sequence cut between its begin and end is the one way a fan
+        // could be left pinned low), and start no new one.
+        try { _fanQueue.CompleteAdding(); } catch { }
+        if (_fanThread != null && Thread.CurrentThread != _fanThread && !_fanThread.Join(4000))
+            Program.Log("kapanış: fan işi 4 sn'de bitmedi");
         try
         {
             bool restore;
-            lock (_lock) restore = _gpuHedef == "max" && _gpuBizim;
+            lock (_lock) restore = _gpuBizim;   // we put the coolers in manual at some point: give them back
             if (restore && _gpuFan != null)
             {
                 _gpuFan.Oto();
@@ -705,7 +746,7 @@ static class ServisUygulamasi
         const int WM_POWERBROADCAST = 0x218, WM_QUERYENDSESSION = 0x11, WM_ENDSESSION = 0x16;
         const int PBT_APMSUSPEND = 0x4, PBT_APMRESUMESUSPEND = 0x7, PBT_APMRESUMEAUTOMATIC = 0x12;
         readonly Servis _s;
-        DateTime _lastResume = DateTime.MinValue;
+        bool _suspended;
 
         public GizliPencere(Servis s)
         {
@@ -724,11 +765,12 @@ static class ServisUygulamasi
             if (m.Msg == WM_POWERBROADCAST)
             {
                 int ev = m.WParam.ToInt32();
-                if (ev == PBT_APMSUSPEND) _s.OnSuspend();
-                else if (ev == PBT_APMRESUMEAUTOMATIC || ev == PBT_APMRESUMESUSPEND)
+                if (ev == PBT_APMSUSPEND) { _suspended = true; _s.OnSuspend(); }
+                else if ((ev == PBT_APMRESUMEAUTOMATIC || ev == PBT_APMRESUMESUSPEND) && _suspended)
                 {
-                    // both arrive on a user wake; act once
-                    if (DateTime.UtcNow - _lastResume > TimeSpan.FromSeconds(20)) { _lastResume = DateTime.UtcNow; _s.OnResume(); }
+                    // both arrive on a user wake: act on the first resume after each suspend
+                    _suspended = false;
+                    _s.OnResume();
                 }
             }
             else if (m.Msg == WM_ENDSESSION && m.WParam != IntPtr.Zero)

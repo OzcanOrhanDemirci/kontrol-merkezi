@@ -76,8 +76,15 @@ public sealed class Ayarlar
             if (d.TryGetValue("islemciRengi", out var ir)) a.IslemciRengi = Ints(ir, 3);
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
                 foreach (var kv in kd) a.Kazanc[kv.Key] = Doubles(kv.Value, 3);
-            if (d.TryGetValue("aioHalkalari", out var ah)) a.AioHalkalari = Ints(ah, -1);
+            if (d.TryGetValue("aioHalkalari", out var ah))
+            {
+                var rings = Ints(ah, -1);
+                if (rings.Length > 0 && rings.All(n => n > 0 && n <= 60)) a.AioHalkalari = rings;
+                else Program.Log("ayarlar: aioHalkalari geçersiz, varsayılan kullanılıyor");
+            }
             if (d.TryGetValue("pompaHalkasi", out var ph)) a.PompaHalkasi = Convert.ToInt32(ph);
+            foreach (var arr in new[] { a.YapayZekaRengi, a.IslemciRengi }.Concat(a.Duraklar.Select(x => x.Renk)))
+                for (int i = 0; i < arr.Length; i++) arr[i] = Math.Max(0, Math.Min(255, arr[i]));
         }
         catch (Exception ex)
         {

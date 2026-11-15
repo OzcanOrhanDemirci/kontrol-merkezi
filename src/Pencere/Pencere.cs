@@ -162,6 +162,13 @@ static class PencereUygulamasi
                 s.IsGeneralAutofillEnabled = false;
                 core.SetVirtualHostNameToFolderMapping(HostName, uiDir, CoreWebView2HostResourceAccessKind.Allow);
                 core.WebMessageReceived += OnWebMessage;
+                core.ProcessFailed += (_, ev) =>
+                {
+                    // a crashed renderer would leave a black window: log it and load the page again
+                    Program.Log("pencere: WebView2 süreci düştü (" + ev.ProcessFailedKind + "), sayfa yeniden yükleniyor");
+                    _pageReady = false;
+                    try { BeginInvoke((Action)(() => { try { _wv.CoreWebView2.Reload(); } catch { } })); } catch { }
+                };
                 core.Navigate("https://" + HostName + "/index.html");
             }
             catch (Exception ex)
@@ -230,11 +237,14 @@ static class PencereUygulamasi
 
         void SendToService(string json)
         {
+            bool sent = false;
             lock (_writeLock)
             {
-                try { _writer?.Write(json.Replace("\n", " ") + "\n"); _writer?.Flush(); }
+                try { if (_writer != null) { _writer.Write(json.Replace("\n", " ") + "\n"); _writer.Flush(); sent = true; } }
                 catch (Exception ex) { Program.Log("pencere: komut gönderilemedi: " + ex.Message); }
             }
+            if (!sent)
+                Post("{\"tip\":\"olay\",\"tur\":\"baglanti\",\"sonuc\":\"hata\",\"metin\":\"Servise bağlı değil; komut gönderilemedi.\"}");
         }
 
         void Conn(string state)

@@ -107,6 +107,7 @@ sealed class JarvisIzleyici : IDisposable
 
     void Poll()
     {
+        var started = DateTime.UtcNow;   // a hook landing while the list is being read is newer than this poll
         try
         {
             var psi = new ProcessStartInfo(ClaudeExe(), "agents --json")
@@ -129,7 +130,7 @@ sealed class JarvisIzleyici : IDisposable
             lock (_lock)
             {
                 _pollOk = true;
-                _pollAt = DateTime.UtcNow;
+                _pollAt = started;
                 _alive = row != null;
                 if (row != null)
                 {
