@@ -558,10 +558,10 @@ function renderRgb() {
 let tickKey = '';
 function buildTicks() {
   const st = stops() || L.stopsT.map(c => ({ c }));
-  const key = st.map(s => s.c).join(',');
+  const key = st.map(s => s.c + (s.ad || '')).join(',');
   if (key === tickKey) return;
   tickKey = key;
-  $('#ticks').innerHTML = st.map((s, i) => `<div class="anch"><div class="tick" data-c="${s.c}">${s.c}<small>°</small></div></div>`).join('');
+  $('#ticks').innerHTML = st.map((s, i) => `<div class="anch"><div class="tick" data-c="${s.c}">${s.c}<small>°</small>${s.ad ? `<span class="ad">${esc(s.ad)}</span>` : ''}</div></div>`).join('');
 }
 const arcPoint = (c, r) => {
   const a = (c - scaleMin) / (scaleMax - scaleMin);
