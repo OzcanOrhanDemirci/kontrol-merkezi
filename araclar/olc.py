@@ -179,5 +179,42 @@ def cmd_olc():
         print(l)
 
 
+def cmd_titreme():
+    """Temporal stability of a resting view: N screenshots in a row, per-pixel change between
+    consecutive frames (8-bit units) over 16x16 blocks (block means catch crawling blotches that
+    per-pixel numbers hide). Reported separately for the whole frame and outside the fan faces."""
+    import numpy as np
+    from PIL import Image
+    import io
+    js = arg("--js", "__km.sim.temp(46)")
+    n = arg("--n", 8)
+    with sync_playwright() as p:
+        b, pg, logs, first = open_page(p, 2560, 1440)
+        pg.evaluate(f"() => {{ {js} }}")
+        time.sleep(arg("--bekle", 6.0))
+        frames = []
+        for i in range(n):
+            frames.append(np.asarray(Image.open(io.BytesIO(pg.screenshot())).convert("L"), dtype=np.float32))
+            time.sleep(0.12)
+        mask = pg.evaluate("""() => { const r = s => { const e = document.querySelector(s).getBoundingClientRect(); return [e.left, e.top, e.right, e.bottom]; };
+            return __km.M.tab === 'fan' ? [r('#hotKasa'), r('#hotGpu')] : []; }""")
+        b.close()
+    F = np.stack(frames)
+    d = np.abs(np.diff(F, axis=0))
+    keep = np.ones(F.shape[1:], bool)
+    for x0, y0, x1, y1 in mask:
+        keep[int(y0):int(y1), int(x0):int(x1)] = False
+    H, W = F.shape[1] // 16 * 16, F.shape[2] // 16 * 16
+    blocks = F[:, :H, :W].reshape(n, H // 16, 16, W // 16, 16).mean(axis=(2, 4))
+    bd = np.abs(np.diff(blocks, axis=0))
+    kb = keep[:H, :W].reshape(H // 16, 16, W // 16, 16).all(axis=(1, 3))
+    res = {
+        "piksel_ort": round(float(d.mean()), 3), "piksel_ort_fan_disi": round(float(d[:, keep].mean()), 3),
+        "piksel_p999_fan_disi": round(float(np.percentile(d[:, keep], 99.9)), 2),
+        "blok_ort_fan_disi": round(float(bd[:, kb].mean()), 4), "blok_max_fan_disi": round(float(bd[:, kb].max()), 3),
+    }
+    print(json.dumps(res))
+
+
 if __name__ == "__main__":
-    {"kare": cmd_kare, "durumlar": cmd_durumlar, "olc": cmd_olc}[sys.argv[1]]()
+    {"kare": cmd_kare, "durumlar": cmd_durumlar, "olc": cmd_olc, "titreme": cmd_titreme}[sys.argv[1]]()

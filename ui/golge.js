@@ -400,6 +400,16 @@ void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out
     if (dot(abs(n), vec3(1.0)) > 0.99 && abs(n.x) + abs(n.y) + abs(n.z) < 1.01) n = normalize(n + 1.4 * e);
     alb = vec3(0.014, 0.0145, 0.016); F0 = vec3(0.05); a = m == M_PLINTH ? 0.16 : 0.12;
     if (m == M_FRAME && length(q.xz) < FBR + 0.02) { a = 0.32; alb = vec3(0.01); }
+    if (m == M_FRAME && n.y < -0.5) {          // four titanium screws in the corners, hex recess
+      vec2 sc = abs(q.xz) - vec2(5.05);
+      float r = length(sc);
+      if (r < 0.36) {
+        alb = vec3(0.0); F0 = vec3(0.56, 0.52, 0.47); a = 0.14;
+        n = normalize(vec3(0.0, -1.0, 0.0) + vec3(sc.x * sign(q.x), 0.0, sc.y * sign(q.z)) * 1.1);
+        vec2 h = abs(sc);
+        if (max(h.x * 0.866 + h.y * 0.5, h.y) < 0.14) { alb = vec3(0.004); F0 = vec3(0.03); a = 0.5; n = vec3(0.0, -1.0, 0.0); }
+      } else if (r < 0.44) { alb = vec3(0.003); a = 0.6; }
+    }
   } else if (m == M_ROTOR) {
     alb = vec3(0.30, 0.31, 0.33); F0 = vec3(0.045); a = 0.22; gTr = 0.72;   // frosted, translucent like ARGB fan blades
   } else if (m == M_HUB || m == M_TI) {

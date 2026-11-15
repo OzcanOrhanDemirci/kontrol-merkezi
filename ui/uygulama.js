@@ -151,7 +151,7 @@ function resize() {
 // ==================================================================== camera
 const CAMS = {
   fan: { pos: [0, -74, 13.5], tgt: [0, 6, 15.2], fov: 30 },
-  rgb: { pos: [0, -70, 36], tgt: [0, 24, 30.5], fov: 33 },
+  rgb: { pos: [0, -66, 41], tgt: [0, 24, 35.5], fov: 31 },
 };
 function camState() {
   const k = smoother(clamp(M.camT, 0, 1));
@@ -190,16 +190,23 @@ function updateLights(dt) {
   const iz = D.isik;
   const connected = D.link === 'bagli';
   const on = connected && D.durum && D.durum.rgb ? !!D.durum.rgb.acik : false;
-  M.rgbOn = approach(M.rgbOn, on ? 1 : 0, dt, on ? 0.35 : 0.22);
+  M.rgbOn = on ? 1 : approach(M.rgbOn, 0, dt, 0.22);
   const k = 1 - Math.exp(-dt / 0.045);
   const HK = 4.2;                                   // LED radiance scale
   const off = 1 - M.rgbOn;
   L.prevHalo.set(L.halo);
+  // ignition: the chain lights from the top LED outward both ways (startup and RGB on)
+  if (on && !L.wasOn) L.igniteT = M.t;
+  L.wasOn = on;
+  const ig = M.t - (L.igniteT == null ? -99 : L.igniteT);
   for (let i = 0; i < 84; i++) {
     const c = iz && iz.halka && iz.halka[i] ? iz.halka[i] : [0, 0, 0];
+    const dly = Math.min(i, 84 - i) / 42 * 0.55;
+    const sweep = clamp((ig - dly) / 0.12, 0, 1);
+    const flash = 1 + 1.2 * Math.exp(-Math.max(0, ig - dly) / 0.09) * (ig > dly ? 1 : 0);
     for (let j = 0; j < 3; j++) {
-      const target = lin(c[j]) * HK * M.rgbOn + NEUTRAL[j] * 0.035 * off;
-      L.halo[i * 3 + j] += (target - L.halo[i * 3 + j]) * k;
+      const target = lin(c[j]) * HK * M.rgbOn * sweep * flash + NEUTRAL[j] * 0.035 * off;
+      L.halo[i * 3 + j] += (target - L.halo[i * 3 + j]) * (ig < 1.2 ? 1 - Math.exp(-dt / 0.02) : k);
     }
   }
   for (let i = 0; i < 10; i++) {
@@ -281,7 +288,7 @@ function render(dt) {
   // accumulation control
   const mov = moving();
   const dl = lightChange();
-  let aMin = clamp(dl * 18, 1 / 400, 0.6);
+  let aMin = clamp(dl * 6, 1 / 400, 0.2);
   if (mov) { R.n = 0; }
   const nEff = Math.min(R.n + 1, 1 / aMin);
   R.n = nEff;
@@ -289,10 +296,26 @@ function render(dt) {
   const alphaB = mov ? 1 : Math.max(alphaA, dl > 2e-4 ? 0.6 : 0);
   R.seed = mov ? 7 : (R.seed + 1) % 1000003;
 
+  // resting: converged and the light steady -> only the moving rotors keep tracing
+  R.idle = !mov && R.n >= 300 && dl < 3e-4 && !params.has('noidle');
+  let traceOn = true;
+  R.stillFrames = R.idle && M.tab === 'rgb' && M.light >= 1 ? (R.stillFrames || 0) + 1 : 0;
+  if (R.stillFrames > 3) { R.gpuSkipped = (R.gpuSkipped || 0) + 1; return; }   // nothing changes: the canvas keeps its image
   gl.bindVertexArray(R.vao);
   const tq = R.timer && R.queries.length < 6 ? gl.createQuery() : null;
   if (tq) gl.beginQuery(R.timer.TIME_ELAPSED_EXT, tq);
 
+  if (R.idle) {
+    if (M.tab === 'rgb') traceOn = false;
+    else {
+      const rs = R.fanRects || [{ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }, { left: 0, top: 0, right: 0, bottom: 0 }];
+      const sx = w / window.innerWidth, sy = h / window.innerHeight;
+      const x0 = Math.floor(Math.min(rs[0].left, rs[1].left) * sx) - 2, x1 = Math.ceil(Math.max(rs[0].right, rs[1].right) * sx) + 2;
+      const y0 = Math.floor(Math.min(rs[0].top, rs[1].top) * sy) - 2, y1 = Math.ceil(Math.max(rs[0].bottom, rs[1].bottom) * sy) + 2;
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(x0, h - y1, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+    }
+  }
   // 1) path trace, blended into the accumulation buffers
   gl.bindFramebuffer(gl.FRAMEBUFFER, R.fb.acc.f);
   gl.viewport(0, 0, w, h);
@@ -352,8 +375,9 @@ function render(dt) {
   gl.uniform4f(U(p, 'uScale'), scaleMin, scaleMax, M.tempShown, 0.32 + 0.25 * M.rgbOn);
   gl.uniform3fv(U(p, 'uMarkCol'), L.mark);
   gl.uniform1f(U(p, 'uFill'), 0.9 + 1.4 * M.rgbOn);
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (traceOn) gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.disable(gl.BLEND);
+  gl.disable(gl.SCISSOR_TEST);
 
   // 2) glare chain
   const B = R.fb.bloom;
@@ -403,7 +427,7 @@ function render(dt) {
     }
   }
   R.frame++;
-  R.rays += w * h * spp * 3.2;
+  if (traceOn && !R.idle) R.rays += w * h * spp * 3.2;
   R.cpuMs = performance.now() - t0;
   if (R.frame === 1) {
     R.firstFrameMs = performance.now() - bootT;
@@ -577,6 +601,7 @@ function layout() {
   };
   const showFan = M.tab === 'fan' && !moving(), showRgb = M.tab === 'rgb' && !moving();
   const rk = rectOf(FCL, 6, 6, FCL[1] - 1.3), rg = rectOf(FCR, 6, 6, FCR[1] - 1.3), rt = rectOf(HC, 4.3, 4.3, HC[1] - 1.1);
+  R.fanRects = [rk, rg].map(r => ({ left: r[0], top: r[1], right: r[2], bottom: r[3] }));
   placeRect($('#hotKasa'), ...rk); placeRect($('#hotGpu'), ...rg); placeRect($('#hotTog'), ...rt);
   $('#hotKasa').style.display = showFan ? 'block' : 'none';
   $('#hotGpu').style.display = showFan ? 'block' : 'none';
@@ -584,12 +609,14 @@ function layout() {
   // RGB: toggle caption under the bezel, temperature riding the marker, stops along the arc
   const tc = pj([HC[0], HC[1] - 1.1, HC[2] - 5.6]);
   place($('#aTog'), tc[0], tc[1]);
-  const np = pj(arcPoint(clamp(M.tempShown, scaleMin, scaleMax), 29.6));
+  const np = pj(arcPoint(clamp(M.tempShown, scaleMin, scaleMax), 16.8));
   place($('#aNow'), np[0], np[1]);
   document.querySelectorAll('#ticks .anch').forEach(el => {
     const c = +el.firstChild.dataset.c;
-    const q = pj(arcPoint(c, 27.7));
+    const q = pj(arcPoint(c, 27.3));
     place(el, q[0], q[1]);
+    const near = clamp((Math.abs(c - M.tempShown) - 2.5) / 3, 0, 1).toFixed(2);
+    if (el._o !== near) { el._o = near; el.style.opacity = near; }
   });
   // side columns, aligned with the ring's horizontal diameter
   const lp = pj([HC[0] - 33, HC[1], HC[2] + 6]), rp = pj([HC[0] + 33, HC[1], HC[2] + 6]);
