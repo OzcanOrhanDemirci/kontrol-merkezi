@@ -166,7 +166,7 @@ sealed class JarvisIzleyici : IDisposable
         lock (_lock)
         {
             if (!_pollOk && _pollAt == DateTime.MinValue) d = JarvisDurum.Yok;
-            else if (!_alive || _failed)
+            else if (!_alive || _failed || (_hookEvent == "bitti" && _hookSession != null && _hookSession == _sessionId && _hookAt > _pollAt))
             {
                 var since = _lastSeen > _start ? _lastSeen : _start;
                 d = !_failed && DateTime.UtcNow - since < RestartWindow && KeepAliveEnabled() ? JarvisDurum.Yeniden : JarvisDurum.Kapali;
