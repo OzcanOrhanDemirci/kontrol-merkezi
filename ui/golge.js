@@ -207,6 +207,8 @@ void trace(vec3 ro, vec3 rd, float tmax) {
   vec2 hb = boxT(ro, inv, HC, vec3(BR1 + 0.1, HD + 0.1, BR1 + 0.1), bn);
   if (hb.x < hb.y && hb.y > 0.0 && hb.x < hT) {
     take(tubeY(ro, rd, HC, HR0, HR1, HD, n), n, M_HALO, 0);
+    take(tubeY(ro, rd, HC, HR1, HR1 + 0.3, HD + 0.16, n), n, M_TI, 2);     // machined lips around the light guide
+    take(tubeY(ro, rd, HC, HR0 - 0.3, HR0, HD + 0.16, n), n, M_TI, 3);
     take(tubeY(ro, rd, HC, BR0, BR1, BD, n), n, M_BAND, 0);
     take(tubeY(ro, rd, HC, TR0, TR1, TD, n), n, M_TI, 0);
     take(tubeY(ro, rd, HC + vec3(0.0, 0.25 + uPush.z, 0.0), 0.0, TR0, 0.35, n), n, M_TOG, 0);
@@ -259,7 +261,7 @@ vec3 bandEmit(vec3 p, vec3 n, out float tick) {
   float tc = t - floor(t + 0.5);
   float tw = 0.06 * (r / 25.0);
   float major = step(abs(mod(floor(t + 0.5), 5.0)), 0.01);
-  if (abs(tc) < tw * (1.0 + major) && r > (major > 0.5 ? 24.85 : 25.15) && r < 25.55) tick = 1.0;
+  if (abs(tc) < tw * (1.0 + major) && r > (major > 0.5 ? 24.85 : 25.15) && r < 25.55) { tick = 1.0; return vec3(0.16, 0.155, 0.15) * (0.6 + 0.4 * major); }  // luminous lacquer
   if (r > 24.3 && r < 24.65) {
     vec3 c = stopColor(t) * uScale.w;
     float fill = t < uScale.z ? uFill : 0.0;
@@ -413,7 +415,7 @@ void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out
   } else if (m == M_ROTOR) {
     alb = vec3(0.30, 0.31, 0.33); F0 = vec3(0.045); a = 0.22; gTr = 0.72;   // frosted, translucent like ARGB fan blades
   } else if (m == M_HUB || m == M_TI) {
-    alb = vec3(0.0); F0 = vec3(0.56, 0.52, 0.47); a = m == M_HUB ? 0.07 : 0.11;
+    alb = vec3(0.0); F0 = vec3(0.56, 0.52, 0.47); a = m == M_HUB ? 0.07 : (f == 1 ? 0.34 : 0.11);   // spokes brushed
     if (m == M_HUB && n.y < -0.5) {           // domed cap with concentric machining
       vec2 q = p.xz - (f == 0 ? FCL.xz : FCR.xz);
       float r = length(q);

@@ -216,5 +216,32 @@ def cmd_titreme():
     print(json.dumps(res))
 
 
+def cmd_gecis():
+    """Frames during a tab change, as a contact sheet (gecis-dizi.jpg) plus 1:1 crops of two of them."""
+    from PIL import Image
+    import io
+    with sync_playwright() as p:
+        b, pg, logs, first = open_page(p, 2560, 1440)
+        pg.evaluate("__km.sim.temp(54)")
+        time.sleep(5)
+        pg.evaluate("__km.setTab('rgb', true)")
+        ims = []
+        for i in range(8):
+            ims.append(Image.open(io.BytesIO(pg.screenshot())).convert("RGB"))
+            time.sleep(0.12)
+        b.close()
+    tw = 640
+    sheet = Image.new("RGB", (tw * 4, 360 * 2))
+    for i, im in enumerate(ims):
+        sheet.paste(im.resize((tw, 360), Image.LANCZOS), ((i % 4) * tw, (i // 4) * 360))
+    sheet.save(OUT / "gecis-dizi.jpg", quality=90)
+    for i in (2, 4):
+        ims[i].crop((800, 600, 1900, 1300)).save(OUT / f"gecis-{i}-kirp.jpg", quality=92)
+    print(OUT / "gecis-dizi.jpg")
+
+
 if __name__ == "__main__":
+    if sys.argv[1] == "gecis":
+        cmd_gecis()
+        sys.exit()
     {"kare": cmd_kare, "durumlar": cmd_durumlar, "olc": cmd_olc, "titreme": cmd_titreme}[sys.argv[1]]()
