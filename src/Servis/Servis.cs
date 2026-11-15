@@ -35,8 +35,18 @@ sealed class Servis : IDisposable
     static string HistoryPath => Path.Combine(Program.DataDir, "isi-gecmisi.csv");
 
     readonly bool _admin;
-    readonly Ayarlar _ayar;
-    readonly RenkMotoru _motor;
+    volatile Ayarlar _ayar;
+    volatile RenkMotoru _motor;
+    // Development/calibration overrides (pipe command "onizle"); null = live value. Not reachable from the window.
+    volatile Zorla _zorla = new();
+
+    sealed class Zorla
+    {
+        public double? C;
+        public bool? YapayZeka, Islemci;
+        public JarvisDurum? Jarvis;
+        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null;
+    }
     readonly YerelModel _model = new();
     readonly Afterburner _ab = new();
     JarvisIzleyici _jarvis;
@@ -191,6 +201,31 @@ sealed class Servis : IDisposable
                 Program.Log("servis: kapatma isteği");
                 KapatIstegi?.Invoke();
                 break;
+            case "onizle":
+            {
+                // {"komut":"onizle","c":64,"kip":"yapayzeka"|"islemci"|null,"jarvis":"dusunuyor"|...} ; {"komut":"onizle"} clears
+                var z = new Zorla();
+                if (d.TryGetValue("c", out var c) && c != null) z.C = Convert.ToDouble(c, Inv);
+                var kip = Json.S(d, "kip");
+                if (kip == "yapayzeka") z.YapayZeka = true;
+                if (kip == "islemci") { z.Islemci = true; z.YapayZeka = false; }
+                if (kip == "sicaklik") { z.Islemci = false; z.YapayZeka = false; }
+                var jv = Json.S(d, "jarvis");
+                if (jv != null && Enum.TryParse<JarvisDurum>(jv, true, out var jd)) z.Jarvis = jd;
+                _zorla = z;
+                Program.Log("önizleme: " + (z.Bos ? "kapalı" : "c=" + z.C + " kip=" + kip + " jarvis=" + z.Jarvis));
+                break;
+            }
+            case "ayar-yukle":
+            {
+                var a = Ayarlar.Yukle();
+                var m = new RenkMotoru(a) { Acik = _motor.Acik };
+                _ayar = a;
+                _motor = m;
+                Program.Log("ayarlar yeniden yüklendi");
+                Publish();
+                break;
+            }
             case "fan-kasa": _fanQueue.Add("kasa"); break;
             case "fan-gpu": _fanQueue.Add("gpu"); break;
             case "rgb":
@@ -437,7 +472,15 @@ sealed class Servis : IDisposable
             last = t;
             try
             {
-                _motor.Hesapla(_girdi, t, dt);
+                var gi = _girdi;
+                var z = _zorla;
+                if (!z.Bos)
+                    gi = new Girdi
+                    {
+                        CpuC = z.C ?? gi.CpuC, GpuC = z.C ?? gi.GpuC, CpuYuk = gi.CpuYuk, GpuYuk = gi.GpuYuk,
+                        YapayZeka = z.YapayZeka ?? gi.YapayZeka, Islemci = z.Islemci ?? gi.Islemci, Jarvis = z.Jarvis ?? gi.Jarvis,
+                    };
+                _motor.Hesapla(gi, t, dt);
                 if (!_uyku) WriteDevices();
                 if (_boru != null && _boru.Count > 0) _boru.Broadcast(IsikJson());
             }
