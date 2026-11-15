@@ -72,7 +72,7 @@ Values:
 - `onizleme`: the base colour (temperature or override) even when RGB is off; for the scale marker.
 - `cikis`: average colour actually sent to the devices (after effects). All zero when off. This is the scene's key light.
 - `halka`: the 84 AIO LEDs in chain order (24 fan, 24 fan, 12 pump(?), 24 fan; the physical order is confirmed in the morning). `klavye`: the 10 keyboard zones.
-- 0-255 ints, device values before per-device calibration gains.
+- 0-255 sRGB display values (what the colour looks like on a screen). The devices get the same colours as linear-light PWM values times the per-device calibration gains from `ayarlar.json`.
 
 ### `olay` (one-off results)
 
@@ -89,6 +89,8 @@ Values:
 { "komut": "fan-gpu" }                // toggle GPU fans: max <-> card auto
 { "komut": "rgb", "acik": true }      // all RGB on (temperature colour) / off
 ```
+
+Development only (never sent by the window): `{"komut":"onizle","c":64,"kip":"yapayzeka"|"islemci"|"sicaklik","jarvis":"dusunuyor"}` forces values for a preview of the real lights (`{"komut":"onizle"}` clears), `{"komut":"ayar-yukle"}` reloads `ayarlar.json`, `{"komut":"kapat"}` stops the service cleanly (used by the installer).
 
 ## Window host <-> page (WebView2, not the service)
 
