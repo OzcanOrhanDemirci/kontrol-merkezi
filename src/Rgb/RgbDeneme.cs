@@ -9,7 +9,7 @@
 //   option  --hz <n>                        frame rate for renk/dalga (default 30)
 //   option  --acik-birak                    renk/dalga: exit WITHOUT turning off (simulates a crash; follow with sondur)
 //
-// The GPU is not reachable from here on purpose (MsiGpuV2 is locked; docs/GPU_ISIK_PLANI.md).
+//   rgb-dene gpu ...                        the graphics card's lights: GpuDeneme.cs (only with --karta-yaz, in a GPU_ISIK build)
 
 using System;
 using System.Collections.Generic;
@@ -41,6 +41,7 @@ static class RgbDeneme
 
         if (a.Count == 0) { Yaz("kullanım: rgb-dene liste | <aio|klavye> <oku|renk RRGGBB [s]|dalga [s]|sondur>"); return 64; }
         if (a[0] == "liste") return Liste();
+        if (a[0] == "gpu") return GpuDeneme.Calistir(a.Skip(1).ToList());
         if (a.Count < 2) { Yaz("komut eksik"); return 64; }
 
         IRgbCihaz cihaz = a[0] switch

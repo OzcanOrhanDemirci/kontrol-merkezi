@@ -1,16 +1,20 @@
-// The fixed device set of this PC. The GPU's lighting is not constructed at all until the morning proof
-// (docs/GPU_ISIK_PLANI.md); the window shows it as locked.
+// The fixed device set of this PC. The GPU's lighting is in only in a build that can drive it (the normal build;
+// -p:GpuIsik=kapali leaves it out, src/Rgb/MsiGpuV2.cs); such a build shows it as locked and cannot reach the card.
 
 using System.Collections.Generic;
+using KontrolMerkezi.Isik;
 using KontrolMerkezi.Rgb;
 
 namespace KontrolMerkezi.Servis;
 
 static class RgbCihazlari
 {
-    public static List<IRgbCihaz> Olustur() => new()
+    public static List<IRgbCihaz> Olustur(Ayarlar a)
     {
-        new CoolerMasterA1(),
-        new SteelSeriesApex3(),
-    };
+        var list = new List<IRgbCihaz> { new CoolerMasterA1(), new SteelSeriesApex3() };
+#pragma warning disable CS0162
+        if (MsiGpuV2.KartaYazabilir) list.Add(new MsiGpuV2 { YalnizRenk = a.GpuYalnizRenk });
+#pragma warning restore CS0162
+        return list;
+    }
 }

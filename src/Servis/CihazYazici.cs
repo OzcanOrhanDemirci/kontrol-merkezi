@@ -53,10 +53,35 @@ sealed class CihazYazici : IDisposable
         _signal.Set();
     }
 
+    /// <summary>For a device that lights up on its own when it gets power (the GPU shows its stored white): it is taken
+    /// as showing white, and over sure seconds it fades from that white to what it should show (the light frame, or
+    /// dark when the lights are off; dark ends with Sondur, retried until it works). Özcan 11-16: the white at
+    /// power-on is a "starting" light that the service takes over softly.</summary>
+    public void BeyazdanBasla(double sure)
+    {
+        lock (_lock)
+        {
+            if (_suspended || _stop) return;
+            _fadeFrom = new Rgb.Rgb(255, 255, 255);
+            _fadeDur = Math.Max(0.1, sure);
+            _fadeAt = DateTime.MinValue;   // the clock starts at the first successful open (the driver may not be ready yet)
+            _fading = true;
+            _isLit = true;
+            _dark.Reset();
+        }
+        _signal.Set();
+    }
+
+    bool _fading;
+    Rgb.Rgb _fadeFrom;
+    double _fadeDur;
+    DateTime _fadeAt;
+    Rgb.Rgb[] _fadeFrame;
+
     /// <summary>Sleep: off, close the handle, ignore frames until Uyan. Waits up to the timeout for the device to be dark.</summary>
     public bool Uyu(TimeSpan timeout)
     {
-        lock (_lock) { _suspended = true; _wantLit = false; _pending = null; _wantRelease = true; }
+        lock (_lock) { _suspended = true; _wantLit = false; _pending = null; _wantRelease = true; _fading = false; }
         _signal.Set();
         Thread.Sleep(20);
         return _dark.Wait(timeout);
@@ -73,7 +98,7 @@ sealed class CihazYazici : IDisposable
     {
         while (true)
         {
-            _signal.WaitOne(_isLit ? 200 : 1000);
+            _signal.WaitOne(_fading ? 30 : _isLit ? 200 : 1000);
             Rgb.Rgb[] frame;
             bool lit, release;
             lock (_lock)
@@ -85,6 +110,33 @@ sealed class CihazYazici : IDisposable
             }
             try
             {
+                bool fading;
+                lock (_lock) fading = _fading && !release;
+                if (fading)
+                {
+                    if (!Open()) continue;
+                    double k;
+                    lock (_lock)
+                    {
+                        if (_fadeAt == DateTime.MinValue) _fadeAt = DateTime.UtcNow;
+                        k = (DateTime.UtcNow - _fadeAt).TotalSeconds / _fadeDur;
+                        if (k >= 1 && lit) _fading = false;   // handed over: the frames carry on
+                    }
+                    if (k >= 1 && lit) continue;
+                    if (k < 1)
+                    {
+                        int n = Cihaz.LedSayisi;
+                        if (_fadeFrame == null || _fadeFrame.Length != n) _fadeFrame = new Rgb.Rgb[n];
+                        for (int j = 0; j < n; j++)
+                        {
+                            var to = lit && frame != null ? frame[j < frame.Length ? j : frame.Length - 1] : Rgb.Rgb.Black;
+                            _fadeFrame[j] = Rgb.Rgb.Gecis(_fadeFrom, to, k);
+                        }
+                        if (!Cihaz.Yaz(_fadeFrame)) { Program.Log("rgb: " + Cihaz.Ad + " geçiş yazılamadı: " + Cihaz.Hata); _nextOpenTry = DateTime.UtcNow.AddSeconds(1); }
+                        continue;
+                    }
+                    lock (_lock) _fading = false;   // faded to black: Sondur below switches it off
+                }
                 if (lit && frame != null && !release)
                 {
                     if (!Open()) continue;

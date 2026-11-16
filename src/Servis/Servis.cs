@@ -44,10 +44,10 @@ sealed class Servis : IDisposable
     {
         public double? C;
         public bool? YapayZeka, Islemci;
-        public int? YzEfekt, IslemciEfekt;
+        public int? YzEfekt, IslemciEfekt, GpuYzEfekt;
         public bool? Uyari;
         public JarvisDurum? Jarvis;
-        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null && YzEfekt == null && IslemciEfekt == null && Uyari == null;
+        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null && YzEfekt == null && IslemciEfekt == null && GpuYzEfekt == null && Uyari == null;
     }
     readonly YerelModel _model = new();
     readonly Afterburner _ab = new();
@@ -92,8 +92,9 @@ sealed class Servis : IDisposable
         _admin = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
         _ayar = Ayarlar.Yukle();
         _motor = new RenkMotoru(_ayar);
-        _rgb = RgbCihazlari.Olustur();
+        _rgb = RgbCihazlari.Olustur(_ayar);
         _yazicilar = _rgb.Select(d => new CihazYazici(d)).ToList();
+        GpuKarart("açılış");
         Program.Log("servis başladı | yönetici=" + _admin + " | sürüm " + typeof(Servis).Assembly.GetName().Version);
 
         OpenHardware();
@@ -223,6 +224,7 @@ sealed class Servis : IDisposable
                 z.Uyari = Json.B(d, "uyari");
                 if (d.TryGetValue("yzEfekt", out var ye) && ye != null) z.YzEfekt = Convert.ToInt32(ye);
                 if (d.TryGetValue("islemciEfekt", out var ie) && ie != null) z.IslemciEfekt = Convert.ToInt32(ie);
+                if (d.TryGetValue("gpuYzEfekt", out var ge) && ge != null) z.GpuYzEfekt = Convert.ToInt32(ge);
                 var jv = Json.S(d, "jarvis");
                 if (jv != null && Enum.TryParse<JarvisDurum>(jv, true, out var jd)) z.Jarvis = jd;
                 _zorla = z;
@@ -485,6 +487,7 @@ sealed class Servis : IDisposable
             var list = HidSharp.DeviceList.Local;
             _takili["aio"] = list.GetHidDevices(0x2516, 0x0173).Any();
             _takili["klavye"] = list.GetHidDevices(0x1038, 0x161A).Any();
+            _takili["gpu"] = _gpuFan != null;   // NvAPI sees the card (its lights answer on the same driver)
         }
         catch (Exception ex) { Program.Log("usb listesi okunamadı: " + ex.Message); }
     }
@@ -530,7 +533,7 @@ sealed class Servis : IDisposable
                     {
                         CpuC = z.C ?? gi.CpuC, GpuC = z.C ?? gi.GpuC, CpuYuk = gi.CpuYuk, GpuYuk = gi.GpuYuk,
                         YapayZeka = z.YapayZeka ?? gi.YapayZeka, Islemci = z.Islemci ?? gi.Islemci, Jarvis = z.Jarvis ?? gi.Jarvis,
-                        YzEfekt = z.YzEfekt, IslemciEfekt = z.IslemciEfekt, Uyari = z.Uyari,
+                        YzEfekt = z.YzEfekt, IslemciEfekt = z.IslemciEfekt, GpuYzEfekt = z.GpuYzEfekt, Uyari = z.Uyari,
                     };
                 _motor.Hesapla(gi, t, dt);
                 if (!_uyku) WriteDevices();
@@ -672,12 +675,23 @@ sealed class Servis : IDisposable
 
     System.Threading.Timer _wakeTimer;
 
+    /// <summary>The card shows its stored white whenever it gets power: take it over with a soft fade to dark, or to
+    /// the temperature colour if the lights are on (volatile writes only).</summary>
+    void GpuKarart(string neden)
+    {
+        double sn = _ayar.GpuBaslangicSn;
+        if (sn <= 0) return;
+        foreach (var w in _yazicilar)
+            if (w.Cihaz.Kimlik == "gpu") { w.BeyazdanBasla(sn); Program.Log("ekran kartı: beyazdan geçiş (" + neden + ")"); }
+    }
+
     public void OnResume()
     {
         Program.Log("uyanış");
         foreach (var w in _yazicilar) w.Uyan();
         _karanlik = true;
         _uyku = false;
+        GpuKarart("uyanış");
         // Fans: check right after wake and once more later, in case the EC or the driver resets after a delay.
         try
         {

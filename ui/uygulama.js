@@ -599,7 +599,7 @@ function renderRgb() {
     else if (c.bagli) { cls = 'ok'; s = 'bağlı'; }
     const name = c.kimlik === 'gpu' ? c.ad.replace(/ Gaming X Trio$/, '') : c.ad;
     return `<div class="d ${cls}"><span class="a">${esc(name)}</span><span class="s"><i></i>${esc(up(s))}</span></div>` +
-      (c.kilitli ? `<div class="d lock" style="margin-top:-.6em"><span class="s" style="min-width:0;letter-spacing:.06em">sabahki denemeye kadar dokunulmuyor</span></div>` : '');
+      (c.kilitli ? `<div class="d lock" style="margin-top:-.6em"><span class="s" style="min-width:0;letter-spacing:.06em">bu derlemede karta yol yok</span></div>` : '');
   }).join('');
   $('#nowV').innerHTML = `${fmt1(M.temp)}<small>°C</small>`;
 }

@@ -18,6 +18,15 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- The NvAPI write to the GPU's light controller (src/Rgb/MsiGpuV2.cs) is in the normal build since 11-16. A build
+       with -p:GpuIsik=kapali has no path to the card at all (the card commands then only simulate). -->
+  <PropertyGroup>
+    <GpuIsik Condition="'$(GpuIsik)' == ''">acik</GpuIsik>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(GpuIsik)' == 'acik'">
+    <DefineConstants>$(DefineConstants);GPU_ISIK</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />

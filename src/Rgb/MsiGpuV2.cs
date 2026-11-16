@@ -1,68 +1,97 @@
-// MSI RTX 4080 Gaming X Trio lighting (PCI 10DE:2704, subsystem 1462:5111): "MSI GPU v2" (ITE9) registers on the
-// card's I2C port 1, address 0x68, reached through NvAPI I2C.
+// MSI RTX 4080 Gaming X Trio lighting (PCI 10DE:2704, subsystem 1462:5111): the light controller at I2C address 0x68
+// on the card's port 1, reached through NvAPI I2C.
 //
-// LOCKED. This class has never talked to the card. It cannot run unless BOTH switches are on:
-//   1. compile time: DerlemeIzni below is const false in the committed code;
-//   2. run time:     environment variable KONTROL_GPU_ISIK must equal "acik" (unset on this PC).
-// Until both are on, the constructor throws before NvAPI is loaded, and every method that could reach the card checks
-// again. Nothing in the program constructs it (RgbDeneme and the service do not). The proof plan that must come first is
-// docs/GPU_ISIK_PLANI.md: record MSI Center's own writes, replay only those.
+// What is sent is exactly what MSI Mystic Light sent on 2026-11-16 (docs/gpu-kayit/), minus its save:
+//   colour : 2D=00 (zones on), 22=1C (programming), 36=64 (full brightness), 38=02, 30=R, 31=G, 32=B, 22=13 (steady)
+//   off    : 2D=03 (both zones off)
+// Every write is checked against an allow-list of (register, value) pairs taken from that capture. The controller's
+// save register is not in the list, and Yol (the bus) refuses it on its own as well: nothing here can change what
+// the card stores. Proven on the card: colour/mode writes are lost at power-off (step 4, 11:10 -> 11:54); the zone
+// switch 2D is never stored, not even by a save (power-off test 12:26: white at the logo after MSI's saved "off").
 //
-// Register facts from OpenRGB 1.1 Controllers/MSIGPUController/MSIGPUv2Controller (reimplemented, see docs/RGB_SURUCULER.md):
-//   0x22 mode (0x1C idle/programming, 0x13 static, 0x01 off), 0x2E unknown (written 0 before a mode change),
-//   0x30/0x31/0x32 colour R/G/B, 0x27/0x28/0x29 three-byte colour blocks (B,G,R), 0x36 brightness (20 * 1..5),
-//   0x38 speed, 0x46 direction/control. Register 0x3F is "save to the card's memory" and is NOT in this file's
-//   write list: KayitYaz() refuses it, and no code path names it. OpenRGB waits 20 ms after every write.
-// The NvAPI I2C call shape follows OpenRGB's i2c_smbus_nvapi.cpp (port 1, register address one byte, default speed).
+// The NvAPI write exists only in a build with the symbol GPU_ISIK (the normal build; -p:GpuIsik=kapali leaves it out).
+// A build without it cannot reach the card at all: the I2C entry point is never looked up and the class below is not
+// compiled; it drives the same code against KayitYolu, which only records the writes (checking sequences off the card).
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace KontrolMerkezi.Rgb;
 
+/// <summary>One register write on the card's light controller. Implementations: NvApiYolu (real, GPU_ISIK builds
+/// only) and KayitYolu (records only).</summary>
+public interface IGpuYolu
+{
+    bool Ac();
+    void Yaz(byte kayit, byte deger);
+    string Hata { get; }
+}
+
 public sealed class MsiGpuV2 : IRgbCihaz
 {
-    /// <summary>Compile-time switch. Must stay false until the morning proof (docs/GPU_ISIK_PLANI.md) is done.</summary>
-    internal const bool DerlemeIzni = false;
-    const string CalismaDegiskeni = "KONTROL_GPU_ISIK";
+#if GPU_ISIK
+    /// <summary>True in a build that can drive the card (GPU_ISIK; not with -p:GpuIsik=kapali).</summary>
+    public const bool KartaYazabilir = true;
+#else
+    public const bool KartaYazabilir = false;
+#endif
 
-    /// <summary>Both switches on? Pure: reads one constant and one environment variable, touches no hardware.</summary>
-    public static bool IzinVar =>
-#pragma warning disable CS0162
-        DerlemeIzni && Environment.GetEnvironmentVariable(CalismaDegiskeni) == "acik";
-#pragma warning restore CS0162
+    // ---- the sequence MSI used (docs/gpu-kayit/msi-mystic-light-2026-11-16*.txt)
+    const byte RegBolge = 0x2D, RegMod = 0x22, RegParlaklik = 0x36, RegHiz = 0x38, RegR = 0x30, RegG = 0x31, RegB = 0x32;
+    const byte BolgelerAcik = 0x00, BolgelerKapali = 0x03, ModProgram = 0x1C, ModSabit = 0x13, TamParlaklik = 0x64, Hiz = 0x02;
 
-    const uint PciCihaz = 0x270410DE;    // device << 16 | vendor
-    const uint PciAlt = 0x51111462;      // subsystem device << 16 | subsystem vendor
-    const byte Adres = 0x68;
+    /// <summary>MSI waited ~30 ms between writes.</summary>
+    public int YazmaArasiMs { get; set; } = 30;
 
-    const byte RegMod = 0x22, RegBilinmeyen = 0x2E, RegR = 0x30, RegG = 0x31, RegB = 0x32, RegParlaklik = 0x36;
-    const byte ModBosta = 0x1C, ModSabit = 0x13;
-    const int YazmaSonrasiMs = 20;
+    /// <summary>After one full sequence, change only R/G/B (3 writes instead of 8). Off until a run on the card shows
+    /// that the controller takes it (docs/GPU_ISIK_PLANI.md, run 2).</summary>
+    public bool YalnizRenk { get; set; }
 
-    /// <summary>The only registers this class may ever write. 0x3F (save) is deliberately absent.</summary>
-    static readonly HashSet<byte> IzinliKayitlar = new()
+    /// <summary>Shortest spacing between two colour updates; frames in between are skipped (the next carries the colour).</summary>
+    public int EnKisaAralikMs { get; set; } = 0;
+
+    /// <summary>Is this exact write one MSI made? The only gate every write passes. The save register is absent.</summary>
+    public static bool Izinli(byte kayit, byte deger) => kayit switch
     {
-        // exactly what OpenRGB writes: mode, colour blocks 0x27-0x29 (3 bytes each -> up to 0x2B), 0x2E, R/G/B,
-        // brightness, speed, control. To be narrowed further to MSI's recorded writes (GPU_ISIK_PLANI.md step 3).
-        0x22, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2E, 0x30, 0x31, 0x32, 0x36, 0x38, 0x46,
+        RegBolge => deger == BolgelerAcik || deger == BolgelerKapali,
+        RegMod => deger == ModProgram || deger == ModSabit,
+        RegParlaklik => deger == TamParlaklik,
+        RegHiz => deger == Hiz,
+        RegR or RegG or RegB => true,
+        _ => false,
     };
 
-    /// <summary>Full register sequence takes ~7 x 20 ms; the engine's 30 Hz frames are thinned to this.</summary>
-    public int EnKisaAralikMs { get; set; } = 250;
+    /// <summary>The full colour sequence, in MSI's order.</summary>
+    public static (byte kayit, byte deger)[] RenkSirasi(Rgb c) => new[]
+    {
+        (RegBolge, BolgelerAcik), (RegMod, ModProgram), (RegParlaklik, TamParlaklik), (RegHiz, Hiz),
+        (RegR, c.R), (RegG, c.G), (RegB, c.B), (RegMod, ModSabit),
+    };
+
+    public static (byte kayit, byte deger)[] KapatSirasi() => new[] { (RegBolge, BolgelerKapali) };
 
     readonly object kilit = new();
-    NvApi nv;
-    IntPtr gpu;
+    readonly IGpuYolu yol;
     Rgb son;
+    bool sabitKurulu;      // a full sequence went out since the last open/off: R/G/B alone may follow (YalnizRenk)
     bool sonVar;
     long sonTick;
 
-    public MsiGpuV2()
+    /// <summary>The real card. Throws in a build that cannot drive it.</summary>
+    public MsiGpuV2() : this(GercekYol()) { }
+
+    public MsiGpuV2(IGpuYolu yol) { this.yol = yol ?? throw new ArgumentNullException(nameof(yol)); }
+
+    static IGpuYolu GercekYol()
     {
-        if (!IzinVar) throw new InvalidOperationException("GPU ışığı kilitli (docs/GPU_ISIK_PLANI.md)");
+#if GPU_ISIK
+        return new NvApiYolu();
+#else
+        throw new InvalidOperationException("Bu derleme ekran kartına yazamaz (GPU_ISIK yok)");
+#endif
     }
 
     public string Kimlik => "gpu";
@@ -71,26 +100,20 @@ public sealed class MsiGpuV2 : IRgbCihaz
     public bool Bagli { get; private set; }
     public string Hata { get; private set; }
 
+    /// <summary>Optional trace of every write (tests and the card runs log it).</summary>
+    public Action<string> Iz { get; set; }
+
     public bool Ac()
     {
         lock (kilit)
         {
-            if (!IzinVar) { Hata = "GPU ışığı kilitli"; return false; }
             try
             {
-                nv ??= NvApi.Yukle();
-                gpu = nv.KartBul(PciCihaz, PciAlt);
-                if (gpu == IntPtr.Zero) { Hata = "Ekran kartı bulunamadı"; return false; }
-                Bagli = true;
-                Hata = null;
+                if (!yol.Ac()) { Hata = yol.Hata ?? "Ekran kartı bulunamadı"; Bagli = false; return false; }
+                Bagli = true; Hata = null; sabitKurulu = false; sonVar = false;
                 return true;
             }
-            catch (Exception ex)
-            {
-                Hata = "GPU ışığı: " + ex.Message;
-                Bagli = false;
-                return false;
-            }
+            catch (Exception ex) { Hata = "GPU ışığı: " + ex.Message; Bagli = false; return false; }
         }
     }
 
@@ -98,16 +121,16 @@ public sealed class MsiGpuV2 : IRgbCihaz
     {
         lock (kilit)
         {
-            if (!IzinVar || gpu == IntPtr.Zero || renkler == null || renkler.Length < 1) return false;
+            if (!Bagli || renkler == null || renkler.Length < 1) return false;
             var c = renkler[0];
             long simdi = Environment.TickCount;
-            if (sonVar && c.Equals(son)) return true;
-            if (sonVar && simdi - sonTick < EnKisaAralikMs) return true;   // thinned; the next frame carries the colour
+            if (sonVar && c.Equals(son)) return true;   // unchanged: the controller holds it, no keep-alive needed
+            if (sonVar && EnKisaAralikMs > 0 && simdi - sonTick < EnKisaAralikMs) return true;
             try
             {
-                Sabit(c);
+                if (YalnizRenk && sabitKurulu) Gonder(new[] { (RegR, c.R), (RegG, c.G), (RegB, c.B) });
+                else { Gonder(RenkSirasi(c)); sabitKurulu = true; }
                 son = c; sonVar = true; sonTick = simdi;
-                Bagli = true;
                 return true;
             }
             catch (Exception ex)
@@ -119,136 +142,152 @@ public sealed class MsiGpuV2 : IRgbCihaz
         }
     }
 
-    /// <summary>Static black (no mode-off write, no save).</summary>
+    /// <summary>Zones off (MSI's own off switch, never stored by the card).</summary>
     public void Sondur()
     {
         lock (kilit)
         {
-            if (!IzinVar || gpu == IntPtr.Zero) return;
-            try { Sabit(Rgb.Black); son = Rgb.Black; sonVar = true; }
+            if (!Bagli) return;
+            try { Gonder(KapatSirasi()); sabitKurulu = false; sonVar = false; }
             catch (Exception ex) { Hata = "GPU ışığı söndürülemedi: " + ex.Message; Bagli = false; }
         }
     }
 
     public void Birak()
     {
-        lock (kilit) { gpu = IntPtr.Zero; Bagli = false; sonVar = false; }
+        lock (kilit) { Bagli = false; sabitKurulu = false; sonVar = false; }
     }
 
     public void Dispose() => Birak();
 
-    /// <summary>OpenRGB's "Direct" (static) sequence: 0x2E=0, 0x22=idle, R, G, B, brightness max, 0x22=static. No 0x3F.</summary>
-    void Sabit(Rgb c)
+    void Gonder((byte kayit, byte deger)[] sira)
     {
-        KayitYaz(RegBilinmeyen, 0x00);
-        KayitYaz(RegMod, ModBosta);
-        KayitYaz(RegR, c.R);
-        KayitYaz(RegG, c.G);
-        KayitYaz(RegB, c.B);
-        KayitYaz(RegParlaklik, 100);
-        KayitYaz(RegMod, ModSabit);
+        foreach (var (k, d) in sira) if (!Izinli(k, d)) throw new InvalidOperationException($"GPU: {k:X2}={d:X2} izinli değil");
+        foreach (var (k, d) in sira)
+        {
+            yol.Yaz(k, d);
+            Iz?.Invoke($"{DateTime.Now:HH:mm:ss.fff} yaz 0x68 port1 {k:X2}={d:X2}");
+            if (YazmaArasiMs > 0) Thread.Sleep(YazmaArasiMs);   // after every write, also the last (the next sequence may follow at once)
+        }
     }
 
-    void KayitYaz(byte kayit, byte deger)
+    /// <summary>The bus's own refusal, independent of the allow-list: the save register is never written.</summary>
+    internal static void KayitKorumasi(byte kayit)
     {
-        if (!IzinVar) throw new InvalidOperationException("GPU ışığı kilitli");
-        if (!IzinliKayitlar.Contains(kayit)) throw new InvalidOperationException($"GPU: 0x{kayit:X2} yazılamaz");
-        nv.ByteYaz(gpu, Adres, kayit, deger);
-        Thread.Sleep(YazmaSonrasiMs);
+        if (kayit == 0x3F) throw new InvalidOperationException("GPU: kaydetme yazmacı asla yazılmaz");
+    }
+}
+
+/// <summary>Records the writes instead of sending them. Reaches no hardware; used by tests and by builds without GPU_ISIK.</summary>
+public sealed class KayitYolu : IGpuYolu
+{
+    public readonly List<(long ms, byte kayit, byte deger)> Yazilanlar = new();
+    readonly Stopwatch sw = Stopwatch.StartNew();
+    public string Hata => null;
+    public bool Ac() => true;
+    public void Yaz(byte kayit, byte deger)
+    {
+        MsiGpuV2.KayitKorumasi(kayit);
+        lock (Yazilanlar) Yazilanlar.Add((sw.ElapsedMilliseconds, kayit, deger));
+    }
+}
+
+#if GPU_ISIK
+/// <summary>NvAPI I2C byte write on port 1, address 0x68, of the RTX 4080 with MSI's subsystem id. No reads.
+/// Call shape as MSI's own calls were recorded (ver 3, address D0, port 1 set, i2cSpeed FFFF, 400 kHz), in the
+/// 64-bit layout of the same structure (OpenRGB's i2c_smbus_nvapi.cpp uses it so); a layout NvAPI does not accept is
+/// refused by the driver as a version mismatch, before anything reaches the bus.</summary>
+sealed class NvApiYolu : IGpuYolu
+{
+    const uint PciCihaz = 0x270410DE;    // device << 16 | vendor
+    const uint PciAlt = 0x51111462;      // subsystem device << 16 | subsystem vendor
+    const byte Adres = 0x68;
+
+    [DllImport("nvapi64.dll", EntryPoint = "nvapi_QueryInterface", CallingConvention = CallingConvention.Cdecl)]
+    static extern IntPtr QueryInterface(uint id);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int InitializeT();
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int EnumPhysicalGpusT([Out] IntPtr[] handles, out int count);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GetPciIdentifiersT(IntPtr gpu, out uint deviceId, out uint subSystemId, out uint revisionId, out uint extDeviceId);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int I2cWriteExT(IntPtr gpu, ref I2cInfoV3 info, out uint unknown);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct I2cInfoV3
+    {
+        public uint Version;
+        public uint DisplayMask;
+        public byte IsDdcPort;
+        public byte I2cDevAddress;       // 7-bit address << 1
+        public IntPtr I2cRegAddress;
+        public uint RegAddrSize;
+        public IntPtr Data;
+        public uint Size;
+        public uint I2cSpeed;            // 0xFFFF = use I2cSpeedKhz
+        public uint I2cSpeedKhz;         // NV_I2C_SPEED: 6 = 400 kHz, as MSI
+        public byte PortId;
+        public uint IsPortIdSet;
     }
 
-    /// <summary>Minimal NvAPI access: initialise, find the card by PCI ids, I2C byte write on port 1. No reads.</summary>
-    sealed class NvApi
+    I2cWriteExT i2cWrite;
+    IntPtr gpu;
+    public string Hata { get; private set; }
+
+    static T Al<T>(uint id) where T : Delegate
     {
-        [DllImport("nvapi64.dll", EntryPoint = "nvapi_QueryInterface", CallingConvention = CallingConvention.Cdecl)]
-        static extern IntPtr QueryInterface(uint id);
+        var p = QueryInterface(id);
+        if (p == IntPtr.Zero) throw new InvalidOperationException($"NvAPI 0x{id:X8} yok");
+        return Marshal.GetDelegateForFunctionPointer<T>(p);
+    }
 
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int InitializeT();
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int EnumPhysicalGpusT([Out] IntPtr[] handles, out int count);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GetPciIdentifiersT(IntPtr gpu, out uint deviceId, out uint subSystemId, out uint revisionId, out uint extDeviceId);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int I2cWriteExT(IntPtr gpu, ref I2cInfoV3 info, out uint unknown);
+    public bool Ac()
+    {
+        int s = Al<InitializeT>(0x0150E828)();
+        if (s != 0) { Hata = "NvAPI başlatılamadı: " + s; return false; }
+        var enumGpus = Al<EnumPhysicalGpusT>(0xE5AC921F);
+        var pciIds = Al<GetPciIdentifiersT>(0x2DDFB66E);
+        i2cWrite ??= Al<I2cWriteExT>(0x283AC65A);
+        gpu = IntPtr.Zero;
+        var h = new IntPtr[64];
+        if (enumGpus(h, out int n) != 0) { Hata = "NvAPI kart listesi alınamadı"; return false; }
+        for (int i = 0; i < n && i < h.Length; i++)
+            if (pciIds(h[i], out uint d, out uint sub, out _, out _) == 0 && d == PciCihaz && sub == PciAlt) { gpu = h[i]; break; }
+        if (gpu == IntPtr.Zero) { Hata = "MSI RTX 4080 Gaming X Trio bulunamadı"; return false; }
+        Hata = null;
+        return true;
+    }
 
-        [StructLayout(LayoutKind.Sequential)]
-        struct I2cInfoV3
+    public void Yaz(byte kayit, byte deger)
+    {
+        MsiGpuV2.KayitKorumasi(kayit);
+        if (gpu == IntPtr.Zero || i2cWrite == null) throw new InvalidOperationException("kart açık değil");
+        var reg = Marshal.AllocHGlobal(1);
+        var veri = Marshal.AllocHGlobal(1);
+        try
         {
-            public uint Version;
-            public uint DisplayMask;
-            public byte IsDdcPort;
-            public byte I2cDevAddress;       // 7-bit address << 1
-            public IntPtr I2cRegAddress;
-            public uint RegAddrSize;
-            public IntPtr Data;
-            public uint Size;
-            public uint I2cSpeed;            // 0xFFFF = use I2cSpeedKhz
-            public uint I2cSpeedKhz;         // 0 = default
-            public byte PortId;
-            public uint IsPortIdSet;
-        }
-
-        EnumPhysicalGpusT enumGpus;
-        GetPciIdentifiersT pciIds;
-        I2cWriteExT i2cWrite;
-
-        static T Al<T>(uint id) where T : Delegate
-        {
-            var p = QueryInterface(id);
-            if (p == IntPtr.Zero) throw new InvalidOperationException($"NvAPI 0x{id:X8} yok");
-            return Marshal.GetDelegateForFunctionPointer<T>(p);
-        }
-
-        public static NvApi Yukle()
-        {
-            if (!IzinVar) throw new InvalidOperationException("GPU ışığı kilitli");
-            var n = new NvApi();
-            int s = Al<InitializeT>(0x0150E828)();
-            if (s != 0) throw new InvalidOperationException("NvAPI başlatılamadı: " + s);
-            n.enumGpus = Al<EnumPhysicalGpusT>(0xE5AC921F);
-            n.pciIds = Al<GetPciIdentifiersT>(0x2DDFB66E);
-            n.i2cWrite = Al<I2cWriteExT>(0x283AC65A);
-            return n;
-        }
-
-        public IntPtr KartBul(uint cihaz, uint alt)
-        {
-            var h = new IntPtr[64];
-            if (enumGpus(h, out int n) != 0) return IntPtr.Zero;
-            for (int i = 0; i < n && i < h.Length; i++)
-                if (pciIds(h[i], out uint d, out uint s, out _, out _) == 0 && d == cihaz && s == alt)
-                    return h[i];
-            return IntPtr.Zero;
-        }
-
-        public void ByteYaz(IntPtr gpu, byte adres, byte kayit, byte deger)
-        {
-            if (!IzinVar) throw new InvalidOperationException("GPU ışığı kilitli");
-            var reg = Marshal.AllocHGlobal(1);
-            var veri = Marshal.AllocHGlobal(1);
-            try
+            Marshal.WriteByte(reg, kayit);
+            Marshal.WriteByte(veri, deger);
+            var info = new I2cInfoV3
             {
-                Marshal.WriteByte(reg, kayit);
-                Marshal.WriteByte(veri, deger);
-                var info = new I2cInfoV3
-                {
-                    Version = (uint)Marshal.SizeOf<I2cInfoV3>() | (3u << 16),
-                    IsDdcPort = 0,
-                    I2cDevAddress = (byte)(adres << 1),
-                    I2cRegAddress = reg,
-                    RegAddrSize = 1,
-                    Data = veri,
-                    Size = 1,
-                    I2cSpeed = 0xFFFF,
-                    I2cSpeedKhz = 0,
-                    PortId = 1,
-                    IsPortIdSet = 1,
-                };
-                int s = i2cWrite(gpu, ref info, out _);
-                if (s != 0) throw new InvalidOperationException($"I2C yazma hatası {s} (0x{kayit:X2})");
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(reg);
-                Marshal.FreeHGlobal(veri);
-            }
+                Version = (uint)Marshal.SizeOf<I2cInfoV3>() | (3u << 16),
+                IsDdcPort = 0,
+                I2cDevAddress = (byte)(Adres << 1),
+                I2cRegAddress = reg,
+                RegAddrSize = 1,
+                Data = veri,
+                Size = 1,
+                I2cSpeed = 0xFFFF,
+                I2cSpeedKhz = 6,
+                PortId = 1,
+                IsPortIdSet = 1,
+            };
+            int s = i2cWrite(gpu, ref info, out _);
+            if (s != 0) throw new InvalidOperationException($"I2C yazma hatası {s} ({kayit:X2})");
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(reg);
+            Marshal.FreeHGlobal(veri);
         }
     }
 }
+#endif

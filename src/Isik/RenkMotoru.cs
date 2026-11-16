@@ -23,6 +23,7 @@ public sealed class Girdi
     public bool Islemci;               // CPU under sustained heavy load (decided with hysteresis by the caller)
     public JarvisDurum Jarvis;
     public int? YzEfekt, IslemciEfekt; // preview only: play this candidate instead of the chosen one
+    public int? GpuYzEfekt;            // preview only: the card's local-model candidate
     public bool? Uyari;                // preview only: force the over-temperature warning
 }
 
@@ -40,7 +41,7 @@ public sealed class RenkMotoru
 
     // One palette per device: the stop colours that make that device show what the reference (the keyboard) shows.
     // LED errors depend on hue, so per-channel gains cannot match devices across the palette.
-    readonly Lab[] _ref, _aioPal;
+    readonly Lab[] _ref, _aioPal, _gpuPal;
     readonly int[] _ringStart;
     readonly int _aioCount;
 
@@ -71,6 +72,7 @@ public sealed class RenkMotoru
         _a = a;
         _ref = Build(a, null);
         _aioPal = Build(a, a.CihazRenkleri.TryGetValue("aio", out var cr) ? cr : null);
+        _gpuPal = Build(a, a.CihazRenkleri.TryGetValue("gpu", out var cg) ? cg : null);
         _ringStart = new int[a.AioHalkalari.Length + 1];
         for (int i = 0; i < a.AioHalkalari.Length; i++) _ringStart[i + 1] = _ringStart[i] + a.AioHalkalari[i];
         _aioCount = _ringStart[a.AioHalkalari.Length];
@@ -153,6 +155,26 @@ public sealed class RenkMotoru
         return 1 - e * 0.6 * gap;
     }
 
+    /// <summary>Local model generating, on the graphics card's own LEDs (one colour for the whole card, so only
+    /// brightness over time). 1 "nefes": a deep slow breath, full down to ~5 % linear light (about a fifth to the
+    /// eye) and back, 2.5 s. 2 "yanıp söner": off and on once a second, soft edges (the 90 °C warning is faster and
+    /// blinks everything). 3 "akış": quick irregular small dips, like text streaming out (needs fast updates).
+    /// 0 = none. No heartbeat: the CPU-load effect already beats on the card too.</summary>
+    static double GpuYzFactor(int variant, double t, double e)
+    {
+        if (e < 0.001 || variant <= 0) return 1;
+        if (variant == 1) return 1 - e * 0.95 * (0.5 - 0.5 * Math.Cos(2 * Math.PI * t / 2.5));
+        if (variant == 2)
+        {
+            double s = 0.5 + 0.5 * Math.Cos(2 * Math.PI * t / 1.0);
+            double on = Smooth01(Math.Max(0, Math.Min(1, (s - 0.3) * 2.0)));
+            return 1 - e * 0.97 * (1 - on);
+        }
+        // 3: three incommensurate ripples; only their joint peaks make a dip, so the rhythm never repeats visibly
+        double n = Math.Max(0, Math.Sin(t * 9.1) * Math.Sin(t * 5.3 + 1.7) * Math.Sin(t * 2.2 + 0.4));
+        return 1 - e * 0.6 * Math.Min(1, n * 2.2);
+    }
+
     /// <summary>CPU under sustained heavy load. 1 "kalp": a calm lub-dub, the light rests a little lower and each
     /// beat brings it back to full (1.5 s). 2 "yük dalgası": a soft shade travels through the whole case, fan to fan,
     /// pump, last fan, then across the keyboard, every 3 s, as if the work flows through the machine.</summary>
@@ -180,8 +202,9 @@ public sealed class RenkMotoru
             _smooth = _smooth.HasValue ? Approach(_smooth.Value, _smooth1.Value, dt, TempTau) : avg;
         }
         double tc = _smooth ?? _a.Duraklar[0].C;
-        var baseCol = Palet(_ref, tc);          // keyboard, GPU, and what the window shows
+        var baseCol = Palet(_ref, tc);          // keyboard, and what the window shows
         var aioBase = Palet(_aioPal, tc);
+        var gpuBase = Palet(_gpuPal, tc);   // the card's own stop colours if calibrated, else the reference
         Taban = baseCol;
 
         // ---- load effects
@@ -297,7 +320,8 @@ public sealed class RenkMotoru
             Klavye[z] = (c * (breath * blink * master)).Clamped();
         }
 
-        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (baseCol * (CpuFactor(cpuV, 0.5, t, eCpu) * breath * blink * master)).Clamped();
+        int gpuYzV = g.GpuYzEfekt ?? _a.GpuYapayZekaEfekti;
+        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (gpuBase * (CpuFactor(cpuV, 0.5, t, eCpu) * GpuYzFactor(gpuYzV, t, eAi) * breath * blink * master)).Clamped();
 
         Cikis = _aioCount > 0 ? new Lin(sr / _aioCount, sg / _aioCount, sb / _aioCount) : baseCol * master;
     }
