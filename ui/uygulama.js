@@ -49,6 +49,7 @@ const sound = window.KM_SES;
 let S = null;                      // the renderer
 let journey = null;                // the camera path (built from the pack's views)
 let W = null;                      // walk mode (ui/yuruyus.js): Y; it takes its own input while active
+let V = null;                      // the outside (ui/disari.js): the void, the hatch, the fall and the wrap
 
 // ==================================================================== the journey
 // The path runs straight down the central aisle (Özcan, 11-17: "Kameranın betonların etrafından dolaşmasına gerek
@@ -441,6 +442,7 @@ const ACTIONS = {
   git_fanlar: { at: 'any', press: () => go('fanlar'), can: () => true, quiet: true },
   cikis_1_tik: { at: 'any', press: () => closeSoftly(), can: () => true, quiet: true },
   cikis_2_tik: { at: 'any', press: () => closeSoftly(), can: () => true, quiet: true },
+  kapak_tik: { at: 'any', press: () => { if (V) V.toggle(); }, can: () => true, quiet: true },   // the roof's hatch (walk mode)
 };
 function canFan(i) {
   if (!linked() || !D.durum) return false;
@@ -549,6 +551,7 @@ function step(dt) {
   updateLights(dt);
   if (!S) return;
   const pose = W ? W.camera(dt, drift(journey.pose(M.s))) : drift(journey.pose(M.s));
+  if (V) V.step(dt, pose.eye);       // the outside: its facilities, the hatch, the fall (ui/disari.js)
   S.setCamera(pose.eye, add(pose.eye, pose.dir), pose.fov);
   // the eye half adapts to the dark when the lights are out
   S.setExposure((W ? W.exposure(exposureAt(M.s)) : exposureAt(M.s)) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
@@ -657,7 +660,7 @@ function kick() { if (!raf && M.visible && S && S.ready && !params.has('still'))
 if (host) host.addEventListener('message', e => onMessage(e.data));
 else sim = window.KM_BENZETIM(onMessage);
 window.__km = {
-  M, D, get S() { return S; }, get W() { return W; }, go, step, onMessage, get sim() { return sim; },
+  M, D, get S() { return S; }, get W() { return W; }, get V() { return V; }, go, step, onMessage, get sim() { return sim; },
   // measurement and stills: put the camera somewhere on the journey (0..1) and draw one frame
   async still(u, opts = {}) {
     const pin = () => { M.s = clamp(u, 0, 1) * journey.total; M.v = 0; M.place = u >= 1 ? 'rgb' : 'fanlar'; };
@@ -708,6 +711,7 @@ function reportOpening(marks) {
     S = await loading;
     journey = buildJourney(S.views);
     if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick, exposureAt });
+    if (window.KM_DISARI) V = KM_DISARI.create({ S: () => S, W: () => W, stops, journeyTotal: () => journey.total });
     S.ready = true;
     marks.hazir = performance.now();
     for (const n of Object.keys(levhaParked)) { installLevha(n, levhaParked[n]); delete levhaParked[n]; }

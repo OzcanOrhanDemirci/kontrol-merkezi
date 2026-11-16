@@ -31,6 +31,40 @@ vec4 hazeAt(vec2 uv, float z) {
 }
 #endif
 
+// ---- the void (Phase 2, the outside): wherever a view ray runs outside our block (the hall's concrete box on its
+// columns), a dense blue-grey fog, homogeneous (the world wraps: nothing in it may depend on where the camera is), its
+// light a smooth gradient from below to above (the columns sink into a darker depth). Inside the block nothing changes:
+// uVoidOn is 0 there, and a ray that stays inside the box has no fog. The baked haze of our own roof (uHomeHaze) fades
+// with the distance from it, so a facility seen from far is the same with and without it (the wrap).
+#if defined(PASS_COMPOSE) || defined(PASS_BLOOMPRE)
+uniform float uVoidOn;
+uniform float uFogSigma;
+uniform vec3 uFogUp, uFogDown;
+uniform vec3 uBlockLo, uBlockHi;
+uniform float uCamInside;      // 1: the camera is in the block (the stair under the hatch)
+uniform float uHomeHaze;
+vec3 fogSky(float y) { float t = smoothstep(-0.9, 0.9, y); return mix(uFogDown, uFogUp, t * t); }   // light from above: the horizon a quarter of the way
+// the outside's share of a ray of length dist from the eye: its transmittance and the fog's light
+vec4 voidFog(vec3 rd, float dist) {
+    vec3 inv = 1.0 / mix(rd, vec3(1e-9), lessThan(abs(rd), vec3(1e-9)));
+    vec3 a = (uBlockLo - uEye) * inv, b = (uBlockHi - uEye) * inv;
+    vec3 mn = min(a, b), mx = max(a, b);
+    float t0 = max(max(mn.x, mn.y), max(mn.z, 0.0)), t1 = min(min(mx.x, mx.y), min(mx.z, dist));
+    float out_ = dist - max(t1 - t0, 0.0);
+    float T = exp(-uFogSigma * max(out_, 0.0));
+    return vec4(fogSky(rd.y) * (1.0 - T), T);
+}
+// scene colour s with its baked haze h, seen through the void
+vec3 voidComposite(vec3 s, vec4 h, vec3 rd, float dist) {
+    if (uVoidOn < 0.5) return s * h.a + h.rgb;
+    vec4 f = voidFog(rd, dist);
+    if (uCamInside > 0.5) return (s * f.a + f.rgb) * h.a + h.rgb;
+    vec4 hw = mix(vec4(0.0, 0.0, 0.0, 1.0), h, uHomeHaze);
+    return (s * hw.a + hw.rgb) * f.a + f.rgb;
+}
+float voidDist(float depth, float z, vec3 rd) { return depth >= 1.0 ? 1e6 : z / max(dot(rd, uCamF), 1e-4); }
+#endif
+
 // ---- bloom level 0: the scene box-filtered to the haze's size (Karis-weighted against fireflies), composited
 #ifdef PASS_BLOOMPRE
 uniform sampler2D uScene;
@@ -48,7 +82,9 @@ void main() {
     }
     c /= ws;
     vec4 h = texture(uHaze, vUv);
-    outColor = vec4(safe3(c * h.a + h.rgb), 1.0);
+    float dd = uVoidOn > 0.5 ? texture(uDepth, vUv).r : 0.0;   // the void: its fog (the depth at this texel's centre)
+    vec3 rd = viewRay(vUv);
+    outColor = vec4(safe3(voidComposite(c, h, rd, voidDist(dd, viewZ(dd), rd))), 1.0);
 }
 #endif
 
@@ -149,7 +185,8 @@ void main() {
     vec2 sh = heatShift(vUv, z / max(dot(viewRay(vUv), uCamF), 1e-4));
     vec3 s = sh == vec2(0.0) ? texelFetch(uScene, px, 0).rgb : texture(uScene, vUv + sh).rgb;
     vec4 h = hazeAt(vUv, z);
-    vec3 c = s * h.a + h.rgb;
+    vec3 rd = viewRay(vUv);
+    vec3 c = voidComposite(s, h, rd, voidDist(texelFetch(uDepth, px, 0).r, z, rd));
     vec3 b = texture(uBloom, vUv).rgb / uBloomLevels;
     c = mix(c, b, uBloomMix) * uExposure;
     outColor = vec4(agxEncoded(safe3(c)), 1.0);
@@ -171,6 +208,9 @@ float lanczos2(float x) {
 }
 #ifdef PASS_RESOLVEV
 uniform sampler2D uDither;
+// ---- the void: the lamps' light (fener.vert) and the far masts (direk.vert), in display light at the canvas' resolution
+uniform sampler2D uGlow;
+uniform float uGlowOn;
 #endif
 void main() {
     ivec2 o = ivec2(gl_FragCoord.xy);
@@ -199,6 +239,10 @@ void main() {
 #ifdef PASS_RESOLVEH
     outColor = vec4(r, 1.0);
 #else
+    if (uGlowOn > 0.5) {       // the void's far masts (laid over: a) and lamps (added), in display light (fener.vert)
+        vec4 g = texelFetch(uGlow, o, 0);
+        r = r * (1.0 - g.a) + g.rgb;
+    }
     r = clamp(r, 0.0, 1.0);
     r = mix(12.92 * r, 1.055 * pow(r, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), r));
     r += (texelFetch(uDither, o & 63, 0).r - 0.5) / 255.0;
