@@ -36,7 +36,7 @@ def wait_lock():
 STILLS = [
     ('kapak_ust', (-1.5, 35.0, -334.0), 0, -14),        # standing by the hatch, looking at it and the mast
     ('cati_boyunca', (3.0, 35.0, -330.0), 180, -4),        # along the roof towards the far end (the lamp's pit)
-    ('kuyu_lamba', (9.0, 35.0, -22.0), -125, -22),       # the roof's lamp close up
+    ('kuyu_lamba', (9.0, 35.0, -22.0), -45, -22),        # the roof's lamp close up (the pit at x 0, z -31)
     ('kenar_disari', (44.0, 35.0, -170.0), 90, 2),       # at the edge, looking out at the void
     ('kenar_asagi', (46.5, 35.0, -120.0), 90, -55),      # over the edge, down along the columns
     ('ufuk_capraz', (40.0, 35.0, -330.0), 135, 0),       # the corner, diagonal into the void

@@ -1158,7 +1158,7 @@ async function create(canvas, options = {}) {
     list: [],                                   // [{ o: [x, y, z], yaw, col: [r, g, b] (full colour, 0..1), home }]
     lid: 0,                                     // our hatch's lid, radians about its axis (+: open)
     kOthers: 30,                                // the other facilities' group-0 intensity (their lamps are steady)
-    fog: { sigma: 0.0028, up: [0.070, 0.087, 0.092], down: [0.004, 0.005, 0.0056], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
+    fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
     force: null,                                // tests: true / false overrides the automatic switch
     lampsOff: false,                            // tests: the frame without the lamps' sprites (their own light alone)
     lampsBare: false,                           // tests: the lamps unhidden by the scene (their full light)
