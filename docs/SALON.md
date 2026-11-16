@@ -221,7 +221,9 @@ Frame pacing: the existing pacer in `ui/uygulama.js` (measured refresh, frame k 
 scene pass split into flushed bands). The cadence is capped at ~30 fps (Özcan, 11-16: "2K da 30 fps yeterli"; no free
 movement, only the camera's own paths): at 165 Hz every 5th refresh (33 fps), so a frame may use ~21 ms of GPU (the
 pacer keeps median × 1.3 + 2 ms under the period). Budget above that goes to quality (supersampling, haze steps), not
-frame rate. Even cadence, no hitch.
+frame rate. Even cadence, no hitch. Not a licence for waste (his words: "optimizasyona önem verildiği halde 2K 30 [...]
+gerçekten kaliteye gitsin. Takıntı yapmadan."): every pass is timed, needless work removed, then the freed time is spent
+on quality; no endless performance chase.
 
 ## Interaction
 
