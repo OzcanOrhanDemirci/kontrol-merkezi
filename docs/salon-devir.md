@@ -57,6 +57,10 @@ and `.claude/worktrees/agent-aa49ccaff5f95de23/.tmp/bosluk-durum.md` (void/loop)
 briefed from that file and its branch (merge salon-gece into it first). Branches already merged: the walk, oven and
 opening worktrees (agent-a1f831a…, agent-abe74550…, agent-aa285b9…): those worktrees can be cleared.
 
+At 01:43 both had committed (stab: 4d0359d on worktree-agent-a7368f56e3c926064; void: 87222f6 on
+worktree-agent-aa49ccaff5f95de23) and written their status files; the void helper's distant-lamp pan test was still
+running and is lost with the restart (rerun it).
+
 ## Tools made tonight
 
 `araclar/salon_dizi.py` (headless frame sequences), `araclar/salon-denetim.ps1 -Hz 165` (real-window check, recording
