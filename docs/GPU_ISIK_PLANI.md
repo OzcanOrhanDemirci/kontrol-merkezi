@@ -76,6 +76,15 @@ Static blue sent at 11:10:57 with MSI's sequence, no 0x3F (`araclar/nvspy/gpu-te
 planned by a mistake (an old build run with an argument it ignored), before MSI's services were stopped; the content was
 the approved step. Power-off check: `docs/GPU_ADIM4_KONTROL.md`.
 
+## After the power-off test (2026-11-16)
+
+- 11:54 boot: the card lit green at power-on (MSI's last saved colour; MSI's "off" had only switched the zones off via
+  0x2D), then MSI Center, started at logon despite its disabled services, re-applied its profile at 11:55:28/31 (the
+  flashing) and the card went dark. Our blue did not return: the step-4 write without 0x3F was volatile.
+- 12:03 (captured, `docs/gpu-kayit/msi-mystic-light-2026-11-16-off.txt`): Özcan applied Steady white, full brightness
+  (0x36 = 0x64), then Mystic Light's "Off". MSI's Off effect is the zone switch only (0x2D = 03) plus a save; it never
+  writes the mode register. Stored state: Steady white, full brightness, zones off. Power-on check pending.
+
 ## Never
 
 - Write register 0x3F.
