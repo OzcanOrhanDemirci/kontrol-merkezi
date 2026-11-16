@@ -23,6 +23,9 @@ using dz::Xform;
 
 constexpr float kPi = 3.14159265358979f;
 
+// the hall's walls (|x|) and ceiling (y): widened and raised 11-16 for grandeur (was 30 and 26)
+constexpr float kHallW = 45.0f, kHallH = 32.0f;
+
 // ---- the emitters' radiance (white, in each group's own units; the window scales every group live). Tune here.
 // One value per emissive material, so a surface seen directly glows exactly as bright as the emitter that lights.
 constexpr float kKuyuL = 1.0f;       // group 0: the shaft's daylight at the well's top

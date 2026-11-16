@@ -207,9 +207,9 @@ void portal(Hall& h) {
     Formwork f;
     f.pu = 0.0f;
     f.pv = 0.0f;
-    h.formworkFace(t, -30, -14.6f, 0, 26, f, M_DUVAR);
-    h.formworkFace(t, 14.6f, 30, 0, 26, f, M_DUVAR);
-    h.formworkFace(t, -14.6f, 14.6f, 22.6f, 26, f, M_DUVAR);
+    h.formworkFace(t, -kHallW, -14.6f, 0, kHallH, f, M_DUVAR);
+    h.formworkFace(t, 14.6f, kHallW, 0, kHallH, f, M_DUVAR);
+    h.formworkFace(t, -14.6f, 14.6f, 22.6f, kHallH, f, M_DUVAR);
     for (int s : {-1, 1}) {
         h.box(v3(s * 12.8f, 10.8f, -44.5f), v3(0.8f, 10.8f, 0.5f), 0.06f, M_ANIT, 3.0f);
         h.box(v3(s * 14.1f, 11.3f, -44.25f), v3(0.5f, 11.3f, 0.25f), 0.05f, M_ANIT, 3.0f);

@@ -27,22 +27,29 @@ void addVolume(Scene& s, const char* name, float3 lo, float3 hi, float cell) {
     s.vols.push_back(v);
 }
 
-// the journey: a smooth line through the aisle from fanlar's eye to rgb's eye, rising over the landing's railing first
+// the journey: a smooth line from fanlar's eye to rgb's eye, rising over the landing's railing first. In the middle of
+// the hall it leaves the aisle through a gap of the inner row (x = 8) into the lane between the rows at x = 8 and 22,
+// runs down the lane and comes back through another gap before the plaza: the view opens diagonally across the forest
+// of columns instead of down one corridor (11-16, for grandeur). The inner columns span z +-3.5 m about -60, -80, ...;
+// the crossings of x 6..10 lie inside the gaps (z -83.5..-96.5 and -183.5..-196.5); geo_onizle.py checks clearance.
 std::vector<float3> journey(const View& a, const View& b) {
-    const std::vector<float2> ctl = {{a.eye.z, a.eye.y}, {-4.2f, 5.35f}, {-6.0f, 6.05f}, {-10.0f, 6.6f}, {-25.0f, 7.0f},
-                                     {-44.0f, 7.2f},     {-80.0f, 7.4f},  {-130.0f, 7.5f}, {-180.0f, 7.2f}, {-210.0f, 6.5f},
-                                     {-222.0f, 5.8f},    {b.eye.z, b.eye.y}};
+    const std::vector<float3> ctl = {a.eye,
+                                     {0.0f, 5.35f, -4.2f}, {0.0f, 6.05f, -6.0f}, {0.0f, 6.6f, -10.0f}, {0.0f, 7.0f, -25.0f},
+                                     {0.0f, 7.2f, -44.0f}, {0.0f, 7.6f, -66.0f}, {2.0f, 8.0f, -82.0f}, {8.0f, 8.4f, -90.0f},
+                                     {14.0f, 8.8f, -98.0f}, {15.0f, 9.0f, -112.0f}, {15.0f, 9.0f, -150.0f},
+                                     {15.0f, 8.6f, -168.0f}, {14.0f, 8.0f, -182.0f}, {8.0f, 7.4f, -190.0f},
+                                     {2.0f, 6.8f, -198.0f}, {0.0f, 6.4f, -212.0f}, {0.0f, b.eye.y + 0.3f, -222.0f}, b.eye};
     // Catmull-Rom (centripetal enough at these spacings), sampled finely, then resampled every ~2 m of arc
     std::vector<float3> fine;
     const int n = int(ctl.size());
     for (int i = 0; i + 1 < n; ++i) {
-        const float2 p0 = ctl[std::max(0, i - 1)], p1 = ctl[i], p2 = ctl[i + 1], p3 = ctl[std::min(n - 1, i + 2)];
+        const float3 p0 = ctl[std::max(0, i - 1)], p1 = ctl[i], p2 = ctl[i + 1], p3 = ctl[std::min(n - 1, i + 2)];
         for (int k = 0; k < 200; ++k) {
             const float t = k / 200.0f, t2 = t * t, t3 = t2 * t;
             auto cr = [&](float q0, float q1, float q2, float q3) {
                 return 0.5f * (2 * q1 + (-q0 + q2) * t + (2 * q0 - 5 * q1 + 4 * q2 - q3) * t2 + (-q0 + 3 * q1 - 3 * q2 + q3) * t3);
             };
-            fine.push_back(make_float3(0.0f, cr(p0.y, p1.y, p2.y, p3.y), cr(p0.x, p1.x, p2.x, p3.x)));
+            fine.push_back(make_float3(cr(p0.x, p1.x, p2.x, p3.x), cr(p0.y, p1.y, p2.y, p3.y), cr(p0.z, p1.z, p2.z, p3.z)));
         }
     }
     fine.push_back(b.eye);
@@ -89,11 +96,11 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
         s.path = journey(s.fanlar, s.rgb);
 
         // baked light in the air: the whole hall coarse; finer round the shaft's beam, the fans and the arch
-        addVolume(s, "salon", make_float3(-30.5f, -0.5f, -276.0f), make_float3(30.5f, 34.0f, 5.5f), 0.5f);
+        addVolume(s, "salon", make_float3(-kHallW - 0.5f, -0.5f, -276.0f), make_float3(kHallW + 0.5f, kHallH + 1.0f, 5.5f), 0.5f);
         addVolume(s, "kuyu", make_float3(-5.2f, 0.0f, -43.0f), make_float3(5.2f, 33.6f, -25.5f), 0.15f);   // 0.1 m was 6.1 M cells (~290 MB for 3 groups)
         addVolume(s, "fan_kasa", make_float3(-16.6f, 2.0f, -31.0f), make_float3(-4.0f, 15.2f, -17.0f), 0.2f);
         addVolume(s, "fan_gpu", make_float3(4.0f, 2.0f, -31.0f), make_float3(16.6f, 15.2f, -17.0f), 0.2f);
-        addVolume(s, "kemer", make_float3(-15.0f, 0.0f, -268.0f), make_float3(15.0f, 26.0f, -245.0f), 0.25f);
+        addVolume(s, "kemer", make_float3(-21.0f, 0.0f, -275.0f), make_float3(21.0f, kHallH, -240.0f), 0.3f);
 
         // finishing: displacement normals and tangents; the light map's chart coordinates (levha faces keep the metres
         // their builder put in uv2, their uv0 runs 0..1)

@@ -1,5 +1,6 @@
-// The hall itself (docs/SALON.md): x in [-30, 30], y in [0, 26], z in [-275, -44]. A wet floor with drainage channels
-// along the walls and a few floor drains; four rows of 2 x 7 m columns (x = ±8, ±22) every 20 m from z = -60 to -220,
+// The hall itself (docs/SALON.md): x in [-45, 45], y in [0, 32], z in [-275, -44] (widened and raised 11-16 for
+// grandeur). A wet floor with drainage channels along the walls and a few floor drains; six rows of 2 x 7 m columns
+// (x = ±8, ±22, ±36) every 20 m from z = -60 to -220,
 // ending ~35 m before the arch to leave it a plaza; a flat ceiling on deep cross beams over the column lines and
 // lighter beams along the rows; side walls with pilasters carrying the beams; a catwalk with its ladder cage and a door
 // with a lit frame on the left wall; pipe runs on brackets; a sparse row of caged lamps. Human scale: railings 1.1 m,
@@ -13,12 +14,12 @@ namespace salon::hall {
 
 namespace {
 
-constexpr float kZ0 = -44.0f, kZ1 = -275.0f, kW = 30.0f, kH = 26.0f;
-constexpr float kRowX[4] = {-22.0f, -8.0f, 8.0f, 22.0f};
+constexpr float kZ0 = -44.0f, kZ1 = -275.0f, kW = kHallW, kH = kHallH;
+constexpr float kRowX[6] = {-36.0f, -22.0f, -8.0f, 8.0f, 22.0f, 36.0f};
 constexpr float kColZ0 = -60.0f, kColZ1 = -220.0f, kColStep = 20.0f;
 constexpr float kBeamZ1 = -240.0f;            // the last cross beam (over the plaza's front)
-constexpr float kChanIn = 27.6f, kChanOut = 28.2f, kChanD = 0.35f;   // drainage channels (|x|), depth
-constexpr float kPilFace = 29.0f;             // the pilasters' face (|x|)
+constexpr float kChanIn = kW - 2.4f, kChanOut = kW - 1.8f, kChanD = 0.35f;   // drainage channels (|x|), depth
+constexpr float kPilFace = kW - 1.0f;             // the pilasters' face (|x|)
 const float kDrainZ[3] = {-90.0f, -150.0f, -210.0f};
 constexpr float kDrainX = 15.0f, kDrainH = 0.4f;
 
@@ -104,13 +105,13 @@ void channels(Hall& h) {
 
 void column(Hall& h, float x, float z, bool detailed) {
     const float hx = 1.0f, hz = 3.5f, rc = 0.08f;
-    const float yb = 1.8f, yt = 23.2f;
+    const float yb = 1.8f, yt = kH - 2.8f;
     // the flared foot (G-Cans' columns stand on a sloped skirt) and the haunch into the ceiling
     h.loft(v3(x, 0, z), hx, hz, rc, {{0.55f, 0.0f}, {0.55f, 0.3f}, {0.54f, 0.34f}, {0.5f, 0.4f}, {0.04f, 1.74f}, {0.01f, 1.79f},
                                      {0.0f, yb}},
            M_KOLON);
-    h.loft(v3(x, 0, z), hx, hz, rc, {{0.0f, yt}, {0.01f, yt + 0.02f}, {0.04f, yt + 0.07f}, {0.31f, 23.95f}, {0.34f, 23.99f},
-                                     {0.35f, 24.05f}, {0.35f, kH}},
+    h.loft(v3(x, 0, z), hx, hz, rc, {{0.0f, yt}, {0.01f, yt + 0.02f}, {0.04f, yt + 0.07f}, {0.31f, kH - 2.05f}, {0.34f, kH - 2.01f},
+                                     {0.35f, kH - 1.95f}, {0.35f, kH}},
            M_KOLON);
     // the shaft: on the inner rows near the gallery its aisle face is cast formwork with tie holes, as geometry
     const int aisle = x > 0 ? 2 : 0;   // the side facing x = 0
@@ -167,14 +168,14 @@ void ceilingAndWalls(Hall& h) {
     for (int s : {-1, 1})
         for (float z = kColZ0; z >= kBeamZ1 - 1e-3f; z -= kColStep)
             h.loft(v3(s * (kPilFace + 0.5f), 0, z), 0.5f, 0.8f, 0.06f,
-                   {{0.25f, 0.0f}, {0.25f, 0.3f}, {0.23f, 0.34f}, {0.01f, 1.28f}, {0.0f, 1.3f}, {0.0f, 23.4f}, {0.02f, 23.45f},
-                    {0.28f, 23.97f}, {0.3f, 24.02f}, {0.3f, kH}},
+                   {{0.25f, 0.0f}, {0.25f, 0.3f}, {0.23f, 0.34f}, {0.01f, 1.28f}, {0.0f, 1.3f}, {0.0f, kH - 2.6f}, {0.02f, kH - 2.55f},
+                    {0.28f, kH - 2.03f}, {0.3f, kH - 1.98f}, {0.3f, kH}},
                    M_KOLON, s > 0 ? 0 : 2);
 }
 
 void catwalk(Hall& h) {
     // along the left wall at y = 12, in front of the pilasters; reached by a caged ladder against the front wall
-    const float y = 12.0f, xa = -kPilFace + 0.05f, xb = -27.75f, za = -45.0f, zb = -246.0f;
+    const float y = 12.0f, xa = -kPilFace + 0.05f, xb = -kW + 2.25f, za = -45.0f, zb = -246.0f;
     const float xc = 0.5f * (xa + xb), zc = 0.5f * (za + zb);
     h.box(v3(xc, y - 0.006f, zc), v3(0.5f * (xb - xa), 0.006f, 0.5f * (za - zb)), 0.003f, M_SAC, 6.0f);
     for (float x : {xa, xb}) h.bar(v3(x, y - 0.08f, za), v3(x, y - 0.08f, zb), 0.012f, 0.15f, v3(0, 1, 0), M_KOYU);
@@ -187,7 +188,7 @@ void catwalk(Hall& h) {
     h.railing({v3(xb - 0.05f, y, za), v3(xb - 0.05f, y, zb + 0.05f), v3(xa, y, zb + 0.05f)}, 1.5f, M_PASLI);
     // the cable tray above the walkway, its cables
     {
-        const float ty = 14.3f, tx0 = -28.9f, tx1 = -28.55f;
+        const float ty = 14.3f, tx0 = -kW + 1.1f, tx1 = -kW + 1.45f;
         h.bar(v3(0.5f * (tx0 + tx1), ty, za), v3(0.5f * (tx0 + tx1), ty, zb), tx1 - tx0, 0.01f, v3(0, 1, 0), M_SAC);
         for (float x : {tx0, tx1}) h.bar(v3(x, ty + 0.04f, za), v3(x, ty + 0.04f, zb), 0.008f, 0.08f, v3(0, 1, 0), M_SAC);
         for (int c = 0; c < 3; ++c) h.tube(v3(tx0 + 0.08f + 0.1f * c, ty + 0.03f, za), v3(tx0 + 0.08f + 0.1f * c, ty + 0.03f, zb), 0.024f, M_KABLO, 6.0f);
@@ -225,7 +226,7 @@ void catwalk(Hall& h) {
     }
     // the ladder: stiles 0.5 m apart off the front wall, rungs every 0.3 m, a cage of hoops from 2.4 m up
     {
-        const float lx = -28.4f, lz = kZ0 - 0.25f, top = y + 1.1f;
+        const float lx = -kW + 1.6f, lz = kZ0 - 0.25f, top = y + 1.1f;
         for (float sx : {-0.25f, 0.25f}) {
             h.bar(v3(lx + sx, 0.0f, lz), v3(lx + sx, top, lz), 0.012f, 0.065f, v3(0, 0, 1), M_PASLI);
             for (float yy = 1.5f; yy < top; yy += 2.5f) h.bar(v3(lx + sx, yy, kZ0), v3(lx + sx, yy, lz + 0.01f), 0.06f, 0.012f, v3(1, 0, 0), M_PASLI);
@@ -247,10 +248,10 @@ void catwalk(Hall& h) {
 }
 
 void pipes(Hall& h) {
-    // the right wall: a big main at 17.5 m, two smaller lines at 2.8 and 3.4 m diving into the floor near the end
+    // the right wall: a big main at 21 m, two smaller lines at 2.8 and 3.4 m diving into the floor near the end
     struct Run { float x, y, r; bool dive; int side; };
-    const Run runs[] = {{28.45f, 17.5f, 0.35f, false, 1}, {28.72f, 2.8f, 0.15f, true, 1}, {28.72f, 3.4f, 0.15f, true, 1},
-                        {-28.5f, 9.6f, 0.2f, false, -1}};
+    const Run runs[] = {{kW - 1.55f, 21.0f, 0.35f, false, 1}, {kW - 1.28f, 2.8f, 0.15f, true, 1}, {kW - 1.28f, 3.4f, 0.15f, true, 1},
+                        {-kW + 1.5f, 9.6f, 0.2f, false, -1}};
     for (const Run& r : runs) {
         // the left line comes out of the side wall behind the ladder's reach
         std::vector<float3> pts = {r.side < 0 ? v3(-kW, r.y, -47.0f) : v3(r.x, r.y, kZ0)};
@@ -288,15 +289,28 @@ void doorsAndLamps(Hall& h) {
         h.rod(v3(x - 0.17f, 0.95f, zd - 0.38f), v3(x - 0.17f, 1.15f, zd - 0.38f), 0.016f, M_KOYU);
         h.cagedLamp(v3(x, 4.6f, zd), v3(-1, 0, 0), kBulbBoard);
     }
-    // uplights at the foot of every inner-row column, on the aisle side (group 2, warm, dim): G-Cans' pillars are lit
-    // from their bases, so down the hall each column stands in its own pool of light with the haze between them, the
-    // columns fading one by one into the distance
+    // uplights at the columns' feet, on the side facing the aisle (group 2, warm, dim): G-Cans' pillars are lit from
+    // their bases. Not every column, not equally: the inner rows mostly lit, the outer ones sparsely, each a little
+    // brighter or dimmer (a fixed hash), so the side bays emerge from the haze one here, one there, and the far ones
+    // vanish into the dark (review 1, A2: avoid lighting every bay equally)
+    auto hash = [](int a, int b) {
+        uint32_t x = uint32_t(a) * 73856093u ^ uint32_t(b) * 19349663u;
+        x ^= x >> 13; x *= 0x5bd1e995u; x ^= x >> 15;
+        return (x & 0xFFFFu) / 65535.0f;
+    };
+    int ri = 0;
     for (float x : kRowX) {
-        if (std::fabs(x) > 10.0f) continue;
-        const float sx = x > 0 ? -1.0f : 1.0f;           // towards the aisle
+        ++ri;
+        const float ax = std::fabs(x);
+        const float share = ax < 10.0f ? 0.9f : ax < 30.0f ? 0.55f : 0.35f;   // how many columns of the row are lit
+        const float sx = x > 0 ? -1.0f : 1.0f;                                  // towards the aisle
         const float tilt = 12.0f * kPi / 180.0f;
-        const float3 n = v3(-sx * std::sin(tilt), std::cos(tilt), 0);   // up, leaning onto the column's face
+        const float3 n = v3(-sx * std::sin(tilt), std::cos(tilt), 0);          // up, leaning onto the column's face
+        int ci = 0;
         for (float z = kColZ0; z >= kColZ1 - 1e-3f; z -= kColStep) {
+            ++ci;
+            if (hash(ri, ci) > share) continue;
+            const float gain = 0.55f + 0.9f * hash(ri + 17, ci + 5);
             const float3 base = v3(x + sx * 1.9f, 0.0f, z);
             h.box(base + v3(0, 0.07f, 0), v3(0.24f, 0.07f, 0.34f), 0.012f, M_KOYU, 0.5f);
             h.at(axes(base + v3(0, 0.141f, 0), v3(0, 0, 1), v3(1, 0, 0), v3(0, 1, 0)), M_CAM_LAMBA, 1.0f).quad(0.5f, 0.3f);
@@ -307,7 +321,7 @@ void doorsAndLamps(Hall& h) {
             e.u = v3(0, 0, 0.25f);
             e.v = v3(0.15f, 0, 0);
             e.n = n;
-            e.L = kColUpL;
+            e.L = kColUpL * gain;
             e.lobe = 14.0f;
             h.s.lights.push_back(e);
         }
