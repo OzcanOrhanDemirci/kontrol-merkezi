@@ -47,9 +47,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+class Server(socketserver.ThreadingTCPServer):
+    def handle_error(self, request, client_address):
+        pass                    # the browser closing a connection mid-file (a page that failed or closed)
+
+
 def serve(pack):
     Handler.pack = pack
-    httpd = socketserver.ThreadingTCPServer(('127.0.0.1', 0), Handler)
+    httpd = Server(('127.0.0.1', 0), Handler)
     httpd.daemon_threads = True
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, httpd.server_address[1]
@@ -138,33 +143,42 @@ def cmd_kare(a, port, pw):
     pg.close()
 
 
+def measure(pg, q, fx, rounds=3, n=45):
+    """GPU time per pass: the median over n frames, the lowest of a few rounds (the GPU is also the desk: another
+    program's work between a timer query's begin and end counts in it, so single rounds can read high)."""
+    best = None
+    for r in range(rounds):
+        pg.ev('(q) => salon.setQuality(q)', q)
+        pg.ev('(o) => fixture.set(o)', fx)
+        pg.frames(15)
+        st = pg.frames(n)
+        if best is None or (st['gpuMs'] or 1e9) < (best['gpuMs'] or 1e9):
+            best = st
+    return {'gpuMs': round(sum(best['passes'].values()), 3), 'passes': best['passes'], 'memoryMB': best['memoryMB'],
+            'scene': best['scene']}
+
+
 def cmd_zaman(a, port, pw):
     res = {}
     pg = Page(pw, port, a.w, a.h, 2)
+    base = dict(scale=2, hazeScale=0.5, hazeStep=1, prepass=True, bands=6, cubic=True)
+    fx = dict(mode='fanlar', revs=3.0, strength=1.0, animColour=False)
     for sc in [float(x) for x in a.scales.split(',')]:
-        pg.ev('(q) => salon.setQuality(q)', dict(scale=sc))
-        pg.ev('(o) => fixture.set(o)', dict(mode='fanlar', revs=3.0, strength=1.0))
-        pg.frames(20)
-        st = pg.frames(45)
-        res[f'{sc:g}'] = {'gpuMs': st['gpuMs'], 'passes': st['passes'], 'memoryMB': st['memoryMB'], 'scene': st['scene']}
-        print(sc, json.dumps(res[f'{sc:g}']), flush=True)
-    for name, q in [('onkatman_yok', dict(scale=2, prepass=False)), ('bant_1', dict(scale=2, prepass=True, bands=1)),
-                    ('pus_tam', dict(scale=2, bands=6, hazeScale=1.0)), ('pus_adim_05', dict(scale=2, hazeScale=0.5, hazeStep=0.5))]:
-        pg.ev('(q) => salon.setQuality(q)', q)
-        pg.frames(20)
-        st = pg.frames(45)
-        res[name] = {'gpuMs': st['gpuMs'], 'passes': st['passes']}
+        res[f'olcek_{sc:g}'] = measure(pg, dict(base, scale=sc), fx)
+        print(f'olcek_{sc:g}', json.dumps(res[f'olcek_{sc:g}']), flush=True)
+    for name, q in [('onkatman_yok', dict(prepass=False)), ('kubik_yok', dict(cubic=False)), ('pus_075', dict(hazeScale=0.75)),
+                    ('pus_tam', dict(hazeScale=1.0)), ('pus_adim_05', dict(hazeStep=0.5))]:
+        res[name] = measure(pg, dict(base, **q), fx)
         print(name, json.dumps(res[name]), flush=True)
-    pg.ev('(q) => salon.setQuality(q)', dict(scale=2, hazeScale=0.5, hazeStep=1, prepass=True, bands=6))
     for mode in ['yol', 'rgb']:
-        pg.ev('(o) => fixture.set(o)', dict(mode=mode, u=0.45))
-        pg.frames(20)
-        st = pg.frames(45)
-        res['gorunum_' + mode] = {'gpuMs': st['gpuMs'], 'passes': st['passes']}
-        print(mode, json.dumps(res['gorunum_' + mode]), flush=True)
+        res['gorunum_' + mode] = measure(pg, base, dict(fx, mode=mode, u=0.45))
+        print('gorunum_' + mode, json.dumps(res['gorunum_' + mode]), flush=True)
+    res['renk_degisiyor'] = measure(pg, base, dict(fx, animColour=True))
+    print('renk_degisiyor', json.dumps(res['renk_degisiyor']), flush=True)
+    st = pg.ev('() => salon.stats()')
     res['compileMs'] = st['compileMs']
     res['yukleme_s'] = pg.load_s
-    (OUT / 'zaman.json').parent.mkdir(parents=True, exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     (OUT / 'zaman.json').write_text(json.dumps(res, indent=1), encoding='utf-8')
     pg.close()
 

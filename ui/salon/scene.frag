@@ -126,8 +126,8 @@ void main() {
         vec4 a[3], b[3];
         for (int g = 0; g < 3; g++) {
             float layer = float(uPage * 3 + g);
-            a[g] = lmRead(uLmA, vLm, layer, wc);
-            b[g] = lmRead(uLmB, vLm, layer, wc);
+            a[g] = lmRead(uLmA, vLm, layer, wc);          // L0 (the light's amount) smooth to the second derivative;
+            b[g] = texture(uLmB, vec3(vLm, layer));        // its direction varies slowly: bilinear is enough
         }
         open = clamp(a[0].a, 0.0, 1.0);
         s.so = open * mix(1.0, s.ao, 0.5);

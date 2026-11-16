@@ -121,8 +121,9 @@ function blueNoise() {
 
 // ==================================================================== the renderer
 async function create(canvas, options = {}) {
-  const say = (f, t) => { if (options.onProgress) try { options.onProgress(f, t); } catch (e) { /* the page's handler */ } };
-  const fail = msg => { const e = new Error(msg); say(1, msg); console.error('Salon: ' + msg); return e; };
+  let failed = false;            // after the first error the loads still running report nothing more
+  const say = (f, t) => { if (options.onProgress && !failed) try { options.onProgress(f, t); } catch (e) { /* the page's handler */ } };
+  const fail = msg => { const e = new Error(msg); if (!failed) { say(1, msg); console.error('Salon: ' + msg); } failed = true; return e; };
   const gl = canvas.getContext('webgl2', {
     alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false,
     preserveDrawingBuffer: !!options.preserveDrawingBuffer, powerPreference: 'high-performance',
@@ -634,14 +635,17 @@ async function create(canvas, options = {}) {
   const fanEye = pack.gorunumler.fanlar.goz;
 
   // ---------------------------------------------------------------- GPU timing
-  const timing = { frames: [], hist: {}, last: {}, total: null, frame: null };
+  const timing = { frames: [], hist: {}, last: {}, lastSet: new Set(), total: null, frame: null };
+  // one pass, timed on the GPU when the timer extension is there; flushed after it, so the compositor finds the GPU
+  // between passes (outside the query: the flush's gap is not counted in the pass)
   function timed(name, fn) {
-    if (!extTimer || timing.frames.length > 8) { fn(); return; }
+    if (!extTimer || timing.frames.length > 8) { fn(); gl.flush(); return; }
     const q = gl.createQuery();
     gl.beginQuery(extTimer.TIME_ELAPSED_EXT, q);
     fn();
     gl.endQuery(extTimer.TIME_ELAPSED_EXT);
     timing.frame.push([name, q]);
+    gl.flush();
   }
   function pollTimers() {
     if (!extTimer) return;
@@ -663,7 +667,7 @@ async function create(canvas, options = {}) {
         const h = timing.hist[name] || (timing.hist[name] = []);
         h.push(ms); if (h.length > 30) h.shift();
       }
-      if (f.length) timing.total = sum;
+      if (f.length) { timing.total = sum; timing.lastSet = new Set(f.map(x => x[0])); }
     }
   }
   const median = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
@@ -915,6 +919,7 @@ async function create(canvas, options = {}) {
   }
   function render(dt = 1 / 60, shutter = 1 / 60) {
     if (disposed) return;
+    const cpu0 = performance.now();
     if (gl.isContextLost()) throw fail('GPU bağlantısı kesildi');
     resize();
     time += Math.max(0, dt || 0);
@@ -989,6 +994,8 @@ async function create(canvas, options = {}) {
     if (timing.frame.length) timing.frames.push(timing.frame);
     timing.frame = null;
     frames++;
+    cpuHist.push(performance.now() - cpu0);
+    if (cpuHist.length > 30) cpuHist.shift();
     if (options.debug) { const e = gl.getError(); if (e) console.error('Salon: WebGL hatası 0x' + e.toString(16)); }
   }
 
@@ -1029,6 +1036,7 @@ async function create(canvas, options = {}) {
   }
 
   let disposed = false, frames = 0;
+  const cpuHist = [];
   function dispose() {
     if (disposed) return;
     disposed = true;
@@ -1075,10 +1083,12 @@ async function create(canvas, options = {}) {
     resize,
     stats() {
       pollTimers();
+      // the median of the last frames of every pass the last measured frame ran (the volumes' recombination only
+      // runs when a light's colour moves: its last time is reported apart)
       const passes = {};
-      for (const [k, h] of Object.entries(timing.hist)) passes[k] = +median(h).toFixed(3);
+      for (const k of Object.keys(timing.last)) if (timing.hist[k] && timing.lastSet.has(k)) passes[k] = +median(timing.hist[k]).toFixed(3);
       return {
-        gpuMs: timing.total, passes, last: { ...timing.last }, memoryMB: +(bytes / 1048576).toFixed(1), textures: owned.filter(x => x[0] === 'Texture').length,
+        gpuMs: timing.total, passes, cpuMs: cpuHist.length ? +median(cpuHist).toFixed(2) : null, volumesMs: timing.last.volumes != null ? +timing.last.volumes.toFixed(3) : null, memoryMB: +(bytes / 1048576).toFixed(1), textures: owned.filter(x => x[0] === 'Texture').length,
         triangles, compileMs: +compileMs.toFixed(0), parallelCompile: !!extPar, timer: !!extTimer, frames,
         size: [W, H], scene: T ? [T.scene.w, T.scene.h] : null, quality: { ...Q },
       };
