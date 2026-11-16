@@ -153,10 +153,17 @@ void ceilingAndWalls(Hall& h) {
         h.oneChart(vm, cm);
     }
     {
-        const size_t vm = h.vmark();
-        const uint32_t cm = h.cmark();
-        h.patch(v3(-kW, 0, kZ1), v3(kW, 0, kZ1), v3(-kW, kH, kZ1), v3(kW, kH, kZ1), v3(0, 0, 1), M_DUVAR, 8.0f);
-        h.oneChart(vm, cm);
+        // the end wall, with the opening into the heat core's chamber behind the arch (x +-12, y 0..26; the chamber
+        // closes itself on every side, hall_arch.cpp): three pieces round the hole, each its own chart
+        const float hx = 12.0f, hy = 26.0f;
+        for (int q = 0; q < 3; ++q) {
+            const size_t vm = h.vmark();
+            const uint32_t cm = h.cmark();
+            if (q == 0) h.patch(v3(-kW, 0, kZ1), v3(-hx, 0, kZ1), v3(-kW, kH, kZ1), v3(-hx, kH, kZ1), v3(0, 0, 1), M_DUVAR, 8.0f);
+            if (q == 1) h.patch(v3(hx, 0, kZ1), v3(kW, 0, kZ1), v3(hx, kH, kZ1), v3(kW, kH, kZ1), v3(0, 0, 1), M_DUVAR, 8.0f);
+            if (q == 2) h.patch(v3(-hx, hy, kZ1), v3(hx, hy, kZ1), v3(-hx, kH, kZ1), v3(hx, kH, kZ1), v3(0, 0, 1), M_DUVAR, 8.0f);
+            h.oneChart(vm, cm);
+        }
     }
     // cross beams over the column lines (1.2 m wide, 2 m deep), wall to wall; lighter beams along the rows
     for (float z = kColZ0; z >= kBeamZ1 - 1e-3f; z -= kColStep) h.box(v3(0, kH - 1.0f, z), v3(kW, 1.0f, 0.6f), 0.05f, M_TAVAN, 6.0f);
