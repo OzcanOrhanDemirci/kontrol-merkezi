@@ -2,6 +2,8 @@
 //
 //   rgb-dene gpu sondur --karta-yaz    zones off (one write, 2D=03)
 //   rgb-dene gpu sira --karta-yaz      white 5 s (MSI's full sequence), blue 5 s (colour + steady), then dark
+//   rgb-dene gpu tekrar [s] --karta-yaz white, then the same white re-sent as colour + steady ~10 times a second for s (15)
+//   rgb-dene gpu gecis-dokum           computation only: what the card receives in gecis.py's transition
 //   rgb-dene gpu servis                card-less build only: the service's writer through start, on, off, wake, exit
 //
 // Do not run these while the installed service drives the card (both would write). Every write goes to the console
@@ -15,6 +17,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using KontrolMerkezi.Isik;
 
 namespace KontrolMerkezi.Rgb;
 
@@ -35,6 +38,7 @@ static class GpuDeneme
 #if !GPU_ISIK
         if (a[0] == "servis") return ServisBenzetimi();
 #endif
+        if (a[0] == "gecis-dokum") return GecisDokumu();   // computation only, reaches no device
 
         KayitYolu kayit = null;
 #pragma warning disable CS0162
@@ -79,6 +83,25 @@ static class GpuDeneme
                         while (!bitti && sw.Elapsed.TotalSeconds < 5) Thread.Sleep(50);
                     }
                     return 0;
+                case "tekrar":
+                {
+                    double sn = a.Count > 1 ? double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture) : 15;
+                    var beyaz = new Rgb(255, 255, 255);
+                    kart.YazmaArasiMs = 25;
+                    Yaz("-- beyaz (tam sıra), 3 sn sabit");
+                    if (!kart.Yaz(new[] { beyaz })) return 1;
+                    var sw0 = Stopwatch.StartNew();
+                    while (!bitti && sw0.Elapsed.TotalSeconds < 3) Thread.Sleep(50);
+                    var iz = kart.Iz;
+                    kart.Iz = null;
+                    Yaz($"-- aynı beyaz, renk + sabit olarak yeniden, {sn:0} sn");
+                    var sw = Stopwatch.StartNew();
+                    int n = 0;
+                    while (!bitti && sw.Elapsed.TotalSeconds < sn) { if (!kart.AyniRengiYinele(beyaz)) { kart.Iz = iz; return 1; } n++; }
+                    kart.Iz = iz;
+                    Yaz($"   {n} yineleme / {sw.Elapsed.TotalSeconds:F1} sn = {n / sw.Elapsed.TotalSeconds:F1}/sn");
+                    return 0;
+                }
                 default:
                     Yaz("bilinmeyen komut: " + a[0] + " (yalnız söndürülecek)");
                     return 64;
@@ -96,6 +119,50 @@ static class GpuDeneme
             try { dosya?.Dispose(); } catch { }
             dosya = null;
         }
+    }
+
+    /// <summary>What the card receives in the preview transition (gecis.py 45 -> 64): the light engine at 30 frames/s with
+    /// Özcan's settings and effects off; the card takes the newest frame every 1/rate s. For 30/s (the fans and keyboard)
+    /// and the card's ~10/s: how large each step is to the eye (OKLab distance; ~0.02 is about the smallest visible).</summary>
+    static int GecisDokumu()
+    {
+        var ayar = Ayarlar.Yukle();
+        ayar.EfektlerKapali = true;
+        foreach (double hiz in new[] { 30.0, 9.6 })
+        {
+            var m = new RenkMotoru(ayar) { Acik = true };
+            var adimlar = new List<(double t, Rgb c, double d)>();
+            Rgb? onceki = null;
+            double sonraki = 0;
+            for (int i = 0; i <= 50 * 30; i++)
+            {
+                double t = i / 30.0;
+                double c = t < 10 ? 45 : 64;
+                m.Hesapla(new Girdi { CpuC = c, GpuC = c }, t, 1 / 30.0);
+                if (t < sonraki) continue;
+                sonraki += 1 / hiz;
+                var l = m.Gpu[0];
+                byte B8(double x) => (byte)Math.Round(Lin.Clamp(x) * 255);
+                var r = new Rgb(B8(l.R), B8(l.G), B8(l.B));
+                if (onceki is Rgb o && !o.Equals(r))
+                {
+                    var la = Lab.From(new Lin(o.R / 255.0, o.G / 255.0, o.B / 255.0));
+                    var lb = Lab.From(new Lin(r.R / 255.0, r.G / 255.0, r.B / 255.0));
+                    double d = Math.Sqrt((la.L - lb.L) * (la.L - lb.L) + (la.A - lb.A) * (la.A - lb.A) + (la.B - lb.B) * (la.B - lb.B));
+                    if (t >= 10) adimlar.Add((t, r, d));
+                }
+                onceki = r;
+            }
+            var ds = adimlar.Select(x => x.d).OrderBy(x => x).ToList();
+            Console.WriteLine($"== {hiz:0.#}/sn: geçişte {adimlar.Count} değişim; adım büyüklüğü (OKLab): ortanca {ds[ds.Count / 2]:0.000}, %90 {ds[(int)(ds.Count * 0.9)]:0.000}, en büyük {ds[ds.Count - 1]:0.000}; 0,02'yi aşan {ds.Count(x => x > 0.02)}");
+            foreach (var x in adimlar.OrderByDescending(x => x.d).Take(6).OrderBy(x => x.t))
+                Console.WriteLine($"   t={x.t - 10:00.0} sn  {x.c}  adım {x.d:0.000}");
+            int sec = 0;
+            Console.Write("   saniye başına toplam adım (göz): ");
+            for (int k = 0; k < 40; k += 4) { double sum = adimlar.Where(x => x.t - 10 >= k && x.t - 10 < k + 4).Sum(x => x.d); Console.Write($"{k}-{k + 4}s:{sum / 4:0.00} "); sec++; }
+            Console.WriteLine();
+        }
+        return 0;
     }
 
 #if !GPU_ISIK

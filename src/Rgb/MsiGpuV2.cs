@@ -158,6 +158,18 @@ public sealed class MsiGpuV2 : IRgbCihaz
         }
     }
 
+    /// <summary>Test only: send the same colour again as colour + steady, although nothing changed (is each update
+    /// visible on the card by itself?).</summary>
+    public bool AyniRengiYinele(Rgb c)
+    {
+        lock (kilit)
+        {
+            if (!Bagli || !sabitKurulu) return false;
+            try { Gonder(DegisimSirasi(c)); return true; }
+            catch (Exception ex) { Hata = "GPU ışığı yazılamadı: " + ex.Message; Bagli = false; return false; }
+        }
+    }
+
     /// <summary>Zones off (MSI's own off switch, never stored by the card).</summary>
     public void Sondur()
     {
