@@ -475,7 +475,9 @@ requestAnimationFrame(measureRefresh);
 PACE.lt = { n: 0, max: 0 };
 try { new PerformanceObserver(l => l.getEntries().forEach(e => { PACE.lt.n++; if (e.duration > PACE.lt.max) { PACE.lt.max = e.duration; PACE.lt.at = (e.startTime - bootT) / 1000; } })).observe({ type: 'longtask' }); } catch (e) { /* not supported */ }
 function choosePace() {
-  const cap = Math.max(1, Math.ceil(15.6 / PACE.refresh - 0.02));            // never faster than ~64 fps
+  // never faster than ~30 fps (Özcan, 11-16: "2K da 30 fps yeterli"; there is no free movement): the largest whole
+  // number of refreshes that still gives 30+ (165 Hz: 5 = 33 fps; 60 Hz: 2); the GPU time this frees goes to quality
+  const cap = Math.max(1, Math.floor(1000 / 30 / PACE.refresh + 0.02));
   const g = GPU.slice(-60);
   if (g.length >= 12) {
     const s2 = g.slice().sort((x, y) => x - y), med = s2[s2.length >> 1];

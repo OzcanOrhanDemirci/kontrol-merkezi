@@ -218,7 +218,10 @@ Frame (2560 × 1440 the reference):
 No TAA, no FXAA/SMAA, no random numbers at run time: every pixel the same samples every frame.
 
 Frame pacing: the existing pacer in `ui/uygulama.js` (measured refresh, frame k refreshes after the running one, the
-scene pass split into flushed bands). 30+ fps is enough; no hitch.
+scene pass split into flushed bands). The cadence is capped at ~30 fps (Özcan, 11-16: "2K da 30 fps yeterli"; no free
+movement, only the camera's own paths): at 165 Hz every 5th refresh (33 fps), so a frame may use ~21 ms of GPU (the
+pacer keeps median × 1.3 + 2 ms under the period). Budget above that goes to quality (supersampling, haze steps), not
+frame rate. Even cadence, no hitch.
 
 ## Interaction
 
