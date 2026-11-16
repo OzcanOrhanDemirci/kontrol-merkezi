@@ -55,6 +55,21 @@ of any kind has been sent to the card, not even a read or a probe.
 5. Only after step 4 passes: uninstall MSI Center, set `DerlemeIzni = true`, and let the service enable the runtime
    flag. Keep the update rate low (the driver thins to 4 Hz) since each colour costs ~7 bus writes.
 
+## Step 1-2 result (2026-11-16, 11:02-11:06)
+
+Recorded with `araclar/nvspy/izle.exe` attached as a debugger to MSI Center 2.0.75 / Mystic Light's `LEDKeeper2.exe`
+(the folder proxy was bypassed: MSI loads nvapi by full path). Raw log: `docs/gpu-kayit/msi-mystic-light-2026-11-16.txt`.
+
+- 63 calls, all `NvAPI_I2CWriteEx`, all to 7-bit address **0x68** on I2C **port 1** (portSet=1), all status 0. No reads,
+  no other address, port or I2C function.
+- Colour apply, in this order, ~30 ms apart: `2D=00`, `22=1C`, `36=<brightness>`, `38=02`, `30=R`, `31=G`, `32=B`,
+  `22=13`, then ~1 s later `3F=00`. Red FF/00/00, green 00/FF/00. Brightness one step: 0x50 -> 0x3C.
+- Off: `2D=00`, `2D=01` (Side) or `2D=03` (Front+Side), then `3F=00`. 0x2D is a zones-off mask (bit 1 Side, bit 2 Front
+  by inference).
+- MSI writes **0x2D, not 0x2E** (OpenRGB's guess) and never 0x27-0x2C or 0x46.
+- **MSI saves (0x3F) after every apply**, plain colour changes included. The card's stored state after the session:
+  Front+Side off (11:06:05). Volatility of the non-save registers is not shown by this data: step 4 decides it.
+
 ## Never
 
 - Write register 0x3F.
