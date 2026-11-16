@@ -161,3 +161,19 @@ of MSI's call (ver 3, D0, port 1 set, i2cSpeed FFFF, 400 kHz) from an unelevated
   stepped? If stepped, a card effect built around the steps (a breath, an on/off) may come back as a later step.
 - Not checked yet: the installed service on the card (start darkening, RGB on/off, idle-off, sleep/wake); per-device
   colour match of the card against the keyboard (`cihazRenkleri.gpu` if needed).
+
+## Speed stages and the final card setting (2026-11-16, 15:52-16:50)
+
+- Installed 15:52; the card follows RGB on/off with the others ("ekran kartı uyumlu yanıyor").
+- Pace, like an overclock, with Özcan watching each stage: 25 ms after every write is taken (~10 colour changes/s);
+  20, 10 and 5 ms are silently ignored (every write returns status 0, the card keeps its colour), also with 5 ms
+  between the colour writes and 25 ms after the steady write. So ~10 changes/s is this card's limit.
+- Re-sending an unchanged colour is invisible ("dümdüz durdu"), so the visible stepping comes from how the chip maps
+  values; the computed steps at 10/s stay under the visible threshold. A/B on the card alone: sRGB-encoded values
+  step less than linear ones ("basamaklanma var ama azaldı [...] kabul edilebilir"). Final: 25 ms, eye-encoded
+  (`gpuYazmaArasiMs`, `gpuGozeGore`).
+- Effects: after seeing them on the real lights (a white/colour "akış" wave and a red over-temperature wave, both
+  previews; the first was disturbed by the window restarting the service), Özcan removed all of them, the 90 °C
+  warning too: "Sıcaklık + 15 dakika yeterli." The service no longer reads Jarvis's state or the local model.
+- For a test run on the devices with the service stopped: close the window first (it restarts the service task),
+  then `{"komut":"kapat"}` on the pipe, and `schtasks /run /tn KontrolMerkezi` afterwards (works unelevated).
