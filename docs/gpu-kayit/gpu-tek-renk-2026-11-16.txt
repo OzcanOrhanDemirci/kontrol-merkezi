@@ -1,0 +1,11 @@
+GPU 0: aygit 270410DE alt 51111462
+== adim 4: tek statik renk (mavi), MSI'in sirasi, 0x3F YOK
+11:10:57.236 yaz 0x68 port1 reg=2D data=00 status=0
+11:10:57.270 yaz 0x68 port1 reg=22 data=1C status=0
+11:10:57.316 yaz 0x68 port1 reg=36 data=50 status=0
+11:10:57.363 yaz 0x68 port1 reg=38 data=02 status=0
+11:10:57.409 yaz 0x68 port1 reg=30 data=00 status=0
+11:10:57.455 yaz 0x68 port1 reg=31 data=00 status=0
+11:10:57.487 yaz 0x68 port1 reg=32 data=FF status=0
+11:10:57.519 yaz 0x68 port1 reg=22 data=13 status=0
+== bitti: 8 yazma, kaydetme (0x3F) gonderilmedi

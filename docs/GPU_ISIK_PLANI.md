@@ -90,3 +90,31 @@ the approved step. Power-off check: `docs/GPU_ADIM4_KONTROL.md`.
 - Write register 0x3F.
 - Probe or scan addresses, or read registers "to see" before step 1 has shown MSI doing the same read.
 - Run the GPU driver while MSI Center, Afterburner's RGB or OpenRGB is running.
+
+## Open question: is the zone switch 0x2D stored? (2026-11-16, 12:15)
+
+- 11:06:06 MSI's last save before step 4 stored Steady green, 0x36=3C, zones off (`2D=03`, then `3F`).
+- 11:10:57 the step-4 blue (no 3F) began with `2D=00` (zones on). Log: `docs/gpu-kayit/gpu-tek-renk-2026-11-16.txt`.
+- 11:54, after a shutdown and ~10 s power off: green at power-on, i.e. saved colour and mode, but zones **on**
+  although the save said off.
+- 12:06 boot after "Kapat" (wall power unknown): white flashed at startup and went off (MSI's logon re-apply).
+  12:11 boot after a warm restart: dark at power-on (the light chip keeps power across a restart).
+
+Two readings, not yet told apart:
+- (A) 0x2D is stored by the controller on every write, without 3F. Then every on/off through 0x2D writes the card's
+  memory, and a power loss while lit brings the card up lit. Design then: never write 0x2D for on/off; use black.
+- (B) 0x2D is never stored, not even by 3F; power-on always has zones on and shows the stored mode (now Steady
+  white, full brightness, from 12:03). Then white at every power-on until the service switches the zones off with a
+  volatile write; dark-at-power-on would need one deliberate save of a dark state (his decision, not the plan).
+
+The decisive test: a full power off (PSU off ~10 s) with MSI gone; dark at the BIOS logo = (A), white = (B).
+
+## MSI Center removed (2026-11-16, 12:22)
+
+`araclar/msi-kaldir/msi-kaldir.cmd` (one UAC) took MSI Center apart by hand without running any MSI program (its
+uninstaller launches MSI executables): Store app, SDK folder, 4 services, NTIOLib drivers, the logon task
+"MSI Task Host - LEDKeeper2_Host" (what started MSI at logon with its services disabled, and the flicker after the
+desktop), firewall rules, registry, ProgramData; 10 plug-ins with their own quiet uninstallers (5 ENE HALs, WD P40,
+WD_BLACK D50, WD_BLACK AN1500, Verbatim, AMD Ryzen Master SDK with its driver); MSI's MsIo64 boot driver (January);
+the logger log folder; the built logger and colour-tool binaries. Kept: Afterburner, RTSS, and the BIOS-installed
+MSI Driver Utility Installer and msiswacpi driver.
