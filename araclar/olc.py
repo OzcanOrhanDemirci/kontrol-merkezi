@@ -244,7 +244,43 @@ def cmd_gecis():
     print(OUT / "gecis-dizi.jpg")
 
 
+def cmd_hareket():
+    """Short frame sequences of the moving states, as contact sheets (hareket-<ad>.jpg, 4x2 frames,
+    ~0.15 s apart) plus one 1:1 crop of the ring top per sequence to check for ghost trails."""
+    from PIL import Image
+    import io
+    seqs = [
+        ("rgb-acilis", "__km.sim.temp(54); __km.setTab('rgb', true); __km.sim.send({komut:'rgb', acik:false})", 6, "__km.sim.send({komut:'rgb', acik:true})"),
+        ("sekme", "__km.sim.temp(64)", 5, "__km.setTab('rgb', true)"),
+        ("dusunuyor", "__km.sim.temp(46); __km.setTab('rgb', true)", 6, "__km.sim.jarvis('dusunuyor')"),
+        ("bekliyor", "__km.sim.temp(54); __km.setTab('rgb', true)", 6, "__km.sim.jarvis('bekliyor')"),
+    ]
+    only = arg("--sadece", "")
+    with sync_playwright() as p:
+        for name, setup, wait, go in seqs:
+            if only and only not in name:
+                continue
+            b, pg, logs, first = open_page(p, 2560, 1440)
+            pg.evaluate(f"() => {{ {setup} }}")
+            time.sleep(wait)
+            pg.evaluate(f"() => {{ {go} }}")
+            ims = []
+            for i in range(8):
+                ims.append(Image.open(io.BytesIO(pg.screenshot())).convert("RGB"))
+                time.sleep(0.05)
+            b.close()
+            sheet = Image.new("RGB", (640 * 4, 360 * 2))
+            for i, im in enumerate(ims):
+                sheet.paste(im.resize((640, 360), Image.LANCZOS), ((i % 4) * 640, (i // 4) * 360))
+            sheet.save(OUT / f"hareket-{name}.jpg", quality=90)
+            ims[5].crop((700, 80, 1860, 700)).save(OUT / f"hareket-{name}-kirp.jpg", quality=92)
+            print(OUT / f"hareket-{name}.jpg")
+
+
 if __name__ == "__main__":
+    if sys.argv[1] == "hareket":
+        cmd_hareket()
+        sys.exit()
     if sys.argv[1] == "gecis":
         cmd_gecis()
         sys.exit()

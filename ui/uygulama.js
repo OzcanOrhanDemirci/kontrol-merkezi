@@ -151,7 +151,7 @@ function resize() {
 // ==================================================================== camera
 const CAMS = {
   fan: { pos: [0, -112, 16], tgt: [0, 8, 24.5], fov: 30 },
-  rgb: { pos: [0, -66, 41], tgt: [0, 24, 35.5], fov: 31 },
+  rgb: { pos: [0, -98, 87], tgt: [0, 20, 24.5], fov: 31 },
 };
 function camState() {
   const k = smoother(clamp(M.camT, 0, 1));
@@ -309,15 +309,12 @@ function render(dt) {
   // resting: converged and the light steady -> only the moving rotors keep tracing
   R.idle = !mov && R.n >= 300 && dl < 3e-4 && !params.has('noidle');
   let traceOn = true;
-  R.stillFrames = R.idle && M.tab === 'rgb' && M.light >= 1 ? (R.stillFrames || 0) + 1 : 0;
-  if (R.stillFrames > 3) { R.gpuSkipped = (R.gpuSkipped || 0) + 1; return; }   // nothing changes: the canvas keeps its image
   gl.bindVertexArray(R.vao);
   const tq = R.timer && R.queries.length < 6 ? gl.createQuery() : null;
   if (tq) gl.beginQuery(R.timer.TIME_ELAPSED_EXT, tq);
 
-  if (R.idle) {
-    if (M.tab === 'rgb') traceOn = false;
-    else {
+  if (R.idle) {             // both views show the rotors: keep tracing their faces only
+    {
       const rs = R.fanRects || [{ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }, { left: 0, top: 0, right: 0, bottom: 0 }];
       const sx = w / window.innerWidth, sy = h / window.innerHeight;
       const x0 = Math.floor(Math.min(rs[0].left, rs[1].left) * sx) - 2, x1 = Math.ceil(Math.max(rs[0].right, rs[1].right) * sx) + 2;
@@ -535,8 +532,8 @@ function renderRgb() {
   $('#tog').classList.toggle('focus', M.focus === 2);
   let mode = '—', modeSub = '';
   if (rgb) {
-    if (rgb.kip === 'yapayzeka') { mode = 'Yerel model yanıt yazıyor'; modeSub = 'sıcaklık rengi bekliyor'; }
-    else if (rgb.kip === 'islemci') { mode = 'İşlemci tam yükte, <i>ekran kartı boşta</i>'; modeSub = 'sıcaklık rengi bekliyor'; }
+    if (rgb.kip === 'yapayzeka') { mode = 'Yerel model yanıt yazıyor'; modeSub = 'bitince sıcaklık rengine döner'; }
+    else if (rgb.kip === 'islemci') { mode = 'İşlemci tam yükte, <i>ekran kartı boşta</i>'; modeSub = 'yük bitince sıcaklık rengine döner'; }
     else {
       mode = 'Bilgisayarın <i>sıcaklığı</i>';
       modeSub = `işlemci <b>${isi.cpu != null ? fmt1(isi.cpu) + '°' : '—'}</b> · ekran kartı <b>${isi.gpu != null ? fmt1(isi.gpu) + '°' : '—'}</b><br>ortalaması yumuşatılarak renge döner`;
@@ -892,7 +889,7 @@ function frame(now) {
 function kick() { if (!raf && M.visible && R.ok && !params.has('still')) { lastT = 0; raf = requestAnimationFrame(frame); } }
 
 // ==================================================================== start
-R.spp = +(params.get('spp') || 12); R.sppDyn = +(params.get('sppdyn') || 20);
+R.spp = +(params.get('spp') || 10); R.sppDyn = +(params.get('sppdyn') || 18);
 if (host) {
   host.addEventListener('message', e => onMessage(e.data));
 } else {
