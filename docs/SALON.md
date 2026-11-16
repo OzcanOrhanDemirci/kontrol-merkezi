@@ -272,6 +272,17 @@ Volumes: `salon` 0.5 m (122 × 69 × 563 cells), `kuyu` 0.15 m (70 × 224 × 117
 views headless (plain shading with back faces in magenta and levha faces as a uv checker, and a direct-light preview)
 and checks the journey's clearance. It is the builder's check, not the product.
 
+### What the renderer assumes of the pack
+
+- uv0 is GL-style, v up (the renderer does not flip images; the normal map's green follows +v). A levha face's uv0
+  runs 0..1 with v = 1 at its top edge, u to the right as seen from the front.
+- A levha-flagged material may be shared by many faces: the renderer gives each triangle to the smallest `levha` or
+  `nokta` anchor box holding its centre. So every sign, board, display and lamp lens needs an anchor box around its
+  face (lamp lenses: a `nokta` anchor named as `setLamp` will call it), and boxes of different faces must not overlap.
+- Hover: a `tik` box lifts the levha/nokta anchors whose centres it contains (and the one of its own name).
+- A rotor's blur disc uses its main material as constants (`ortalamaAlbedo` x `renk`, `puruz`, `metal`).
+- Files may be `.gz` (gzip) or `.z` (zlib deflate).
+
 ## The live renderer (`ui/`, WebGL2)
 
 Frame (2560 × 1440 the reference):
@@ -293,6 +304,13 @@ Frame (2560 × 1440 the reference):
    ±0.5/255 (static).
 
 No TAA, no FXAA/SMAA, no random numbers at run time: every pixel the same samples every frame.
+
+As built (`ui/salon/README.md` has the API and the measured costs): the volumes are recombined with the groups'
+colours into one texture per volume whenever a colour moves (four reads per haze step instead of six; the per-group
+clamp of Ls becomes one clamp of the sum); the reflection is drawn at half the scene pass' resolution and only below
+the horizon, its haze through the outer volume at double steps; bloom starts from the scene composited at the haze's
+resolution; the light map's B-spline read is applied to plane A only (plane B, the direction, stays bilinear); the
+rotor is its crisp mesh when slow and the analytic disc when fast, crossfaded.
 
 Frame pacing: the existing pacer in `ui/uygulama.js` (measured refresh, frame k refreshes after the running one, the
 scene pass split into flushed bands). The cadence is capped at ~30 fps (Özcan, 11-16: "2K da 30 fps yeterli"; no free
