@@ -74,8 +74,16 @@ void main() {
     s.ao = 1.0;
     s.n = Ng;
     s.v = V;
+    // what the wet floor reads at a fixed, coarse scale (the puddles' outline and the reflection's distortion): the
+    // maps at no finer than ~2.3 cm a texel (level 4) and never finer than a canvas pixel, so neither crawls as the
+    // camera moves or as the distance changes the mip level
+    float roughCoarse = 0.7;
+    vec3 nCoarse = Ng;
     if (A.y >= 0.0) {
         vec3 tc = vec3(vec2(vUv.x, -vUv.y) / A.x, A.y);    // GL convention: v up (the images are not flipped)
+        vec2 tpx = tc.xy * 2048.0;
+        float lodPx = log2(max(max(length(dFdx(tpx)), length(dFdy(tpx))) / uPxScale, 1.0));
+        float lodC = max(lodPx + 1.0, 4.0);
         s.albedo *= texture(uAlb, tc).rgb;
         vec3 arm = texture(uArm, tc).rgb;
         s.ao = arm.r;
@@ -87,7 +95,12 @@ void main() {
             T = normalize(T);
             vec3 Bt = cross(Ng, T) * vT.w;
             s.n = normalize(T * tn.x + Bt * tn.y + Ng * max(tn.z, 0.05));
+            if ((flags & 1) != 0) {
+                vec3 tnc = textureLod(uNrm, tc, lodC).xyz * 2.0 - 1.0;
+                nCoarse = normalize(T * tnc.x + Bt * tnc.y + Ng * max(tnc.z, 0.05));
+            }
         }
+        if ((flags & 1) != 0) roughCoarse = textureLod(uArm, tc, lodC).g;
     }
     if (A.z >= 0.0) s.rough = A.z;
     if (A.w >= 0.0) s.metal = A.w;
@@ -112,13 +125,23 @@ void main() {
     float puddle = 0.0;
     if (wet) {
         float m = texture(uNoise, vec3(vP.xz * 0.021, 0.37)).r * 0.65 + texture(uNoise, vec3(vP.xz * 0.083, 0.71)).r * 0.35;
-        m += (0.55 - s.rough) * 0.16;
-        puddle = smoothstep(0.575, 0.615, m);
+        m += (0.55 - roughCoarse) * 0.16;
+        // the outline's edge at least a canvas pixel wide (the mask's own change across the pixel)
+        float fw = 0.5 * fwidth(m) / uPxScale;
+        puddle = smoothstep(0.595 - max(0.02, fw), 0.595 + max(0.02, fw), m);
         float damp = smoothstep(0.50, 0.575, m) * (1.0 - puddle);
         s.albedo *= mix(mix(0.85, 0.6, damp), 0.45, puddle);
         s.rough = mix(mix(s.rough * 0.85, s.rough * 0.45, damp), 0.04, puddle);
         s.n = normalize(mix(s.n, Ng, 0.85 * puddle + 0.3 * damp));
+        nCoarse = normalize(mix(nCoarse, Ng, 0.85 * puddle + 0.3 * damp));
     }
+    // geometric specular antialiasing (Tokuyoshi and Kaplanyan 2019): the normal's change across a canvas pixel
+    // widens the lobe (alpha^2 += min(2 sigma^2 |dn|^2, kappa), sigma^2 = 1/2pi, kappa = 0.18), so a highlight on a
+    // normal-mapped edge or a column's chamfer is the pixel's average, not a glint a sample catches or misses
+    vec3 dnx = dFdx(s.n), dny = dFdy(s.n);
+    float k2 = min(2.0 * 0.15915494 * (dot(dnx, dnx) + dot(dny, dny)) / (uPxScale * uPxScale), 0.18);
+    float r2 = s.rough * s.rough;
+    s.rough = sqrt(sqrt(r2 * r2 + k2));
     s.rough = clamp(s.rough, 0.03, 1.0);
     s.metal = clamp(s.metal, 0.0, 1.0);
     s.f0 = mix(wet ? vec3(0.02) : vec3(0.04), s.albedo, s.metal);
@@ -127,7 +150,7 @@ void main() {
     float open = 1.0;
     if (uDraw.w > 0.5) {
         s.so = s.ao;
-        if (wet) s.so *= 1.0 - 0.9 * puddle;   // a puddle's mirror image comes from the reflection pass
+        if (wet) s.so *= 1.0 - puddle;         // a puddle's mirror image comes from the reflection pass
         c = shadeFromVolumes(s, vP);
     } else {
         // one layer pair per group of this page
@@ -139,7 +162,7 @@ void main() {
         }
         open = clamp(texture(uLmO, vec3(vLm, float(uPage))).r, 0.0, 1.0);
         s.so = open * mix(1.0, s.ao, 0.5);
-        if (wet) s.so *= 1.0 - 0.9 * puddle;
+        if (wet) s.so *= 1.0 - puddle;          // the lights' mirror images are in the reflection pass (no double count)
         for (int g = 0; g < 3; g++) {
             vec3 L0 = max(a[g].rgb, vec3(0.0));
             float l0 = max(lum(L0), 1e-8);
@@ -159,7 +182,7 @@ void main() {
 
     if (wet) {
         // the mirrored scene at this pixel, blurred by roughness, distorted by the normal map; Fresnel (water's f0)
-        vec2 st = gl_FragCoord.xy / uTarget + (s.n.xz - Ng.xz) * vec2(0.035, 0.05);
+        vec2 st = gl_FragCoord.xy / uTarget + (nCoarse.xz - Ng.xz) * vec2(0.035, 0.05);
         float lod = uReflLevels * smoothstep(0.03, 0.75, s.rough);
         vec3 refl = textureLod(uRefl, clamp(st, vec2(0.0005), vec2(0.9995)), lod).rgb;
         float ndv = max(dot(s.n, V), 1e-4);

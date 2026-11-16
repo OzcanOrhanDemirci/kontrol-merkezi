@@ -82,8 +82,9 @@ struct Surf { vec3 n, v, albedo, f0; float rough, metal, ao, so; };
 vec3 shadeGroup(Surf s, vec3 E, vec3 dir, float w, vec3 I, vec3 Lamb) {
     float ndv = max(dot(s.n, s.v), 1e-4);
     vec3 diffuse = s.albedo * (1.0 - s.metal) * E * (s.ao / PI);
-    // the directional part as a light from dir, the lobe widened by how spread the light is (1 - w)
-    float a = clamp(s.rough * s.rough + (1.0 - w) * 0.35, 0.002, 1.0);
+    // the directional part as a light from dir, the lobe widened by how spread the light is (1 - w); never narrower
+    // than the hall's lamps seen from a few metres (alpha 0.02): a point-sharp lobe is a glint no sample grid holds
+    float a = clamp(s.rough * s.rough + (1.0 - w) * 0.35, 0.02, 1.0);
     vec3 h = normalize(s.v + dir);
     float ndl = max(dot(s.n, dir), 0.0), ndh = max(dot(s.n, h), 0.0), vdh = max(dot(s.v, h), 0.0);
     vec3 F = s.f0 + (1.0 - s.f0) * pow(1.0 - vdh, 5.0);
