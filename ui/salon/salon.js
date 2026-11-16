@@ -594,18 +594,36 @@ async function create(canvas, options = {}) {
 
   // ---------------------------------------------------------------- shaders
   say(0.93, 'Gölgelendiriciler derleniyor');
-  let volCode = '';
-  for (let i = 0; i < NV; i++) volCode += `uniform sampler3D uVol${i};\n`;
-  volCode += 'void volRead(int i, vec3 c, out vec4 m, out vec4 kr, out vec4 kg, out vec4 kb) {\n';
-  for (let i = 0; i < NV; i++) volCode += `    ${i ? 'else ' : ''}if (i == ${i}) { m = texture(uVol${i}, c); kr = texture(uVol${i}, c + vec3(0.25, 0, 0)); ` +
-    `kg = texture(uVol${i}, c + vec3(0.5, 0, 0)); kb = texture(uVol${i}, c + vec3(0.75, 0, 0)); }\n`;
-  volCode += '    else { m = kr = kg = kb = vec4(0.0); }\n}\n';
-  const common = src['common.glsl'].replace('// VOLUMES', volCode);
+  // Each program declares only the volumes it reads: a fragment shader has 16 texture units, the scene pass already
+  // uses 9 and the pack can hold 8 volumes (Phase 2: stair, back space, roof). The scene and rotor passes light only the
+  // moving parts from the volumes, so they get the volumes that hold one of them (and the outer one); lightAt skips the
+  // rest (VOL_MASK). The haze reads all of them.
+  function volCodeFor(mask) {
+    let c = '';
+    for (let i = 0; i < NV; i++) if (mask >> i & 1) c += `uniform sampler3D uVol${i};\n`;
+    c += 'void volRead(int i, vec3 c, out vec4 m, out vec4 kr, out vec4 kg, out vec4 kb) {\n';
+    let first = true;
+    for (let i = 0; i < NV; i++) {
+      if (!(mask >> i & 1)) continue;
+      c += `    ${first ? '' : 'else '}if (i == ${i}) { m = texture(uVol${i}, c); kr = texture(uVol${i}, c + vec3(0.25, 0, 0)); ` +
+        `kg = texture(uVol${i}, c + vec3(0.5, 0, 0)); kb = texture(uVol${i}, c + vec3(0.75, 0, 0)); }\n`;
+      first = false;
+    }
+    c += (first ? '    ' : '    else ') + '{ m = kr = kg = kb = vec4(0.0); }\n}\n';
+    return c;
+  }
+  const bits = m => { let n = 0; while (m) { n += m & 1; m >>= 1; } return n; };
+  const ALL_VOLS = (1 << NV) - 1;
+  const inVol = (v, p) => [0, 1, 2].every(k => p[k] >= v.alt[k] && p[k] <= v.hi[k]);
+  let DYN_VOLS = 1 << (NV - 1);
+  for (const d of dyn) vols.forEach((v, i) => { if (inVol(v, d.centre)) DYN_VOLS |= 1 << i; });
+  if (bits(DYN_VOLS) > 7) DYN_VOLS = ALL_VOLS;     // more than the scene pass can hold: the compile error will say so
   mark.tablo = performance.now() - T0;           // materials, fixed tables
   const compileT0 = performance.now();
   const programs = {};
-  function build(name, vsFile, fsFile, defines = '') {
-    const head = '#version 300 es\n#define NV ' + NV + '\n' + defines;
+  function build(name, vsFile, fsFile, defines = '', mask = ALL_VOLS) {
+    const head = '#version 300 es\n#define NV ' + NV + '\n#define VOL_MASK ' + mask + '\n' + defines;
+    const common = src['common.glsl'].replace('// VOLUMES', volCodeFor(mask));
     const pieces = [[gl.VERTEX_SHADER, vsFile, head + src[vsFile]], [gl.FRAGMENT_SHADER, fsFile, head + src[fsFile].replace('// COMMON', common)]];
     const p = own('Program', gl.createProgram());
     const shaders = pieces.map(([type, file, text]) => {
@@ -618,9 +636,9 @@ async function create(canvas, options = {}) {
     gl.linkProgram(p);
     programs[name] = { p, shaders, name };
   }
-  build('scene', 'scene.vert', 'scene.frag');
-  build('depth', 'scene.vert', 'depth.frag');
-  build('rotor', 'rotor.vert', 'rotor.frag');
+  build('scene', 'scene.vert', 'scene.frag', '', DYN_VOLS);
+  build('depth', 'scene.vert', 'depth.frag', '', DYN_VOLS);
+  build('rotor', 'rotor.vert', 'rotor.frag', '', DYN_VOLS);
   build('haze', 'quad.vert', 'haze.frag');
   build('combine', 'quad.vert', 'combine.frag');
   for (const pass of ['BLOOMPRE', 'DOWN', 'UP', 'REFLCOMP', 'COMPOSE', 'RESOLVEH', 'RESOLVEV'])
@@ -654,7 +672,7 @@ async function create(canvas, options = {}) {
   // texture units: fixed per name, the volumes after them
   const UNIT = { uAlb: 0, uNrm: 1, uArm: 2, uLmA: 3, uLmB: 4, uLmO: 15, uLevha: 5, uRefl: 6, uNoise: 7, uTab: 5, uDepth: 1, uHaze: 2,
     uScene: 3, uBloom: 4, uSrc: 0, uDither: 6 };
-  const VOL_UNIT = 8;
+  const VOL_UNIT = 16;                             // after every fixed unit (uLmO is 15): 16 + 8 <= 32 combined
   for (const pr of Object.values(programs)) {
     gl.useProgram(pr.p);
     for (const [k, unit] of Object.entries(UNIT)) if (pr.u[k]) gl.uniform1i(pr.u[k], unit);
