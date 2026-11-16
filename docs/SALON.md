@@ -94,8 +94,12 @@ decodes it: sRGB → linear, mean over the texture).
 
 Folder `sahne/paket/` in development (git-ignored, large), installed next to the exe as `sahne\`. The window host serves
 it on the page's own origin under `/sahne/` (WebResourceRequested; a second virtual host would be cross-origin for
-fetch and WebGL textures). Files are little-endian. Large binaries may be gzip-compressed (`.gz`); the window reads
-them through `DecompressionStream('gzip')`.
+fetch and WebGL textures). Files are little-endian. Every binary is written as a zlib stream (miniz, level 6) with
+the suffix `.z` (`geo.bin.z`, `lm_0.bin.z`, ...); the window reads it through `DecompressionStream('deflate')` (zlib
+format, not raw deflate, not gzip). `salon.exe ... --compress 0` writes them plain (`.bin`), for debugging; the names in
+`sahne.json` are always the files as written. The materials' textures are copied beside the pack under their
+`sahne/varlik` paths (the pack is all the window reads). `salon.exe geo` writes everything but the light files (no
+`lm_*`, the volumes' `dosya` null). The same inputs give the same bytes in every binary (`sahne.json` carries the time).
 
 ### `sahne.json`
 
@@ -103,20 +107,23 @@ them through `DecompressionStream('gzip')`.
 {
   "surum": 1,
   "olusturuldu": "2026-11-16T20:00:00Z",
-  "firin": { "ornek": 2048, "seken": 8, "sure_sn": 412, "ortam_sigma": 0.012 },
+  "firin": { "ornek": 2048, "hacimOrnek": 2048, "seken": 8, "sure_sn": 412, "ortam_sigma": 0.012, "ortam_g": 0.35,
+             "texelOlcek": 1, "filtre": true, "sinir": [1.56, 0.24, 0.28] },
   "malzemeler": [ { "ad": "beton_kolon", "albedo": "doku/concrete_wall_008_diff_2k.jpg", "normal": "...", "arm": "...",
-                    "uvOlcek": 2.0, "renk": [1,1,1], "puruz": null, "metal": null, "bayrak": [], "grup": null,
-                    "ortalamaAlbedo": [0.31, 0.30, 0.29] } ],
-  "geometri": { "dosya": "geo.bin", "kose": 1234567, "ucgen": 2345678,
-                "araliklar": [ { "malzeme": 0, "ilk": 0, "sayi": 36000 } ] },
-  "dinamik": [ { "ad": "fan_kasa_rotor", "dosya": "rotor_kasa.bin", "kose": 1000, "ucgen": 2000,
-                 "merkez": [-11.2, 8.5, -24], "eksen": [1, 0, 0], "yaricap": 4.9, "kanat": 7 } ],
-  "isikHaritasi": { "dosya": ["lm_0.bin", "lm_1.bin"], "genislik": 8192, "yukseklik": 8192, "sayfa": 2,
-                    "gruplar": 3, "texel": 23456789 },
-  "hacimler": [ { "ad": "salon", "dosya": "vol_salon.bin", "boyut": [120, 52, 470], "alt": [-30, 0, -276],
+                    "isimaDoku": null, "uvOlcek": 2.0, "renk": [1,1,1], "puruz": null, "metal": null, "bayrak": [],
+                    "grup": null, "isima": 0, "ortalamaAlbedo": [0.31, 0.30, 0.29] } ],
+  "geometri": { "dosya": "geo.bin.z", "kose": 1234567, "ucgen": 2345678,
+                "araliklar": [ { "malzeme": 0, "sayfa": 0, "ilk": 0, "sayi": 36000 } ] },
+  "dinamik": [ { "ad": "fan_kasa_rotor", "dosya": "rotor_fan_kasa_rotor.bin.z", "kose": 1000, "ucgen": 2000,
+                 "merkez": [-11.2, 8.5, -24], "eksen": [1, 0, 0], "yaricap": 4.9, "kanat": 7, "gecirgenlik": 0.6,
+                 "araliklar": [ { "malzeme": 5, "ilk": 0, "sayi": 6000 } ] } ],
+  "isikHaritasi": { "dosya": ["lm_0.bin.z", "lm_1.bin.z"], "genislik": 8192, "yukseklik": 8192, "sayfa": 2,
+                    "gruplar": 3, "dolgu": 2, "texel": 23456789 },
+  "hacimler": [ { "ad": "salon", "dosya": "vol_salon.bin.z", "boyut": [120, 52, 470], "alt": [-30, 0, -276],
                   "hucre": 0.5 } ],
   "isiklar": [ { "grup": 0, "tur": "dikdortgen", "merkez": [0, 32, -31], "u": [5, 0, 0], "v": [0, 0, 5],
-                 "normal": [0, -1, 0], "parlaklik": 1.0, "kosUs": 6.0 } ],
+                 "normal": [0, -1, 0], "parlaklik": 1.0, "kosUs": 6.0 },
+               { "grup": 2, "tur": "kure", "merkez": [-5, 7, -19], "yaricap": 0.21, "parlaklik": 200 } ],
   "gorunumler": { "fanlar": { "goz": [0, 4.65, -3], "hedef": [0, 7.5, -60], "fov": 50 }, "rgb": { }, "yol": [[0,5,-6], ...] },
   "capalar": [ { "ad": "fan_kasa", "tur": "tik", "kutu": { "merkez": [...], "x": [...], "y": [...], "z": [...] } },
                { "ad": "tabela_rgb", "tur": "levha", "atlas": "tabela_rgb", "boyut": [3.2, 1.1], "kutu": { } } ]
@@ -127,12 +134,13 @@ them through `DecompressionStream('gzip')`.
 
 | field | meaning |
 |---|---|
-| `malzemeler` | materials in id order (the vertex's material id indexes this list) |
-| `geometri` | the static mesh: vertices, indices, and per-material draw ranges (triangles sorted by material) |
-| `dinamik` | moving meshes in their own frame, placed live at `merkez`/`eksen`: the rotors (centred at the origin, axis +x) and the levers `kol_kasa`, `kol_gpu`, `kol_rgb` (origin at the hinge, x the hinge axis). The own frame maps to the world as x → `eksen`, y → world up made perpendicular to it, z → x × y; a lever's mesh is built at rest (handle up), the window turns it about x |
-| `isikHaritasi` | the light map atlas (pages × width × height texels) and its files, one per page |
+| `firin` | how it was baked: samples per texel and per cell, bounces, seconds, the medium, the texel scale, the filter, the firefly clamp per group (`sinir`, one path's luminance) |
+| `malzemeler` | materials in id order (a draw range's `malzeme` indexes this list). `bayrak`: `emissive`, `noOcclude`, `wet`, `levha`, `metal`, `twoSided` (glTF doubleSided: draw without culling). `isima` = emitScale, `isimaDoku` = a model's emissive texture (sRGB) or null; `puruz`/`metal` null: from the ARM texture |
+| `geometri` | the static mesh: vertex and triangle counts, and draw ranges by (page, material); `ilk` and `sayi` count indices |
+| `dinamik` | moving meshes in their own frame, placed live at `merkez`/`eksen`: the rotors (centred at the origin, axis +x) and the levers `kol_kasa`, `kol_gpu`, `kol_rgb` (origin at the hinge, x the hinge axis). The own frame maps to the world as x → `eksen`, y → world up made perpendicular to it, z → x × y; a lever's mesh is built at rest (handle up), the window turns it about x; `gecirgenlik` = the share of light the spinning rotor let through in the bake; its draw ranges by material |
+| `isikHaritasi` | the light map atlas (pages × width × height texels, `dolgu` texels of padding round each chart) and its files, one per page; `texel` = baked texels (null from `geo`) |
 | `hacimler` | baked light in the air: axis-aligned grids (`alt` = lower corner, `hucre` = cell size) |
-| `isiklar` | the emitters (for reference and for live analytic highlights) |
+| `isiklar` | the emitters (for reference and for live analytic highlights). `dikdortgen` (half axes `u`, `v`, perpendicular) and `disk` (`u` = a radius vector): radiance `parlaklik` along `normal`, falling as cos^(kosUs-1) (intensity cos^kosUs: 1 = Lambertian; a shaft's crisp beams need thousands, see "The oven"); `kure`: radiance `parlaklik`, `yaricap` |
 | `gorunumler` | the two views and the journey's centre line |
 | `capalar` | anchors: things the window needs to find (click boxes, sign faces, displays, lamps, lever hinges); `kutu` is an oriented box (centre, three half-axes); a moving part's `nokta` anchor (`kol_*`) also carries its hinge, `mentese` and `eksen` (the scene's `Anchor::pivot`, `axis`) |
 
@@ -151,8 +159,10 @@ Vertex (40 bytes):
 | 28 | float32 × 2 | uv0 (material uv; procedural surfaces: metres / `uvOlcek` is applied in the shader, so store metres) |
 | 36 | uint16 × 2 unorm | uv2 (light map, 0..1 in the page); rotors: 0 |
 
-Material id and light map page are per draw range (`araliklar`: `malzeme`, plus `sayfa`): triangles are sorted by
-(page, material). A procedural surface stores uv0 in metres; a model's uv0 is its own (`uvOlcek` = 1).
+Material id and light map page are per draw range (`araliklar`: `malzeme`, `sayfa`, first index `ilk`, index count
+`sayi`): triangles are sorted by (page, material), vertices in the order the sorted triangles first use them (a range's
+vertices are contiguous). A procedural surface stores uv0 in metres; a model's uv0 is its glTF uv (origin at the
+image's top left, `uvOlcek` = 1).
 
 ### Light map pages `lm_<page>.bin`
 
@@ -192,6 +202,42 @@ So L(ω) ≈ M + 3·F·ω (luminance; colour from M). Uses:
 
 Several volumes may exist (the whole hall coarse; finer ones around the shaft, the fans and the arch). The renderer
 samples the finest volume that contains the point (blending across the inner volume's last cell).
+
+### The oven (`sahne/firin`, `salon.exe bake`)
+
+Method from pc_graphics' Denizaltı oven, extended. What the window can count on, and what the scene builder needs to know:
+
+- **Charts.** The builder leaves each vertex's chart-local coordinates in metres in `uv2` (the kit's `grid` copies its
+  surface coordinates there; `importModel` unwraps a glTF with xatlas into charts in metres). The atlas gives every chart
+  `texelFor(d) × texelScale` metres per texel, d = its distance to the journey and the two eyes, shelf-packs them on
+  pages, and overwrites `uv2`. A chart larger than a page at its density is made coarser to fit (printed).
+- **Emitters.** Rectangles and discs are sampled two ways in one-sample MIS: by area and by their lobe. A shaft's
+  emitter as large as the well's top with a lobe of thousands casts the grate's bars crisp (the test room: 4 × 4 m,
+  lobe 10000, half intensity at 0.7°, bars sharp on the floor 12 m below); a lobe of ~6 cannot, whatever the emitter's
+  size: its beams are soft by geometry.
+- **Two passes.** Pass 1, 32 samples of direct light per texel: from it the firefly clamp per group (2 × the 99.9th
+  percentile of the surfaces' direct outgoing radiance) and the secondary lights: the directly lit texels as emitters,
+  picked by power (equal share per group), sampled at every path vertex in MIS with the path. A pool of light from the
+  shaft lighting a gallery by its bounce is 1 % of the hemisphere; without them the test room's walls were speckled at
+  1024 samples (12.8/255), with them 0.78/255.
+- **Texels inside parts.** Where two parts meet flush (a wall piece under the next, a wall on the floor) the rounded strip
+  along the joint is narrower than a texel and shaded from the texel of the hidden face. A texel whose centre is inside
+  a part is moved, before its samples, to a point within its footprint in open air (printed: "moved out of a part");
+  deeper inside it stays black (hidden). Without it every joint was a black line.
+- **Back faces end paths**, two-sided materials too (a glTF `doubleSided` prop is usually closed; walked as two-sided,
+  paths wandered inside its pieces and the bake stopped being deterministic).
+- **Samples** spread over the texel's footprint (the cell's volume); a 5 × 5 edge-keeping filter inside each chart
+  (`--filter 0` turns it off); the padding filled from the chart's own texels; NaN/Inf counted and zeroed.
+- **Launches** about 40 ms each (the card is Özcan's desk; the driver's watchdog is 2 s), GPU memory under 6 GiB.
+- **Determinism:** every random number is a hash of the texel's (cell's) index and the sample's: the same inputs give
+  the same bytes, and the first N samples of a bake with more are the bake with N (nested).
+- **Measured on the test room** (`salon.exe bake --test 1`, 1.67 M texels on 4 pages of 1024², two volumes of
+  0.40 M cells in all; RTX 4080): 256 samples 4.0 s, 1024 samples 12.4 s. Noise, as the standard deviation in 8-bit sRGB after
+  AgX of a texel's outgoing radiance, each group alone at its own exposure (key 0.18): filtered, at 1024 samples group 0
+  (the shaft, all of the room but the pool lit by its bounce) 0.78/255, groups 1 and 2 0.16 and 0.14/255; under
+  0.5/255 from about 2000-2500 samples for group 0 and 100 for the others (from 256 against 1024, and 1024 against
+  4096: 0.70/255 at 1024, 0.35/255 at 4096; 4096 samples took 46 s). Unfiltered: 1.9, 0.47, 0.39/255 at 1024.
+  The hall's shaft lights a gallery the same way: bake it at 2048-4096.
 
 ### The medium
 

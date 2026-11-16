@@ -20,14 +20,18 @@ struct BakeOptions {
     int atlasWidth = 8192;
     int pages = 0;             // 0: as many as needed
     bool filter = true;        // the edge-keeping filter inside each chart
+    bool compress = true;      // the pack's binaries as zlib streams (<name>.bin.z), docs/SALON.md "The pack"
     std::string root;          // sahne/firin (to find device/*.cu for NVRTC)
     std::string thirdParty;    // C:/dev/pc_graphics/third_party (OptiX and CUDA headers for NVRTC)
 };
 
 struct Atlas {
+    // a chart's rectangle on its page (texels, padding included) and its density (metres per texel)
+    struct Chart { int page = -1, x = 0, y = 0, w = 0, h = 0; float texel = 0; };
     int width = 0, height = 0, pages = 0;
     int pad = 2;
-    size_t usedTexels = 0;
+    size_t usedTexels = 0;     // texels inside triangles (after rasterising: the baked ones)
+    std::vector<Chart> charts; // by chart id (unused ids: page -1)
 };
 
 // Packs the charts of s.mesh at their density (texelFor × texelScale), writes every vertex's uv2 and page
@@ -42,6 +46,8 @@ struct Baked {
     // per volume, per group: grid M and grid F (RGBA16F)
     std::vector<std::vector<uint16_t>> volM, volF;   // [volume * groups + group]
     double seconds = 0.0;
+    size_t invalidValues = 0;          // NaN, Inf or beyond half float's range, replaced (should be 0)
+    float clampUsed[GROUP_COUNT] = {}; // the firefly clamp each group was baked with
 };
 
 bool bake(const Scene& s, const Atlas& a, const std::vector<int>& chartPage, const BakeOptions& o, Baked& out,

@@ -177,7 +177,7 @@ inline void Kit::grid(int nu, int nv, F f) {
             a.dn = a.n;
             a.t = make_float4(1, 0, 0, 1);
             a.uv = g.s;
-            a.uv2 = make_float2(0, 0);
+            a.uv2 = g.s; // Chart-local metres until buildAtlas packs the chart.
             a.mat = mat;
             a.feat = feat;
             a.fp = fp;
