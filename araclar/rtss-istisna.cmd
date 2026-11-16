@@ -6,7 +6,7 @@ rem Sonra RTSS'i kapatip acin (ya da bilgisayari yeniden baslatin); dogrulama: a
 chcp 65001 >nul
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList '%1' -Verb RunAs"
+    if "%~1"=="" (powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs") else (powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList '%~1' -Verb RunAs")
     exit /b
 )
 set "RTSS=C:\Program Files (x86)\RivaTuner Statistics Server\Profiles"
