@@ -4,6 +4,7 @@
 // volumes of baked light in the air.
 #include "scene.h"
 #include "scene/hall_kit.h"
+#include "scene/hall_props.h"
 
 #include <algorithm>
 #include <cmath>
@@ -87,6 +88,7 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
         stage("nave", [&] { buildNave(h); });
         stage("arch", [&] { buildArch(h); });
         stage("signs", [&] { buildSigns(h); });
+        stage("props", [&] { buildProps(h, assetDir); });
         for (const Dynamic& d : s.dyn) std::printf("hall dyn %-16s %7zu triangles\n", d.name.c_str(), d.mesh.tris());
 
         // the views: on the landing at eye height (1.65 m over the deck) looking down the gallery into the hall; at the
@@ -103,10 +105,11 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
         addVolume(s, "kemer", make_float3(-21.0f, 0.0f, -275.0f), make_float3(21.0f, kHallH, -240.0f), 0.3f);
 
         // finishing: displacement normals and tangents; the light map's chart coordinates (levha faces keep the metres
-        // their builder put in uv2, their uv0 runs 0..1)
+        // their builder put in uv2, their uv0 runs 0..1; models, whose materials follow the hall's own, keep their
+        // xatlas charts)
         dz::finishMesh(s.mesh);
         for (dz::Vtx& v : s.mesh.v)
-            if (!(s.mats[v.mat].flags & MF_LEVHA)) v.uv2 = v.uv;
+            if (v.mat < M_COUNT && !(s.mats[v.mat].flags & MF_LEVHA)) v.uv2 = v.uv;
         for (Dynamic& d : s.dyn) {
             dz::finishMesh(d.mesh);
             for (dz::Vtx& v : d.mesh.v) v.uv2 = make_float2(0, 0);
