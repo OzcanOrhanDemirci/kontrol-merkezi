@@ -45,6 +45,8 @@ Layout (first version; the builder owns the exact numbers and writes them into t
 | Hall | x ∈ [-30, 30], y ∈ [0, 26], z ∈ [-275, -44]. Drainage channels along both walls (\|x\| 27.6..28.2), pilasters (1.6 × 1 m) at the column lines carrying the beams, a catwalk on the left wall at y = 12 with a caged ladder at its start, a door with a lit frame off the catwalk at z = -150, pipe runs. |
 | Columns | 2 m (x) × 7 m (z) × floor to ceiling, a flared foot (3.1 × 8.1 m at the floor) and a haunch at the top, rows at x = ±8 and ±22, every 20 m from z = -60 to -220 (36 columns), ending ~35 m before the arch to leave it a plaza. The aisle x ∈ [-7, 7] is free: the camera flies through it. Cross beams (1.2 × 2 m) over the column lines z = -60 .. -240, lighter beams (1 × 1.2 m) along the rows. |
 | Arch | a hydraulic monument in raw cast concrete (`hall_arch.cpp`, its massing in constants at the top): two piers x ±7..±20, front z = -255, floor to ceiling (y = 32), in pours of 3.2 m from the sill (a construction joint each); the plinth (top y = 1.2, two steps from z = -247). The opening x ±7, y 1.2..20.4, 8 m deep (to z = -263), closed by a riveted steel sluice gate (skin at z = -260.4, girders every 2.2 m towards +z, end posts, side rollers on rails on the jambs, 0.27 m light gaps at its sides) raised to 40 % (lower edge y = 8.88, top 28.7). Above: the lintel (two pours, y 20.4..26.8, face z = -256) with the display (8 × 2 m at y = 22.4) in a recessed housing (x ±4.5, y 20.9..23.9) and over it the gauge: the five stop lamps in one row at y = 25.85 (x 0, ±2.9, ±5.8, cold to hot from left to right) on a steel rail, their plates (2 × 1 m) under them at y = 24.6, lit by a hooded strip (group 2) between lamps and plates; a railing on the lintel. Over it the hoist bay (y 26.8..32) with the gate's top, two girders and two winches, no lamps and no back wall: it opens into the chamber, so the core's glow silhouettes the hoist high up (the monument reads from the hall's middle). No floodlights: the piers stand dark against the glow. Service doors at x ±17; the console before the steps (front z = -240.6, low: top 1.85..2.0, under the arrival eye's line to the gate's sill; plates 2 × 0.5 m at y ≈ 1.15, the RGB plate at 1.3). Behind the gate the chamber (`chamberInterior`): x ±12, y 1.2 to the ceiling (32), back wall z = -293, four receding concrete portals (z -267, -272, -277, -282) all ending at y = 23.6 so the light passes over them into the bay, the heat core at z = -288: a glowing square column 4 m wide, y 2.6..21, with eight glowing fins out to r 3.4 (both sides emit), inside steel rings r 3.6..4.6 every 2.2 m, on a concrete drum r 5.2, a steel portal (x ±6, girder at y 26.5) with a winch. End wall z = -275, open over the chamber (x ±12, floor to ceiling). |
+| The way up (Phase 2) | see "The way up": side doors in the chamber (z -280..-279), passages x ±12.6..13.6 back to a space behind the chamber (z -293.6..-295.2), one straight stair (x ±0.8, 182 risers) from it to a hatch in the roof deck (y = 35) at z ≈ -341.6..-346.2. |
+| Raised block (Phase 2) | the hall is inside a concrete block x ±48, y -4..35, z -350..8 on eight columns Ø 12 m (x ±30, z -21, -121, -221, -321) down to y = -604; its roof a bare deck, the shaft's lamp in it, a mast with the facility's one lamp behind the hatch. |
 
 Views (the builder writes them; the renderer interpolates):
 - `fanlar`: eye (0, 4.65, -3.0), looking at (0, 7.5, -60), vertical FOV 50°.
@@ -59,7 +61,7 @@ Light is baked per group, in white. Live colour of group g is `C_g · k_g` (line
 
 | id | name | sources | live colour |
 |---|---|---|---|
-| 0 | `kuyu` | the ceiling shaft's emitter (a horizontal rectangle at the well's top whose normal slants 10° towards -z, lobe 6) | the temperature colour (`isik.onizleme`, the colour the case shows or would show), always; intensity animates in the opening |
+| 0 | `kuyu` | the ceiling shaft's emitter (a horizontal rectangle at the well's top whose normal slants 10° towards -z, lobe 6); since Phase 2 the facility's whole light circuit: the long stair's lamps (`merdiven_isik`), the roof lamp's faint roof-side glow (`dis_isik`) and the mast lamp (`dis_fener`) | the temperature colour (`isik.onizleme`, the colour the case shows or would show), always; intensity animates in the opening |
 | 1 | `kemer` | the arch: the heat core behind the gate (`cekirdek_isik`, 20 RECT emitters: the column's four faces and both sides of its eight fins, ~580 m²), the one light of the place: out under the gate, through its side gaps and over the chamber's portals into the hoist bay; no floodlights | the temperature colour when RGB is on (`isik.cikis`); when off, a faint ember of the temperature colour (the arch is the RGB) |
 | 2 | `lamba` | small fixed service lamps (caged wall lamps, the desks' lamps) | fixed warm white, constant |
 
@@ -217,7 +219,11 @@ Method from pc_graphics' Denizaltı oven, extended. What the window can count on
 - **Charts.** The builder leaves each vertex's chart-local coordinates in metres in `uv2` (the kit's `grid` copies its
   surface coordinates there; `importModel` unwraps a glTF with xatlas into charts in metres). The atlas gives every chart
   `texelFor(d) × texelScale` metres per texel, d = its distance to the journey and the two eyes, shelf-packs them on
-  pages, and overwrites `uv2`. A chart larger than a page at its density is made coarser to fit (printed).
+  pages, and overwrites `uv2`. A chart larger than a page at its density is made coarser to fit (printed). Charts
+  go tallest first, each on the first shelf of any page with room at its end (first fit; opening a shelf only when the
+  next chart did not fit left a quarter of the pages empty). Charts off the journey take their distance from
+  `Scene::walk` instead (`Scene::zones`: chart ranges, each with a nearest distance `dMin` and a `texelMul`): the
+  walk's passages and stair, the roof, the exterior. `salon.exe geo` prints the texels a bake would light, per zone.
 - **Emitters.** Rectangles and discs are sampled two ways in one-sample MIS: by area and by their lobe. A shaft's
   emitter as large as the well's top with a lobe of thousands casts the grate's bars crisp (the test room: 4 × 4 m,
   lobe 10000, half intensity at 0.7°, bars sharp on the floor 12 m below); a lobe of ~6 cannot, whatever the emitter's
@@ -277,6 +283,55 @@ chains); the rotors 37 k and 43 k triangles, the levers 3 k each. Anchors: `fan_
 `kol_gpu`, `kol_rgb`, `durak_0..4` (the gauge over the display, cold to hot from left to right), `cekirdek` (the heart), `kemer_agiz` (the opening's air), `lamba_aio|klavye|gpu` (nokta).
 Volumes: `salon` 0.5 m (122 × 69 × 563 cells), `kuyu` 0.15 m (70 × 224 × 117; 0.1 m was 6.1 M cells, ~290 MB), `fan_kasa`, `fan_gpu` 0.2 m
 (63 × 66 × 70 each), `kemer` 0.33 m (128 × 97 × 170, 2.1 M cells: x ±21, floor to ceiling, z -294..-238: the chamber, the opening, the hoist bay and the air in front where the glow rises; 0.3 m would be 2.9 M).
+Phase 2 adds `merdiven` (the stair's tunnel, 0.3 m, 8 × 117 × 173), `arka` (the space behind the chamber, 0.3 m) and
+`cati` (the roof round the hatch, 0.3 m): eight volumes, the window's limit (`ui/salon/salon.js`).
+
+### The way up (Phase 2: walk mode, `hall_stair.cpp`, `hall_outside.cpp`)
+
+Its numbers are the `hall::up` constants in `hall_kit.h`.
+
+- **Into the walls.** The gate's 40 % leaves 7.7 m under it; the plinth's two front steps are 0.4 m each (the walk
+  needs that step-up, or a ramp). In each side wall of the chamber a plain doorway (1 × 2.1 m, an old steel frame,
+  0.84 m clear) between the third and fourth portal (z -280..-279): the portals hide it from the hall. Behind it a
+  dark passage, 1 m wide, 2.4 m clear (|x| 12.6..13.6, z -278.8..-295.2), back to a narrow space behind the chamber's
+  back wall (z -293.6..-295.2, x ±13.6), lit only by one small lamp facing the stair's foot.
+- **The stair.** One straight flight from that space's middle, x ±0.8: 182 risers of 0.1857 m, goings 0.28 m, 50.96 m
+  of run, 33.8 m of rise to the deck (≈ 32 s at 1.6 m/s along the run), steel nosings, a rusted handrail on the left
+  0.9 m over the nosings, a cast tunnel whose ceiling runs 2.4 m over the risers' feet (2.21 m over the nosings), eight
+  small lamps on the right wall every 6 m of run, 2 m over the nosings (group 0: dark cups, a 6 cm lens of
+  `merdiven_isik` and a Lambertian disc emitter tilted down onto the treads). Group 0 because it is the one circuit
+  always in the temperature colour: group 1 is the arch's and falls to an ember with RGB off, group 2 is fixed warm white.
+- **The hatch.** Where the tunnel's ceiling meets the roof slab (0.6 m) the opening starts: 1.6 × 4.52 m (z -341.64 ..
+  -346.16), its concrete curb 0.25 m over the deck; the climber's head reaches the closed lid ~14 steps from the top.
+  The lid is the `dinamik` entry `kapak`: built closed, centre (= the hinge) (1.05, 35.285, -343.9) on the curb's
+  +x side, `eksen` (0, 0, -1); its own frame maps x → -z, y → up, z → +x and the lid lies towards own -z. **Opening
+  is a turn about `eksen` by +θ** (right hand: the free edge rises); 100-110° stands it up beside the opening, out of
+  the climber's way. `gecirgenlik` 1: the bake does not see it (the roof's light is that of an open hatch; it is lit
+  live from `cati`). Anchors: `kapak` (nokta, the lid's box), `kapak_tik` (tik: reachable from the top treads and from
+  the deck), `merdiven` (nokta, the stair's box).
+- **The block.** The hall is not underground: it is inside a concrete block (x ±48, y -4..35, z -350..8, walls cast
+  in 3.25 m lifts) on eight round columns Ø 12 m flaring into 17 m capitals (x ±30; z -21, -121, -221, -321) down to
+  y = -604, open at their feet. The roof is a bare deck (`dis_zemin`, 12 m tiles), no parapet: only a 6 cm steel drip
+  edge round it. Behind the hatch a mast (18 m, three guys) with the facility's one steady lamp (`dis_fener`, a 0.1 m
+  globe at y 53.2, group 0, sphere emitter L 60).
+- **The fake daylight.** The shaft's emitter (`hall_gallery.cpp`, the 10 × 10 m rectangle at y 33.5 and its two
+  group-0 emitters) is unchanged, so is the hall's light. Over it, in the deck, the lamp's roof side: a 1.5 m pit as
+  large as the well's top, lined in steel, its floor the faint roof-side glow (`dis_isik`, group 0, 6 % of the
+  daylight's radiance, with a Lambertian emitter so the deck round it is lit in the bake), steel louvres every 0.75 m
+  (0.25 m deep, slanted 10° like the beam) and three dividers over it, a rim and two control boxes. From the roof it
+  reads as the light, and as it heats it turns colour with the hall's.
+- **The exterior for the window.** Everything seen from outside, and only that, uses the six `dis_*` materials
+  (`dis_zemin`, `dis_duvar`, `dis_kolon`, `dis_koyu`, `dis_isik`, `dis_fener`: the hall's own texture sets under
+  their own names, so the window shares their texture layers); the draw ranges (`geometri.araliklar`) whose material
+  name starts with `dis_` are the exterior, the rest is the interior. The hatch's lid is `dinamik` `kapak` (`dis_koyu`).
+  The exterior is built and baked once, at the origin: an instance is the same ranges under another transform. Anchors:
+  `dis_sinir` (the facility's bounds, columns and mast included), `dis_blok` (the block), `dis_cati` (the deck's plane,
+  y 35, its extent), `dis_fener` (the mast lamp: the one steady lamp each instance shows), `dis_kuyu_lamba` (the roof
+  lamp's pit). No sky: outside, only the facility's own lamps light it in the bake.
+- **Light map.** The walk's surfaces 4 cm texels (`dMin` 10 m at `--texel-scale 2.5`), the roof's lamp and mast 6.4 cm,
+  the deck from 32 cm round the hatch and the lamp to 1.25 m, walls, underside and columns 2.5 m. At `--texel-scale
+  2.5`: 34.80 M texels on 3 pages (the hall 33.77 M, the way up 0.66 M, the lamp and mast 0.09 M, the deck 0.24 M, the
+  far exterior 0.05 M), 12.04 M volume cells.
 
 `salon.exe dump --out DIR` writes the scene as plain binaries + JSON; `python sahne/araclar/geo_onizle.py DIR` renders the
 views headless (plain shading with back faces in magenta and levha faces as a uv checker, and a direct-light preview)

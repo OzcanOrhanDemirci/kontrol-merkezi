@@ -13,7 +13,21 @@ namespace salon::hall {
 const char* const kMatNames[M_COUNT] = {
     "beton_zemin", "beton_duvar", "beton_kolon", "beton_tavan", "beton_anit", "celik_boyali_kasa", "celik_boyali_gpu",
     "celik_kanat", "celik_pasli", "celik_sac", "metal_koyu", "kablo", "cam_lamba", "kemer_isik", "kuyu_isik", "boya",
-    "pano_yuz", "ekran_yuz", "tabela_yuz", "mercek", "cekirdek_isik"};
+    "pano_yuz", "ekran_yuz", "tabela_yuz", "mercek", "cekirdek_isik", "merdiven_isik", "dis_zemin", "dis_duvar",
+    "dis_kolon", "dis_koyu", "dis_isik", "dis_fener"};
+
+namespace {
+// the exterior's rows are the hall's own texture sets under their own names: the asset step's entry they read
+const char* textureSource(int i) {
+    switch (i) {
+        case M_DIS_ZEMIN: return "beton_zemin";
+        case M_DIS_DUVAR: return "beton_duvar";
+        case M_DIS_KOLON: return "beton_kolon";
+        case M_DIS_KOYU: return "metal_koyu";
+        default: return kMatNames[i];
+    }
+}
+}   // namespace
 
 // ---------------------------------------------------------------------------------------------------------------------
 // materials
@@ -138,6 +152,13 @@ const Fallback kFallback[M_COUNT] = {
     {{0.12f, 0.12f, 0.11f}, 0.6f, 0.0f, 1.0f},     // tabela_yuz
     {{0.30f, 0.30f, 0.30f}, 0.1f, 0.0f, 1.0f},     // mercek
     {{0.80f, 0.80f, 0.80f}, 0.9f, 0.0f, 1.0f},     // cekirdek_isik
+    {{0.80f, 0.78f, 0.72f}, 0.2f, 0.0f, 1.0f},     // merdiven_isik
+    {{0.09f, 0.095f, 0.09f}, 0.5f, 0.0f, 3.0f},    // dis_zemin (beton_zemin's)
+    {{0.20f, 0.19f, 0.17f}, 0.85f, 0.0f, 2.0f},    // dis_duvar (beton_duvar's)
+    {{0.18f, 0.15f, 0.11f}, 0.6f, 0.0f, 1.8f},     // dis_kolon (beton_kolon's)
+    {{0.032f, 0.024f, 0.017f}, 0.65f, 0.9f, 2.0f}, // dis_koyu (metal_koyu's)
+    {{0.80f, 0.80f, 0.80f}, 0.9f, 0.0f, 1.0f},     // dis_isik
+    {{0.80f, 0.78f, 0.72f}, 0.2f, 0.0f, 1.0f},     // dis_fener
 };
 
 }   // namespace
@@ -165,7 +186,7 @@ void loadMaterials(Scene& s, const std::string& assetDir) {
         m.rough = f.rough;
         m.metal = f.metal;
         m.uvScale = f.uvScale;
-        const Json* e = table ? table->get(m.name) : nullptr;
+        const Json* e = table ? table->get(textureSource(i)) : nullptr;
         auto file = [&](const char* key) -> std::string {
             const Json* p = e ? e->get(key) : nullptr;
             if (!p || p->type != Json::STR) return {};
@@ -189,6 +210,10 @@ void loadMaterials(Scene& s, const std::string& assetDir) {
             case M_KEMER_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KEMER; m.emitScale = kKemerL; break;
             case M_CEKIRDEK_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KEMER; m.emitScale = kCekirdekL; break;
             case M_KUYU_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KUYU; m.emitScale = kKuyuL; break;
+            case M_MERDIVEN_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KUYU; m.emitScale = kMerdivenL; break;
+            case M_DIS_KOYU: m.flags = MF_METAL; break;
+            case M_DIS_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KUYU; m.emitScale = kCatiL; break;
+            case M_DIS_FENER: m.flags = MF_EMISSIVE; m.group = GROUP_KUYU; m.emitScale = kFenerL; break;
             case M_BOYA: m.flags = MF_NO_OCCLUDE | MF_LEVHA; break;
             case M_PANO: case M_EKRAN: case M_TABELA: case M_MERCEK: m.flags = MF_LEVHA; break;
             default: break;

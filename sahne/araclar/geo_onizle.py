@@ -128,6 +128,7 @@ void main(){
       float cr = max(0.0, dot(N, l));
       float power;
       if (type == 1) { float r = lv[i].w; power = 3.14159*r*r; }
+      else if (type == 2) { float r = length(lu[i].xyz); float ce = max(0.0, dot(ln[i].xyz, -l)); power = 3.14159*r*r*pow(ce, ln[i].w); }
       else { float area = 4.0*length(cross(lu[i].xyz, lv[i].xyz)); float ce = max(0.0, dot(ln[i].xyz, -l)); power = area*pow(ce, ln[i].w); }
       E += gcol[g] * lL[i] * power * cr / (dd + 0.05);
     }
@@ -227,6 +228,7 @@ def main():
     ap.add_argument('--only')
     ap.add_argument('--size', default='2560x1440')
     ap.add_argument('--no-check', action='store_true')
+    ap.add_argument('--lights', choices=('first', 'near'), default='first')
     a = ap.parse_args()
     out = a.out or os.path.join(a.dir, 'onizleme')
     os.makedirs(out, exist_ok=True)
@@ -263,14 +265,20 @@ def main():
     prog['group'].value = [max(0, m['group']) for m in mats] + [0] * (64 - len(mats))
     prog['emission'].value = [m['emission'] for m in mats] + [0.0] * (64 - len(mats))
     prog['gcol'].value = [GROUP_COLOUR[0], GROUP_COLOUR[1], GROUP_COLOUR[2]]
-    L = D['lights'][:48]
-    pad = 48 - len(L)
-    prog['nl'].value = len(L)
-    prog['lc'].value = [tuple(l['c']) + (float(l['group']),) for l in L] + [(0, 0, 0, 0)] * pad
-    prog['lu'].value = [tuple(l['u']) + (float(l['type']),) for l in L] + [(0, 0, 0, 0)] * pad
-    prog['lv'].value = [tuple(l['v']) + (float(l['r']),) for l in L] + [(0, 0, 0, 0)] * pad
-    prog['ln'].value = [tuple(l['n']) + (float(max(1.0, l['lobe'])),) for l in L] + [(0, 0, 0, 0)] * pad
-    prog['lL'].value = [float(l['L']) for l in L] + [0.0] * pad
+    def set_lights(eye):
+        # the shader holds 48: the scene's first 48 (the default), or with --lights near the 48 nearest the view's eye
+        L = D['lights']
+        if a.lights == 'near':
+            e = np.asarray(eye, np.float64)
+            L = sorted(L, key=lambda l: float(np.linalg.norm(np.asarray(l['c']) - e)))
+        L = L[:48]
+        pad = 48 - len(L)
+        prog['nl'].value = len(L)
+        prog['lc'].value = [tuple(l['c']) + (float(l['group']),) for l in L] + [(0, 0, 0, 0)] * pad
+        prog['lu'].value = [tuple(l['u']) + (float(l['type']),) for l in L] + [(0, 0, 0, 0)] * pad
+        prog['lv'].value = [tuple(l['v']) + (float(l['r']),) for l in L] + [(0, 0, 0, 0)] * pad
+        prog['ln'].value = [tuple(l['n']) + (float(max(1.0, l['lobe'])),) for l in L] + [(0, 0, 0, 0)] * pad
+        prog['lL'].value = [float(l['L']) for l in L] + [0.0] * pad
 
     # wire boxes for the anchors, the journey
     col = {'tik': (1, 0.9, 0.1), 'levha': (0.2, 1, 0.3), 'nokta': (1, 0.2, 0.2)}
@@ -319,7 +327,21 @@ def main():
         'yakin_kanal': ((25.0, 1.6, -86.0), (28.0, 0.0, -92.0), 50),
         'yakin_kol': ((-0.4, 3.4, -248.8), (-1.6, 2.6, -252.2), 45),
         'yakin_tabela_kemer': ((-3.0, 9.0, -200.0), (-9.0, 9.0, -247.0), 12),
+        # Phase 2, the way up (walk mode): the chamber's side door, a passage, the back space, the stair, the roof
+        'yakin_oda_kapi': ((4.5, 2.9, -278.2), (12.0, 2.3, -279.7), 60),
+        'gecit': ((13.1, 2.8, -279.6), (13.1, 2.4, -294.5), 70),
+        'arka': ((12.6, 2.8, -294.4), (0.0, 2.4, -294.4), 70),
+        'merdiven_alt': ((0.0, 2.8, -294.2), (0.0, 9.0, -306.0), 70),
+        'merdiven_orta': ((0.0, 19.6, -320.0), (0.0, 23.5, -326.0), 70),
+        'merdiven_ust': ((0.0, 32.4, -339.0), (0.0, 35.2, -344.0), 70),
+        'cati_kapak': ((5.0, 36.6, -353.0), (0.0, 35.4, -344.0), 60),
+        'cati_ileri': ((-1.5, 36.6, -349.0), (0.0, 34.5, -200.0), 60),
+        'cati_lamba': ((9.0, 38.6, -16.0), (0.0, 34.0, -31.0), 60),
+        'dis_uzak': ((300.0, 80.0, 160.0), (0.0, -80.0, -171.0), 50),
+        'dis_alt': ((70.0, -160.0, -60.0), (0.0, -20.0, -171.0), 60),
     }
+    views['yan_merdiven'] = (look_at((300, 18, -320), (0, 18, -320), (0, 1, 0)), ortho(30, aspect), (300, 18, -320), (1, 0, 0, -0.0))
+    views['ust_dis'] = (look_at((0, 600, -171), (0, 0, -171), (-1, 0, 0)), ortho(110, aspect), (0, 600, -171), None)
     for k, (e, t, f) in close.items():
         views[k] = (look_at(e, t, (0, 1, 0)), perspective(f, aspect), list(e), None)
 
@@ -335,6 +357,7 @@ def main():
             ctx.disable(moderngl.CULL_FACE)
             ctx.clear(0.02, 0.02, 0.03, 1.0) if mode == 0 else ctx.clear(0.0, 0.0, 0.0, 1.0)
             prog['eye'].value = tuple(float(x) for x in eye)
+            set_lights(eye)
             prog['mode'].value = mode
             prog['clipPlane'].value = clip if clip else (0, 0, 0, -1)
             for vao, model in meshes:

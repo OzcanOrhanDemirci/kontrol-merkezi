@@ -91,6 +91,16 @@ struct View {
     float fov = 50.0f;         // vertical, degrees
 };
 
+// the light map's density for charts off the journey (Phase 2: the walk beyond it, the exterior). Charts in
+// [first, end) take their distance from the walk lines (Scene::walk) too, or only (journey = false: the exterior,
+// which the journey sees through no wall), never nearer than dMin. Every other chart keeps the journey's distance.
+struct DensityZone {
+    uint32_t first = 0, end = 0;
+    bool journey = true;
+    float dMin = 0.0f;
+    float texelMul = 1.0f;     // multiplies the zone's texel size (far surfaces no light reaches but the roof's lamps)
+};
+
 struct Scene {
     Mesh mesh;                 // the static mesh (Vtx.mat = index into mats; Vtx.chart = light map chart)
     std::vector<Material> mats;
@@ -100,6 +110,8 @@ struct Scene {
     std::vector<Anchor> anchors;
     View fanlar, rgb;
     std::vector<float3> path;  // the journey's centre line from fanlar's eye to rgb's eye
+    std::vector<std::vector<float3>> walk;   // where the walker goes beyond the journey (eye-height polylines)
+    std::vector<DensityZone> zones;          // which charts take their light map density from `walk`
     float sigma = 0.012f;      // the medium's extinction (1/m), homogeneous in the oven
     float g = 0.35f;           // its forward scattering (Henyey-Greenstein g), live
 };
