@@ -20,14 +20,15 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCK = Path('C:/dev/kontrol-merkezi/.tmp/pencere.lock')
+LOCKS = [Path('C:/dev/kontrol-merkezi/.tmp/pencere.lock'), Path('C:/dev/kontrol-merkezi/.tmp/gpu-tempo.lock')]
 
 
 def wait_lock():
+    # the real window's runs (pencere.lock) and another helper's timing (gpu-tempo.lock): no GPU work meanwhile
     said = False
-    while LOCK.exists():
+    while any(l.exists() for l in LOCKS):
         if not said:
-            print('pencere.lock var: bekleniyor', flush=True)
+            print('kilit var (pencere/gpu-tempo): bekleniyor', flush=True)
             said = True
         time.sleep(20)
 
@@ -64,7 +65,7 @@ def shot(pg, path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--paket', default='C:/dev/kontrol-merkezi/.tmp/paket-on2')
+    ap.add_argument('--paket', default='C:/dev/kontrol-merkezi/sahne/paket')
     ap.add_argument('--out', default=str(ROOT / '.tmp' / 'disari'))
     ap.add_argument('--yalniz', default='kare')
     ap.add_argument('--olcek', default='2')
@@ -194,6 +195,8 @@ def main():
             # a slow pan from the roof's edge: each distant lamp's peak luminance frame by frame (it must not blink)
             wait_lock()
             pg.evaluate(JS_PUT, [44.0, 35.0, -170.0, 60, 1, 5])
+            # the lamps alone (a mast's line under a lamp would be cut by the window's whole-pixel edge)
+            pg.evaluate("window.__km.S.setVoid({ mastsOff: true })")
             frames = []
             pd = out / 'pan'
             pd.mkdir(exist_ok=True)
@@ -206,7 +209,7 @@ def main():
                       const rx = (v) => [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]];
                       const rq = rx(q), rp = rx(p); const off = [f.o[0] + q[0] - rq[0], f.o[1], f.o[2] + q[2] - rq[2]];
                       const w = [rp[0] + off[0], rp[1] + off[1], rp[2] + off[2]]; return [w, S.project(w)]; });
-                    return lamps.filter(l => l[1].z > 0).map(l => [l[0][0], l[0][1], l[0][2], l[1].x, l[1].y, l[1].z, S.voidGlow(l[1].x, l[1].y, 8)]); })""", [yaw])
+                    return lamps.filter(l => l[1].z > 0).map(l => [l[0][0], l[0][1], l[0][2], l[1].x, l[1].y, l[1].z, S.voidGlow(l[1].x, l[1].y, 12)]); })""", [yaw])
                 pth = pd / f'pan_{i:02d}.png'
                 pg.screenshot(path=str(pth))
                 im = np.asarray(Image.open(pth).convert('L')).astype(np.float32)
@@ -216,7 +219,7 @@ def main():
                 pg.screenshot(path=str(pd / 'pan_bos.png'))
                 pg.evaluate("window.__km.S.setVoid({ lampsOff: false })")
                 bare = pg.evaluate("""(async (pts) => { const km = window.__km, S = km.S; S.setVoid({ lampsBare: true }); S.render(0, 0);
-                    await new Promise(r => requestAnimationFrame(r)); const g = pts.map(p => S.voidGlow(p[0], p[1], 8)); S.setVoid({ lampsBare: false }); return g; })""", [[l[3], l[4]] for l in r])
+                    await new Promise(r => requestAnimationFrame(r)); const g = pts.map(p => S.voidGlow(p[0], p[1], 12)); S.setVoid({ lampsBare: false }); return g; })""", [[l[3], l[4]] for l in r])
                 # in the display's linear light (sRGB decoded, x255): a dot below the eye's acuity is seen by the light
                 # it sends, and an sRGB sum would favour a dot spread over two pixels over the same light in one
                 def lin(a):
@@ -253,6 +256,7 @@ def main():
                                round(float(g.mean() / gb.mean()), 2), round(float(gb.mean()), 4), round(float(np.abs(np.diff(gb)).max() / gb.mean()), 4)))
             gw.sort(key=lambda t: -t[1])
             res['pan_float'] = gw
+            pg.evaluate("window.__km.S.setVoid({ mastsOff: false })")
             print('pan float: (uzaklik m, degisim / tam isik, degisim / gorunen, gorunen pay, tam isik, ortulmeden degisim) lamba', len(gw), gw[:14], flush=True)
             for k in sorted(keys, key=lambda k: -np.std([f[k][7] or 0 for f in frames]))[:4]:
                 print('pan float dizi', frames[0][k][0], [(round(f[k][7] or 0, 3), f[k][5]) for f in frames[:12]], flush=True)
