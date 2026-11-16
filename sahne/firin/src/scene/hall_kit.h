@@ -33,9 +33,11 @@ constexpr float kKuyuEmitL = kKuyuL * (kKuyuLobe + 1.0f) / 7.0f;
 // the diffuse sky through the same opening (lobe 2): twice the beam's flux, kKuyuL * 2 * (2 + 1) / 7
 constexpr float kKuyuSkyL = kKuyuL * 6.0f / 7.0f;
 constexpr float kKuyuTilt = 10.0f;   //   the beam's slant towards -z (degrees)
-constexpr float kKemerL = 2.0f;      // group 1: the arch's light chamber and the strips in its reveal
-constexpr float kKemerFloodL = 2600.0f; // group 1: each plinth floodlight's radiance (lobe 24, a 0.9 x 0.36 m slot):
-                                        //   four of them together about 40 % of the chamber's flux, washing the face
+constexpr float kKemerL = 2.0f;      // group 1: kemer_isik, the floodlights' glass as seen (their beams below)
+constexpr float kCekirdekL = 8.0f;   // group 1: the heat core's heart behind the gate (cekirdek_isik and its four RECT
+                                     //   emitters, 3.4 x 13.8 m each): the monument's one light
+constexpr float kKemerFloodL = 700.0f;  // group 1: each plinth floodlight's radiance (lobe 24, a 0.9 x 0.36 m slot): a dim
+                                        //   fill on the piers' faces, four together ~5 % of the heart's flux (was 2600)
 constexpr float kFanFloodL = 300.0f;  // group 2: each fan floodlight (a 0.5 x 0.36 m glass, lobe 10)
 constexpr float kColUpL = 120.0f;    // group 2: each column uplight (a 0.5 x 0.3 m glass, lobe 14), dimmer than the fans'
 constexpr float kLambaL = 8.0f;      // group 2: the caged service lamps' bulbs and the lit door frame
@@ -64,6 +66,7 @@ enum MatId : int {
     M_EKRAN,         // ekran_yuz: displays, exit signs (levha)
     M_TABELA,        // tabela_yuz: hanging signs, plates (levha)
     M_MERCEK,        // mercek: lamp lenses (levha)
+    M_CEKIRDEK_ISIK, // cekirdek_isik: the heat core's heart (emissive, group 1)
     M_COUNT
 };
 extern const char* const kMatNames[M_COUNT];
