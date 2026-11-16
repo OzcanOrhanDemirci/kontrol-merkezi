@@ -1,0 +1,287 @@
+"""Kontrol Merkezi window: screenshots and frame-time measurement in headless Edge on the real GPU.
+
+  python araclar/olc.py kare  [ad] [--js "<setup js>"] [--bekle 4] [--w 2560 --h 1440]
+      one screenshot after setup + wait (seconds), to araclar/cikti/<ad>.png
+  python araclar/olc.py durumlar
+      the standard set of screenshots of every state
+  python araclar/olc.py olc [--sure 30]
+      scripted sequence (tab switch, RGB off/on, fan spin-up, Jarvis effect) with
+      GPU time per frame (EXT_disjoint_timer_query_webgl2) and rAF interval distribution,
+      plus first-frame time; writes araclar/cikti/olcum.json and prints a summary.
+The page runs its own simulated service outside WebView2; window.__km / __km.sim drive it.
+"""
+import json
+import pathlib
+import statistics
+import sys
+import time
+
+from playwright.sync_api import sync_playwright
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = ROOT / "araclar" / "cikti"
+OUT.mkdir(parents=True, exist_ok=True)
+URL = (ROOT / "ui" / "index.html").as_uri()
+EDGE = r"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+ARGS = ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"]
+
+
+def arg(name, default):
+    if name in sys.argv:
+        return type(default)(sys.argv[sys.argv.index(name) + 1])
+    return default
+
+
+def open_page(p, w, h, hash_=""):
+    b = p.chromium.launch(executable_path=EDGE, headless=True, args=ARGS)
+    pg = b.new_page(viewport={"width": w, "height": h}, device_scale_factor=1)
+    logs = []
+    pg.on("console", lambda m: logs.append(f"{m.type}: {m.text}"))
+    pg.on("pageerror", lambda e: logs.append(f"pageerror: {e}"))
+    t0 = time.perf_counter()
+    pg.goto(URL + (("#" + hash_) if hash_ else ""))
+    pg.wait_for_function("() => window.__km && window.__km.R.frame > 0", timeout=120000)
+    first = time.perf_counter() - t0
+    return b, pg, logs, first
+
+
+def shot(pg, name):
+    path = OUT / f"{name}.png"
+    pg.screenshot(path=str(path))
+    return path
+
+
+def wait_frames(pg, n):
+    pg.evaluate("n => new Promise(r => { const f0 = __km.R.frame; const c = () => __km.R.frame >= f0 + n ? r() : requestAnimationFrame(c); c(); })", n)
+
+
+STATES = [
+    # name, setup js, seconds to settle
+    ("fan-bios-soguk", "__km.sim.temp(38)", 5),
+    ("fan-max-kasa", "__km.sim.temp(52); __km.sim.send({komut:'fan-kasa'})", 6),
+    ("fan-max-ikisi", "__km.sim.temp(66); __km.sim.send({komut:'fan-kasa'}); __km.sim.send({komut:'fan-gpu'})", 7),
+    ("fan-afterburner", "__km.sim.temp(46); __km.sim.S.afterburner.fanKontrolu = true; __km.sim.set('x',1)", 5),
+    ("fan-yonetici-yok", "__km.sim.temp(46); __km.sim.set('yonetici', false)", 5),
+    ("fan-baglanti-yok", "__km.sim.link('yok')", 5),
+    ("fan-rgb-kapali", "__km.sim.temp(46); __km.sim.send({komut:'rgb', acik:false})", 5),
+    ("rgb-soguk-beyaz", "__km.sim.temp(38); __km.setTab('rgb', true)", 6),
+    ("rgb-koyu-mavi", "__km.sim.temp(54); __km.setTab('rgb', true)", 6),
+    ("rgb-sari", "__km.sim.temp(64); __km.setTab('rgb', true)", 6),
+    ("rgb-kirmizi", "__km.sim.temp(84); __km.setTab('rgb', true)", 6),
+    ("rgb-pembe-yerel-model", "__km.sim.temp(46); __km.sim.kip('yapayzeka'); __km.setTab('rgb', true)", 6),
+    ("rgb-kapali", "__km.sim.temp(46); __km.sim.send({komut:'rgb', acik:false}); __km.setTab('rgb', true)", 6),
+    ("rgb-jarvis-bekliyor", "__km.sim.temp(54); __km.sim.jarvis('bekliyor'); __km.setTab('rgb', true)", 6),
+    ("rgb-jarvis-dusunuyor", "__km.sim.temp(46); __km.sim.jarvis('dusunuyor'); __km.setTab('rgb', true)", 6),
+]
+
+
+def cmd_kare():
+    name = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("--") else "kare"
+    w, h = arg("--w", 2560), arg("--h", 1440)
+    with sync_playwright() as p:
+        b, pg, logs, first = open_page(p, w, h, arg("--hash", ""))
+        js = arg("--js", "")
+        if js:
+            pg.evaluate(f"() => {{ {js} }}")
+        time.sleep(arg("--bekle", 4.0))
+        path = shot(pg, name)
+        info = pg.evaluate("() => ({ frame: __km.R.frame, gpu: __km.R.gpuMs, compile: __km.R.compileMs, first: __km.R.firstFrameMs, n: __km.R.n })")
+        print(path, json.dumps(info), f"load {first:.2f}s")
+        for l in logs[:20]:
+            print(l)
+        b.close()
+
+
+def cmd_durumlar():
+    only = arg("--sadece", "")
+    with sync_playwright() as p:
+        for name, js, wait in STATES:
+            if only and only not in name:
+                continue
+            b, pg, logs, first = open_page(p, 2560, 1440)
+            pg.evaluate(f"() => {{ {js} }}")
+            time.sleep(wait)
+            print(shot(pg, name), f"gpu {pg.evaluate('__km.R.gpuMs'):.1f} ms")
+            for l in logs[:10]:
+                print("  ", l)
+            b.close()
+        # mid-transition
+        b, pg, logs, first = open_page(p, 2560, 1440)
+        pg.evaluate("__km.sim.temp(54)")
+        time.sleep(3)
+        pg.evaluate("__km.setTab('rgb', true)")
+        time.sleep(0.7)
+        print(shot(pg, "gecis-orta"))
+        b.close()
+
+
+SEQ = """async (sure) => {
+  const k = window.__km, s = k.sim;
+  const iv = [], marks = [], lt = [];
+  new PerformanceObserver(l => l.getEntries().forEach(e => lt.push([Math.round(e.startTime), Math.round(e.duration)]))).observe({ type: 'longtask' });
+  k.R.slow = null;
+  let last = 0;
+  k.onFrame = now => { if (last) iv.push([now, now - last]); last = now; };
+  const g0 = k.R.gpu.length;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const mark = m => marks.push([performance.now(), m]);
+  s.temp(46);
+  await wait(3000);
+  mark('sekme rgb'); k.setTab('rgb', true); await wait(3000);
+  mark('rgb kapat'); s.send({komut:'rgb', acik:false}); await wait(2500);
+  mark('rgb ac'); s.send({komut:'rgb', acik:true}); await wait(2500);
+  mark('jarvis dusunuyor'); s.jarvis('dusunuyor'); await wait(3000);
+  mark('jarvis bekliyor'); s.jarvis('bekliyor'); await wait(3000);
+  mark('sekme fan'); k.setTab('fan', true); await wait(2500);
+  mark('fan kasa max'); s.send({komut:'fan-kasa'}); await wait(3000);
+  mark('fan gpu max'); s.send({komut:'fan-gpu'}); await wait(3000);
+  mark('sicaklik taramasi'); s.release(); s.S.sweep = true; await wait(Math.max(0, sure * 1000 - 28500));
+  k.onFrame = null;
+  return { lt, slow: k.R.slow, iv, marks, gpu: k.R.gpu.slice(g0), first: k.R.firstFrameMs, compile: k.R.compileMs, w: k.R.w, h: k.R.h, spp: k.R.spp, sppDyn: k.R.sppDyn };
+}"""
+
+
+def pct(a, q):
+    a = sorted(a)
+    return a[min(len(a) - 1, int(q * len(a)))]
+
+
+def cmd_olc():
+    sure = arg("--sure", 34.0)
+    with sync_playwright() as p:
+        b, pg, logs, first = open_page(p, 2560, 1440, arg("--hash", ""))
+        time.sleep(1.0)
+        r = pg.evaluate(SEQ, sure)
+        b.close()
+    iv = [x[1] for x in r["iv"]]
+    gpu = r["gpu"]
+    med = statistics.median(iv)
+    res = {
+        "cozunurluk": f"{r['w']}x{r['h']}", "spp": r["spp"], "sppDyn": r["sppDyn"],
+        "ilk_kare_ms": round(r["first"]), "derleme_ms": round(r["compile"]), "yukleme_s": round(first, 2),
+        "kare_sayisi": len(iv),
+        "raf_ms": {"p50": round(med, 2), "p95": round(pct(iv, .95), 2), "p99": round(pct(iv, .99), 2), "max": round(max(iv), 2),
+                   "uzun_2x": sum(1 for x in iv if x > 2 * med)},
+        "gpu_ms": {"p50": round(pct(gpu, .5), 2), "p95": round(pct(gpu, .95), 2), "p99": round(pct(gpu, .99), 2), "max": round(max(gpu), 2), "n": len(gpu)} if gpu else None,
+        "isaretler": [m[1] for m in r["marks"]],
+    }
+    # the worst intervals and what was happening
+    t0 = r["iv"][0][0] if r["iv"] else 0
+    worst = sorted(r["iv"], key=lambda x: -x[1])[:8]
+    def at(t):
+        cur = "basla"
+        for mt, m in r["marks"]:
+            if mt <= t:
+                cur = m
+        return cur
+    res["uzun_gorevler"] = [[round((t - t0) / 1000, 2), d] for t, d in r["lt"]]
+    res["en_yavas_kare_js"] = r["slow"]
+    res["en_uzun"] = [[round((t - t0) / 1000, 2), round(d, 1), at(t)] for t, d in worst]
+    (OUT / "olcum.json").write_text(json.dumps({**res, "iv": iv, "gpu": gpu}, indent=1), encoding="utf-8")
+    print(json.dumps(res, indent=1, ensure_ascii=False))
+    for l in logs[:10]:
+        print(l)
+
+
+def cmd_titreme():
+    """Temporal stability of a resting view: N screenshots in a row, per-pixel change between
+    consecutive frames (8-bit units) over 16x16 blocks (block means catch crawling blotches that
+    per-pixel numbers hide). Reported separately for the whole frame and outside the fan faces."""
+    import numpy as np
+    from PIL import Image
+    import io
+    js = arg("--js", "__km.sim.temp(46)")
+    n = arg("--n", 8)
+    with sync_playwright() as p:
+        b, pg, logs, first = open_page(p, 2560, 1440)
+        pg.evaluate(f"() => {{ {js} }}")
+        time.sleep(arg("--bekle", 6.0))
+        frames = []
+        for i in range(n):
+            frames.append(np.asarray(Image.open(io.BytesIO(pg.screenshot())).convert("L"), dtype=np.float32))
+            time.sleep(0.12)
+        mask = pg.evaluate("""() => { const r = s => { const e = document.querySelector(s).getBoundingClientRect(); return [e.left, e.top, e.right, e.bottom]; };
+            return __km.M.tab === 'fan' ? [r('#hotKasa'), r('#hotGpu')] : []; }""")
+        b.close()
+    F = np.stack(frames)
+    d = np.abs(np.diff(F, axis=0))
+    keep = np.ones(F.shape[1:], bool)
+    for x0, y0, x1, y1 in mask:
+        keep[int(y0):int(y1), int(x0):int(x1)] = False
+    H, W = F.shape[1] // 16 * 16, F.shape[2] // 16 * 16
+    blocks = F[:, :H, :W].reshape(n, H // 16, 16, W // 16, 16).mean(axis=(2, 4))
+    bd = np.abs(np.diff(blocks, axis=0))
+    kb = keep[:H, :W].reshape(H // 16, 16, W // 16, 16).all(axis=(1, 3))
+    res = {
+        "piksel_ort": round(float(d.mean()), 3), "piksel_ort_fan_disi": round(float(d[:, keep].mean()), 3),
+        "piksel_p999_fan_disi": round(float(np.percentile(d[:, keep], 99.9)), 2),
+        "blok_ort_fan_disi": round(float(bd[:, kb].mean()), 4), "blok_max_fan_disi": round(float(bd[:, kb].max()), 3),
+    }
+    print(json.dumps(res))
+
+
+def cmd_gecis():
+    """Frames during a tab change, as a contact sheet (gecis-dizi.jpg) plus 1:1 crops of two of them."""
+    from PIL import Image
+    import io
+    with sync_playwright() as p:
+        b, pg, logs, first = open_page(p, 2560, 1440)
+        pg.evaluate("__km.sim.temp(54)")
+        time.sleep(5)
+        pg.evaluate("__km.setTab('rgb', true)")
+        ims = []
+        for i in range(8):
+            ims.append(Image.open(io.BytesIO(pg.screenshot())).convert("RGB"))
+            time.sleep(0.12)
+        b.close()
+    tw = 640
+    sheet = Image.new("RGB", (tw * 4, 360 * 2))
+    for i, im in enumerate(ims):
+        sheet.paste(im.resize((tw, 360), Image.LANCZOS), ((i % 4) * tw, (i // 4) * 360))
+    sheet.save(OUT / "gecis-dizi.jpg", quality=90)
+    for i in (2, 4):
+        ims[i].crop((800, 600, 1900, 1300)).save(OUT / f"gecis-{i}-kirp.jpg", quality=92)
+    print(OUT / "gecis-dizi.jpg")
+
+
+def cmd_hareket():
+    """Short frame sequences of the moving states, as contact sheets (hareket-<ad>.jpg, 4x2 frames,
+    ~0.15 s apart) plus one 1:1 crop of the ring top per sequence to check for ghost trails."""
+    from PIL import Image
+    import io
+    seqs = [
+        ("rgb-acilis", "__km.sim.temp(54); __km.setTab('rgb', true); __km.sim.send({komut:'rgb', acik:false})", 6, "__km.sim.send({komut:'rgb', acik:true})"),
+        ("sekme", "__km.sim.temp(64)", 5, "__km.setTab('rgb', true)"),
+        ("dusunuyor", "__km.sim.temp(46); __km.setTab('rgb', true)", 6, "__km.sim.jarvis('dusunuyor')"),
+        ("bekliyor", "__km.sim.temp(54); __km.setTab('rgb', true)", 6, "__km.sim.jarvis('bekliyor')"),
+    ]
+    only = arg("--sadece", "")
+    with sync_playwright() as p:
+        for name, setup, wait, go in seqs:
+            if only and only not in name:
+                continue
+            b, pg, logs, first = open_page(p, 2560, 1440)
+            pg.evaluate(f"() => {{ {setup} }}")
+            time.sleep(wait)
+            pg.evaluate(f"() => {{ {go} }}")
+            ims = []
+            for i in range(8):
+                ims.append(Image.open(io.BytesIO(pg.screenshot())).convert("RGB"))
+                time.sleep(0.05)
+            b.close()
+            sheet = Image.new("RGB", (640 * 4, 360 * 2))
+            for i, im in enumerate(ims):
+                sheet.paste(im.resize((640, 360), Image.LANCZOS), ((i % 4) * 640, (i // 4) * 360))
+            sheet.save(OUT / f"hareket-{name}.jpg", quality=90)
+            ims[5].crop((700, 80, 1860, 700)).save(OUT / f"hareket-{name}-kirp.jpg", quality=92)
+            print(OUT / f"hareket-{name}.jpg")
+
+
+if __name__ == "__main__":
+    if sys.argv[1] == "hareket":
+        cmd_hareket()
+        sys.exit()
+    if sys.argv[1] == "gecis":
+        cmd_gecis()
+        sys.exit()
+    {"kare": cmd_kare, "durumlar": cmd_durumlar, "olc": cmd_olc, "titreme": cmd_titreme}[sys.argv[1]]()
