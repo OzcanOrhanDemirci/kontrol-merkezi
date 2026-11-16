@@ -48,6 +48,7 @@ const M = {
 const sound = window.KM_SES;
 let S = null;                      // the renderer
 let journey = null;                // the camera path (built from the pack's views)
+let W = null;                      // walk mode (ui/yuruyus.js): Y; it takes its own input while active
 
 // ==================================================================== the journey
 // The path runs straight down the central aisle (Özcan, 11-17: "Kameranın betonların etrafından dolaşmasına gerek
@@ -528,10 +529,10 @@ function step(dt) {
   stepLevers(dt);
   updateLights(dt);
   if (!S) return;
-  const pose = drift(journey.pose(M.s));
+  const pose = W ? W.camera(dt, drift(journey.pose(M.s))) : drift(journey.pose(M.s));
   S.setCamera(pose.eye, add(pose.eye, pose.dir), pose.fov);
   // the eye half adapts to the dark when the lights are out
-  S.setExposure(exposureAt(M.s) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
+  S.setExposure(exposureAt(W ? W.s(M.s) : M.s) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
   for (const n of Object.keys(M.rot)) S.setRotor(n, M.rot[n], M.w[n]);
   updateHaze();
   updateLamps();
@@ -637,7 +638,7 @@ function kick() { if (!raf && M.visible && S && S.ready && !params.has('still'))
 if (host) host.addEventListener('message', e => onMessage(e.data));
 else sim = window.KM_BENZETIM(onMessage);
 window.__km = {
-  M, D, get S() { return S; }, go, step, onMessage, get sim() { return sim; },
+  M, D, get S() { return S; }, get W() { return W; }, go, step, onMessage, get sim() { return sim; },
   // measurement and stills: put the camera somewhere on the journey (0..1) and draw one frame
   async still(u, opts = {}) {
     const pin = () => { M.s = clamp(u, 0, 1) * journey.total; M.v = 0; M.place = u >= 1 ? 'rgb' : 'fanlar'; };
@@ -659,6 +660,7 @@ window.__km = {
     if (window.KM_LEVHA) await KM_LEVHA.ready;
     S = await window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2) });
     journey = buildJourney(S.views);
+    if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick });
     S.ready = true;
   } catch (err) {
     console.error(err);
