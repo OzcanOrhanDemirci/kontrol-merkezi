@@ -132,7 +132,7 @@ public sealed class RenkMotoru
     /// ring -1 = keyboard; pump = the AIO's pump ring.</summary>
     static double YzFactor(int variant, int ring, bool pump, double ang, double x, int led, double t, double e)
     {
-        if (e < 0.001) return 1;
+        if (e < 0.001 || variant == 0) return 1;   // 0 = no effect on the case/keyboard (Özcan: it belongs on the GPU's own LEDs)
         if (variant == 5) return 1;
         if (variant == 3 || variant == 4)
         {

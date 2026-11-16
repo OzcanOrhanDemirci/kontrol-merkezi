@@ -54,7 +54,9 @@ public sealed class Ayarlar
     /// <summary>Local model generating an answer: rose pink, the one hue family the temperature palette never visits.</summary>
     /// <summary>Which candidate pattern plays for the two load effects (local model 1-5, CPU 1-2; RenkMotoru.YzFactor/CpuFactor).
     /// Hue never changes for them: "rengi sadece sıcaklığa bağlayalım" (Özcan 11-16).</summary>
-    public int YapayZekaEfekti = 1, IslemciEfekti = 1;
+    // Local model: 0 = none on the case and keyboard. Özcan 11-16 picked none of 1-5; the GPU's own LEDs are to show it
+    // once the GPU lighting is proven (docs/GPU_ISIK_PLANI.md).
+    public int YapayZekaEfekti = 0, IslemciEfekti = 1;
 
     /// <summary>Lights fade out after this many minutes without real mouse/keyboard input (0 = never). Özcan 11-16:
     /// "15 dakika işlem yoksa, ama mouse klavye hareketi olarak [...] RGB'ler yumuşak şekilde kapanır".</summary>
@@ -96,7 +98,7 @@ public sealed class Ayarlar
             if (d.TryGetValue("beklemeDakika", out var bd)) a.BeklemeDakika = Math.Max(0, Convert.ToInt32(bd));
             if (d.TryGetValue("efektler", out var ef) && ef is Dictionary<string, object> efd)
             {
-                if (efd.TryGetValue("yapayzeka", out var e1)) a.YapayZekaEfekti = Math.Max(1, Math.Min(5, Convert.ToInt32(e1)));
+                if (efd.TryGetValue("yapayzeka", out var e1)) a.YapayZekaEfekti = Math.Max(0, Math.Min(5, Convert.ToInt32(e1)));
                 if (efd.TryGetValue("islemci", out var e2)) a.IslemciEfekti = Convert.ToInt32(e2) == 2 ? 2 : 1;
             }
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
@@ -136,7 +138,7 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: yerel model (1-5) ve işlemci yükü (1-2) efektinin adayı. beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: yerel model (0 = yok, 1-5) ve işlemci yükü (1-2) efektinin adayı. beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => { var o = new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }; if (x.Gizli) o["gizli"] = true; return o; }).ToList(),
                 ["uyariDerece"] = UyariDerece,
                 ["beklemeDakika"] = BeklemeDakika,

@@ -125,8 +125,8 @@ def main():
             print(f"uyarı oynuyor @ {c} °C (gerçekte ortalama {load().get('uyariDerece', 90)} °C'yi geçince)")
         elif a[1] == "sec":
             kind, n = a[2], int(a[3])
-            if not ((kind == "yapayzeka" and 1 <= n <= 5) or (kind == "islemci" and n in (1, 2))):
-                sys.exit("efekt sec yapayzeka 1-5 | islemci 1|2")
+            if not ((kind == "yapayzeka" and 0 <= n <= 5) or (kind == "islemci" and n in (1, 2))):
+                sys.exit("efekt sec yapayzeka 0-5 (0 = yok) | islemci 1|2")
             d = load()
             d.setdefault("efektler", {})[kind] = n
             save(d)

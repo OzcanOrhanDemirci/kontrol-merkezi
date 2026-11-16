@@ -582,7 +582,7 @@ function renderRgb() {
     // the two load effects ride on the temperature colour; the window names them, the colour stays the temperature's
     const ef = rgb.efektler || {};
     const efl = [ef.uyari && 'sıcaklık uyarısı', ef.yapayzeka && 'yerel model yanıt yazıyor', ef.islemci && 'işlemci yoğun yükte'].filter(Boolean);
-    if (efl.length && on && !rgb.beklemede) modeSub += '<br>ışıkta efekt: <b>' + efl.join('</b> · <b>') + '</b>';
+    if (efl.length && on && !rgb.beklemede) modeSub += '<br>şu an: <b>' + efl.join('</b> · <b>') + '</b>';
   }
   $('#mode').innerHTML = mode;
   $('#modeSub').innerHTML = modeSub;
