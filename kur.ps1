@@ -32,6 +32,10 @@ function Servisi-Durdur {
     } catch { 'Çalışan servis yok (boru bulunamadı).' }
     $kalan = Get-Process KontrolMerkezi -ErrorAction SilentlyContinue
     if ($kalan) { $kalan | Stop-Process -Force; 'Kalan KontrolMerkezi süreçleri durduruldu.' }
+    # The window's WebView2 holds runtimes\...\WebView2Loader.dll until its process has really gone (11-16: an update
+    # failed on that lock); wait for the processes to exit before copying.
+    Get-Process KontrolMerkezi -ErrorAction SilentlyContinue | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
 }
 
 function Kisayol([string]$yol, [string]$exe) {
