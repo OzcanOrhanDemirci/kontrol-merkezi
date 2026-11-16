@@ -20,6 +20,7 @@ function raise() {
   up = true;
   el.classList.add('on');
   canvas.style.visibility = 'visible';           // under the opaque picture from now on
+  if (!shown) setSlit(0.08, 1.6);               // the load has begun
 }
 if (host) {
   const img = new Image();
@@ -32,7 +33,7 @@ if (host) {
 document.fonts.load('20px KMAcilis').then(() => el.classList.add('yazili'), () => el.classList.add('yazili'));
 
 function setSlit(f, seconds) {
-  slit.style.transition = 'transform ' + seconds + 's cubic-bezier(.2, .6, .3, 1)';
+  slit.style.transition = 'transform ' + seconds + 's cubic-bezier(.25, .6, .35, 1)';
   slit.style.transform = 'scaleX(' + Math.max(0.015, Math.min(1, f)).toFixed(3) + ')';
 }
 
@@ -40,9 +41,9 @@ window.KM_ACILIS = Object.freeze({
   progress(f) {
     if (over || !(f > shown + 0.01)) return;
     shown = f;
-    // the last stretch (uploads, shaders) holds the page's thread with no word in between: one long glide that the
-    // compositor plays through it
-    if (f >= 0.85) setSlit(0.97, 2.5); else setSlit(f, 0.7);
+    // the page's thread is held for up to ~0.9 s at a time while the pack is built (no word gets through then): each
+    // word starts a glide a little past it, which the compositor plays on through the silence, slowing as it nears
+    setSlit(Math.min(0.97, f + 0.12), 1.6);
   },
   end() {
     if (over) return;
