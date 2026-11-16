@@ -31,9 +31,16 @@ public sealed class RenkMotoru
     const double White = 1.0;
 
     readonly Ayarlar _a;
-    readonly Lab[] _stopLab;
-    readonly Lab _aiLab, _cpuLab;
-    readonly Lin _aiLight;
+
+    // One palette per device: the stop colours and override colours that make that device show what the reference
+    // (the keyboard) shows. LED errors depend on hue, so per-channel gains cannot match devices across the palette.
+    sealed class Palette
+    {
+        public Lab[] Stops;
+        public Lab Ai, Cpu;
+        public Lin AiLight, AiShimmer;
+    }
+    readonly Palette _ref, _aioPal;
     readonly int[] _ringStart;
     readonly int _aioCount;
 
@@ -57,21 +64,45 @@ public sealed class RenkMotoru
     public RenkMotoru(Ayarlar a)
     {
         _a = a;
-        _stopLab = new Lab[a.Duraklar.Count];
-        for (int i = 0; i < _stopLab.Length; i++)
-            _stopLab[i] = Lab.From(Lin.FromSrgb(a.Duraklar[i].Renk[0], a.Duraklar[i].Renk[1], a.Duraklar[i].Renk[2]).Full());
-        _aiLight = Lin.FromSrgb(a.YapayZekaRengi[0], a.YapayZekaRengi[1], a.YapayZekaRengi[2]).Full();
-        _aiLab = Lab.From(_aiLight);
-        _cpuLab = Lab.From(Lin.FromSrgb(a.IslemciRengi[0], a.IslemciRengi[1], a.IslemciRengi[2]).Full());
+        _ref = Build(a, null);
+        _aioPal = Build(a, a.CihazRenkleri.TryGetValue("aio", out var cr) ? cr : null);
         _ringStart = new int[a.AioHalkalari.Length + 1];
         for (int i = 0; i < a.AioHalkalari.Length; i++) _ringStart[i + 1] = _ringStart[i] + a.AioHalkalari[i];
         _aioCount = _ringStart[a.AioHalkalari.Length];
         Aio = new Lin[_aioCount];
     }
 
-    /// <summary>Palette colour for an averaged temperature (full brightness, linear light).</summary>
-    public Lin Palet(double c)
+    static Lin L(int[] c) => Lin.FromSrgb(c[0], c[1], c[2]).Full();
+
+    static Palette Build(Ayarlar a, CihazRenk own)
     {
+        var p = new Palette { Stops = new Lab[a.Duraklar.Count] };
+        for (int i = 0; i < p.Stops.Length; i++)
+        {
+            var c = own?.Duraklar != null && i < own.Duraklar.Length && own.Duraklar[i] != null ? own.Duraklar[i] : a.Duraklar[i].Renk;
+            p.Stops[i] = Lab.From(L(c));
+        }
+        p.AiLight = L(own?.YapayZeka ?? a.YapayZekaRengi);
+        p.Ai = Lab.From(p.AiLight);
+        p.Cpu = Lab.From(L(own?.Islemci ?? a.IslemciRengi));
+        p.AiShimmer = Lin.Mix(p.AiLight, new Lin(1, 0.45, 0.75), 0.6).Full();
+        return p;
+    }
+
+    /// <summary>Carry the running state over from the engine this one replaces (live settings reload: no fade, no jump).</summary>
+    public void DevamEt(RenkMotoru o)
+    {
+        _smooth = o._smooth; _wAi = o._wAi; _wCpu = o._wCpu; _master = o._master;
+        _eThink = o._eThink; _eWait = o._eWait; _eClosed = o._eClosed; _eRestart = o._eRestart;
+        _hazirAt = o._hazirAt; _wakeAt = o._wakeAt; _lastJ = o._lastJ;
+    }
+
+    /// <summary>Palette colour for an averaged temperature (full brightness, linear light), reference device.</summary>
+    public Lin Palet(double c) => Palet(_ref, c);
+
+    Lin Palet(Palette pal, double c)
+    {
+        var _stopLab = pal.Stops;
         var d = _a.Duraklar;
         if (c <= d[0].C) return _stopLab[0].ToLin().Full();
         for (int i = 1; i < d.Count; i++)
@@ -86,6 +117,14 @@ public sealed class RenkMotoru
         return _stopLab[d.Count - 1].ToLin().Full();
     }
 
+    Lin Base(Palette pal, double tc)
+    {
+        var lab = Lab.From(Palet(pal, tc));
+        if (_wCpu > 0.001) lab = Lab.Mix(lab, pal.Cpu, _wCpu);
+        if (_wAi > 0.001) lab = Lab.Mix(lab, pal.Ai, _wAi);
+        return lab.ToLin().Full();
+    }
+
     static double Approach(double v, double target, double dt, double tau) => v + (target - v) * (1 - Math.Exp(-dt / tau));
 
     public void Hesapla(Girdi g, double t, double dt)
@@ -94,15 +133,13 @@ public sealed class RenkMotoru
         double? avg = g.CpuC.HasValue && g.GpuC.HasValue ? (g.CpuC + g.GpuC) / 2 : g.CpuC ?? g.GpuC;
         Ortalama = avg;
         if (avg.HasValue) _smooth = _smooth.HasValue ? Approach(_smooth.Value, avg.Value, dt, TempTau) : avg;
-        var temp = Palet(_smooth ?? _a.Duraklar[0].C);
+        double tc = _smooth ?? _a.Duraklar[0].C;
 
         // ---- overrides (soft)
         _wAi = Approach(_wAi, g.YapayZeka ? 1 : 0, dt, OverrideTau);
         _wCpu = Approach(_wCpu, g.Islemci && !g.YapayZeka ? 1 : 0, dt, OverrideTau);
-        var lab = Lab.From(temp);
-        if (_wCpu > 0.001) lab = Lab.Mix(lab, _cpuLab, _wCpu);
-        if (_wAi > 0.001) lab = Lab.Mix(lab, _aiLab, _wAi);
-        var baseCol = lab.ToLin().Full();
+        var baseCol = Base(_ref, tc);       // keyboard, GPU, and what the window shows
+        var aioBase = Base(_aioPal, tc);
         Taban = baseCol;
         Kip = g.YapayZeka ? IsikKipi.YapayZeka : g.Islemci ? IsikKipi.Islemci : IsikKipi.Sicaklik;
 
@@ -139,12 +176,12 @@ public sealed class RenkMotoru
             for (int i = 0; i < n; i++)
             {
                 double ang = 2 * Math.PI * i / n;
-                var c = baseCol;
+                var c = aioBase;
                 if (_wAi > 0.001)
                 {
                     // flowing pink: a lighter rose drifts round each ring
                     double f = 0.5 + 0.5 * Math.Sin(ang * 2 - t * 2.4 + r * 1.3);
-                    c = Lin.Mix(c, Lin.Mix(_aiLight, new Lin(1, 0.45, 0.75), 0.6).Full(), 0.45 * f * _wAi);
+                    c = Lin.Mix(c, _aioPal.AiShimmer, 0.45 * f * _wAi);
                 }
                 c = c * cpuPulse;
 
@@ -189,7 +226,7 @@ public sealed class RenkMotoru
             if (_wAi > 0.001)
             {
                 double f = 0.5 + 0.5 * Math.Sin(x * 6.3 - t * 2.4);
-                c = Lin.Mix(c, Lin.Mix(_aiLight, new Lin(1, 0.45, 0.75), 0.6).Full(), 0.45 * f * _wAi);
+                c = Lin.Mix(c, _ref.AiShimmer, 0.45 * f * _wAi);
             }
             c = c * cpuPulse;
             if (_eThink > 0.001)

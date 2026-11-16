@@ -232,6 +232,7 @@ sealed class Servis : IDisposable
                 bool acik;
                 lock (_lock) acik = _rgbAcik;
                 var m = new RenkMotoru(a) { Acik = acik };
+                m.DevamEt(_motor);
                 _ayar = a;
                 _motor = m;
                 Program.Log("ayarlar yeniden yüklendi");

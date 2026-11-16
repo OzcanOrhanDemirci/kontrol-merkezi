@@ -19,8 +19,19 @@ public sealed class Durak
     public string Ad;
 }
 
+/// <summary>A device's own colours: what to send it so it shows what the reference device (keyboard) shows.
+/// Null entries fall back to the shared colour.</summary>
+public sealed class CihazRenk
+{
+    public int[][] Duraklar;   // one per stop, same order as Ayarlar.Duraklar
+    public int[] YapayZeka, Islemci;
+}
+
 public sealed class Ayarlar
 {
+    /// <summary>Per-device colour per stop (hue-dependent matching), e.g. "aio". The keyboard is the reference.</summary>
+    public Dictionary<string, CihazRenk> CihazRenkleri = new();
+
     // Stops from cold to hot. Temperatures come from this machine's range: GPU idles at ~37 °C with its fans
     // stopped (measured 11-16 02:10), the 7900X idles in the 40s and runs to its 95 °C design limit under all-core
     // load; gaming puts both in the 60-80 band. Average: idle ~41-45, desk work ~45-50, games ~63-75, both maxed ~85.
@@ -76,6 +87,17 @@ public sealed class Ayarlar
             if (d.TryGetValue("islemciRengi", out var ir)) a.IslemciRengi = Ints(ir, 3);
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
                 foreach (var kv in kd) a.Kazanc[kv.Key] = Doubles(kv.Value, 3);
+            if (d.TryGetValue("cihazRenkleri", out var crs) && crs is Dictionary<string, object> crd)
+                foreach (var kv in crd)
+                {
+                    if (kv.Value is not Dictionary<string, object> x) continue;
+                    var cr = new CihazRenk();
+                    if (x.TryGetValue("duraklar", out var dd) && dd is IEnumerable dl2)
+                        cr.Duraklar = dl2.Cast<object>().Select(o => o == null ? null : Ints(o, 3)).ToArray();
+                    if (x.TryGetValue("yapayZeka", out var yz2) && yz2 != null) cr.YapayZeka = Ints(yz2, 3);
+                    if (x.TryGetValue("islemci", out var ic2) && ic2 != null) cr.Islemci = Ints(ic2, 3);
+                    a.CihazRenkleri[kv.Key] = cr;
+                }
             if (d.TryGetValue("aioHalkalari", out var ah))
             {
                 var rings = Ints(ah, -1);
@@ -83,7 +105,10 @@ public sealed class Ayarlar
                 else Program.Log("ayarlar: aioHalkalari geçersiz, varsayılan kullanılıyor");
             }
             if (d.TryGetValue("pompaHalkasi", out var ph)) a.PompaHalkasi = Convert.ToInt32(ph);
-            foreach (var arr in new[] { a.YapayZekaRengi, a.IslemciRengi }.Concat(a.Duraklar.Select(x => x.Renk)))
+            var all = new[] { a.YapayZekaRengi, a.IslemciRengi }.Concat(a.Duraklar.Select(x => x.Renk))
+                .Concat(a.CihazRenkleri.Values.SelectMany(c => (c.Duraklar ?? new int[0][]).Concat(new[] { c.YapayZeka, c.Islemci })))
+                .Where(x => x != null);
+            foreach (var arr in all)
                 for (int i = 0; i < arr.Length; i++) arr[i] = Math.Max(0, Math.Min(255, arr[i]));
         }
         catch (Exception ex)
@@ -99,11 +124,15 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı (renk eşleme). Değişiklik servis yeniden başlayınca geçerli.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın ve iki özel durumun rengi (null = ortak renk); klavye referanstır. Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }).ToList(),
                 ["yapayZekaRengi"] = YapayZekaRengi,
                 ["islemciRengi"] = IslemciRengi,
                 ["kazanc"] = Kazanc,
+                ["cihazRenkleri"] = CihazRenkleri.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
+                {
+                    ["duraklar"] = kv.Value.Duraklar, ["yapayZeka"] = kv.Value.YapayZeka, ["islemci"] = kv.Value.Islemci,
+                }),
                 ["aioHalkalari"] = AioHalkalari,
                 ["pompaHalkasi"] = PompaHalkasi,
             };
