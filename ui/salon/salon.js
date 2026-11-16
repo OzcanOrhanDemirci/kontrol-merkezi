@@ -1257,10 +1257,14 @@ async function create(canvas, options = {}) {
   }
   function pick(x, y) {
     const { c, d } = rayAt(x, y);
-    let best = Infinity, hit = null;
+    return pickNearScreen(x, y, pickRay(c.eye, d, Infinity));
+  }
+  // the nearest control along a ray from eye (unit direction d) within maxT (pointer picks and walk mode's centre)
+  function pickRay(eye, d, maxT) {
+    let best = maxT, hit = null;
     for (const a of anchorList) {
       if (a.tur !== 'tik' || !a.kutu) continue;
-      const k = a.kutu, q = sub(c.eye, k.merkez);
+      const k = a.kutu, q = sub(eye, k.merkez);
       let lo = -Infinity, hi = Infinity, ok = true;
       for (const ax of [k.x, k.y, k.z]) {
         const e = len(ax);
@@ -1279,12 +1283,15 @@ async function create(canvas, options = {}) {
       if (rot) {
         const dn = dot(d, rot.axis);
         if (Math.abs(dn) < 1e-6) continue;
-        const td = dot(sub(rot.centre, c.eye), rot.axis) / dn;
-        if (td <= 0 || len(sub(add(c.eye, scl(d, td)), rot.centre)) > rot.rmax * 1.02) continue;
+        const td = dot(sub(rot.centre, eye), rot.axis) / dn;
+        if (td <= 0 || len(sub(add(eye, scl(d, td)), rot.centre)) > rot.rmax * 1.02) continue;
         t = td;
       }
       if (t < best) { best = t; hit = a.ad; }
     }
+    return hit;
+  }
+  function pickNearScreen(x, y, hit) {
     // a far small control (the exit sign seen from the entrance is ~70 x 25 px) is also taken within 18 px of its box's
     // centre on screen, when nothing else is under the pointer
     if (!hit) {
@@ -1369,6 +1376,7 @@ async function create(canvas, options = {}) {
     setQuality(q) { Object.assign(Q, q); T = null; W = 0; resize(); },
     render,
     pick,
+    pickRay,
     project,
     resize,
     stats() {

@@ -521,35 +521,9 @@ function create(o) {
   }
 
   // ---------------------------------------------------------------- the centre's target
-  let tiks = null;
-  function prepareTiks() {
-    tiks = [];
-    for (const a of Object.values(S().anchors || {})) {
-      if (a.tur !== 'tik' || !a.kutu || !o.actions[a.ad]) continue;
-      const k = a.kutu, ax = [k.x, k.y, k.z].map(v => Math.hypot(v[0], v[1], v[2]));
-      if (ax.some(l => l < 1e-9)) continue;
-      tiks.push({ name: a.ad, c: k.merkez, n: [k.x, k.y, k.z].map((v, i) => [v[0] / ax[i], v[1] / ax[i], v[2] / ax[i]]), e: ax });
-    }
-  }
+  // the same test as a pointer pick (a fan counts only on its disc), along the view within reach
   function centreHit() {
-    if (!tiks) prepareTiks();
-    const ex = pose.eye[0], ey = pose.eye[1], ez = pose.eye[2], dx = pose.dir[0], dy = pose.dir[1], dz = pose.dir[2];
-    let best = C.REACH, hit = null;
-    for (let i = 0; i < tiks.length; i++) {
-      const b = tiks[i];
-      const qx = ex - b.c[0], qy = ey - b.c[1], qz = ez - b.c[2];
-      let lo = 0, hi = best, ok = true;
-      for (let a = 0; a < 3 && ok; a++) {
-        const n = b.n[a], e = b.e[a], oo = qx * n[0] + qy * n[1] + qz * n[2], dd = dx * n[0] + dy * n[1] + dz * n[2];
-        if (Math.abs(dd) < 1e-12) { if (Math.abs(oo) > e) ok = false; continue; }
-        let t0 = (-e - oo) / dd, t1 = (e - oo) / dd;
-        if (t0 > t1) { const tt = t0; t0 = t1; t1 = tt; }
-        if (t0 > lo) lo = t0; if (t1 < hi) hi = t1;
-        if (hi < lo) ok = false;
-      }
-      if (ok && lo < best) { best = lo; hit = b.name; }
-    }
-    return hit;
+    return S() && S().pickRay ? S().pickRay(pose.eye, pose.dir, C.REACH) : null;
   }
   function setHover(n) {
     if (M.hover === n) return;
