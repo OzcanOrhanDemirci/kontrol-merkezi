@@ -10,9 +10,11 @@ if(NOT DEFINED PCG_TP)
 endif()
 
 file(GLOB SALON_SRC CONFIGURE_DEPENDS src/*.cpp src/kit/*.cpp src/scene/*.cpp)
-add_executable(salon ${SALON_SRC})
-target_include_directories(salon PRIVATE src ${PCG_TP}/cuda/include ${PCG_TP}/optix/include ${PCG_TP}/cgltf ${PCG_TP}/stb)
-target_compile_definitions(salon PRIVATE SALON_ROOT="${CMAKE_SOURCE_DIR}" SALON_THIRD_PARTY="${PCG_TP}" NOMINMAX
+# third party: xatlas (MIT, vendored in third_party/xatlas), miniz (MIT, pc_graphics third_party/tinyexr)
+add_executable(salon ${SALON_SRC} third_party/xatlas/xatlas.cpp ${PCG_TP}/tinyexr/miniz.c)
+target_include_directories(salon PRIVATE src third_party/xatlas ${PCG_TP}/cuda/include ${PCG_TP}/optix/include ${PCG_TP}/cgltf
+                                         ${PCG_TP}/stb ${PCG_TP}/tinyexr)
+target_compile_definitions(salon PRIVATE SALON_ROOT="${CMAKE_SOURCE_DIR}" SALON_THIRD_PARTY="${PCG_TP}" NOMINMAX _SILENCE_CXX20_U8PATH_DEPRECATION_WARNING
                                          WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
 if(MSVC)
     target_compile_options(salon PRIVATE /W3 /O2 /utf-8 /wd4244 /wd4267 /wd4305 /openmp)
