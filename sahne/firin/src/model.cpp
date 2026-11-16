@@ -1,11 +1,14 @@
-// glTF import with cgltf (MIT, C:/dev/pc_graphics/third_party/cgltf), the albedo's mean with stb_image (MIT / public
-// domain, pc_graphics third_party/stb), light map charts with xatlas (MIT, third_party/xatlas).
+// glTF import with cgltf (MIT, C:/dev/pc_graphics/third_party/cgltf), the albedo's mean with stb_image and the
+// occlusion-less ARM's copy with stb_image_write (MIT / public domain, pc_graphics third_party/stb), light map charts
+// with xatlas (MIT, third_party/xatlas).
 #include "model.h"
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 #include <xatlas.h>
 
 #include <algorithm>
@@ -13,6 +16,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <stdexcept>
 
@@ -38,6 +42,8 @@ fs::path imageOf(const cgltf_texture_view& view, const fs::path& dir) {
 }
 
 float3 meanLinear(const fs::path& image) {
+    static std::map<fs::path, float3> known;   // a kit placed piece by piece decodes each image once
+    if (auto it = known.find(image); it != known.end()) return it->second;
     int w = 0, h = 0, c = 0;
     unsigned char* px = stbi_load(image.string().c_str(), &w, &h, &c, 3);
     if (!px) throw std::runtime_error("cannot decode " + image.string());
@@ -48,12 +54,47 @@ float3 meanLinear(const fs::path& image) {
     for (size_t k = 0; k < n; ++k)
         for (int j = 0; j < 3; ++j) sum[j] += lut[px[k * 3 + j]];
     stbi_image_free(px);
-    return make_float3(float(sum[0] / n), float(sum[1] / n), float(sum[2] / n));
+    return known[image] = make_float3(float(sum[0] / n), float(sum[1] / n), float(sum[2] / n));
+}
+
+// Poly Haven packs ambient occlusion in the ARM map's red channel, but some models carry none there (all but black:
+// metal_trash_can, modular_airduct_circular_01), and the renderer multiplies the diffuse light by it. Such a map is
+// replaced by a copy beside it with the red channel white (<stem>_ao1.png, made once, the same bytes every time).
+fs::path occlusionFixed(const fs::path& arm) {
+    const fs::path fixed = arm.parent_path() / (arm.stem().string() + "_ao1.png");
+    if (fs::exists(fixed)) return fixed;
+    int w = 0, h = 0, c = 0;
+    unsigned char* px = stbi_load(arm.string().c_str(), &w, &h, &c, 3);
+    if (!px) throw std::runtime_error("cannot decode " + arm.string());
+    const size_t n = size_t(w) * h;
+    double red = 0;
+    for (size_t k = 0; k < n; ++k) red += px[k * 3];
+    if (red / n > 0.05 * 255) {   // occlusion is there
+        stbi_image_free(px);
+        return arm;
+    }
+    for (size_t k = 0; k < n; ++k) px[k * 3] = 255;
+    const fs::path tmp = fixed.string() + ".tmp";
+    const bool ok = stbi_write_png(tmp.string().c_str(), w, h, 3, px, w * 3) != 0;
+    stbi_image_free(px);
+    if (!ok) throw std::runtime_error("cannot write " + tmp.string());
+    fs::rename(tmp, fixed);
+    std::printf("model: %s has no occlusion in red: %s (red = 1)\n", arm.filename().string().c_str(),
+                fixed.filename().string().c_str());
+    return fixed;
+}
+
+fs::path withOcclusion(const fs::path& arm) {
+    if (arm.empty()) return arm;
+    static std::map<fs::path, fs::path> known;   // decoded once per image
+    if (auto it = known.find(arm); it != known.end()) return it->second;
+    return known[arm] = occlusionFixed(arm);
 }
 
 }   // namespace
 
-bool importModel(Scene& s, const std::string& path, const dz::Xform& t, float scale, std::string& err) {
+bool importModel(Scene& s, const std::string& path, const dz::Xform& t, float scale, std::string& err,
+                 const std::vector<std::string>& only) {
     try {
         if (!(scale > 0)) throw std::runtime_error("the model's scale must be positive");
         cgltf_options opt{};
@@ -77,7 +118,7 @@ bool importModel(Scene& s, const std::string& path, const dz::Xform& t, float sc
             Material m;
             m.name = g.name ? g.name : fs::path(path).stem().string() + "_" + std::to_string(i);
             m.tint = make_float3(pbr.base_color_factor[0], pbr.base_color_factor[1], pbr.base_color_factor[2]);
-            const fs::path al = imageOf(pbr.base_color_texture, dir), arm = imageOf(pbr.metallic_roughness_texture, dir);
+            const fs::path al = imageOf(pbr.base_color_texture, dir), arm = withOcclusion(imageOf(pbr.metallic_roughness_texture, dir));
             m.albedo = rel(al);
             m.normal = rel(imageOf(g.normal_texture, dir));
             m.arm = rel(arm);   // Poly Haven's ARM: occlusion, roughness, metal (glTF's G and B channels)
@@ -110,8 +151,12 @@ bool importModel(Scene& s, const std::string& path, const dz::Xform& t, float sc
             for (size_t i = 0; i < raw->nodes_count; ++i)
                 if (!raw->nodes[i].parent) visit(visit, &raw->nodes[i]);
         }
+        for (const std::string& name : only)
+            if (std::none_of(nodes.begin(), nodes.end(), [&](const cgltf_node* n) { return n->mesh && n->name && name == n->name; }))
+                throw std::runtime_error("no mesh node " + name + " in " + path);
         for (const cgltf_node* node : nodes) {
             if (!node->mesh) continue;
+            if (!only.empty() && (!node->name || std::find(only.begin(), only.end(), node->name) == only.end())) continue;
             float w[16];
             cgltf_node_transform_world(node, w);
             const float3 X = t.dir(make_float3(w[0], w[1], w[2])) * scale, Y = t.dir(make_float3(w[4], w[5], w[6])) * scale,
@@ -245,7 +290,27 @@ bool importModel(Scene& s, const std::string& path, const dz::Xform& t, float sc
             m.meanAlbedo = make_float3(0.5f, 0.5f, 0.5f);
             mats.push_back(m);
         }
-        s.mats.insert(s.mats.end(), mats.begin(), mats.end());
+        // the model's materials: one row per distinct material, shared by every placement of the model (a draw range
+        // and a texture layer per material, not per copy); only the ones its triangles use are added
+        std::vector<uint32_t> matId(mats.size(), UINT32_MAX);
+        std::vector<char> used(mats.size(), 0);
+        for (const auto& v : out.v) used[v.mat - matBase] = 1;
+        for (size_t i = 0; i < mats.size(); ++i) {
+            if (!used[i]) continue;
+            const Material& m = mats[i];
+            for (size_t j = 0; j < s.mats.size() && matId[i] == UINT32_MAX; ++j) {
+                const Material& o = s.mats[j];
+                if (o.name == m.name && o.albedo == m.albedo && o.normal == m.normal && o.arm == m.arm && o.emission == m.emission &&
+                    o.flags == m.flags && o.rough == m.rough && o.metal == m.metal && o.tint.x == m.tint.x && o.tint.y == m.tint.y &&
+                    o.tint.z == m.tint.z)
+                    matId[i] = uint32_t(j);
+            }
+            if (matId[i] == UINT32_MAX) {
+                matId[i] = uint32_t(s.mats.size());
+                s.mats.push_back(m);
+            }
+        }
+        for (auto& v : out.v) v.mat = matId[v.mat - matBase];
         s.mesh.append(out, dz::Xform{});
         std::printf("model %s: %zu triangles, %u charts, %zu materials\n", fs::path(path).filename().string().c_str(), out.tris(),
                     out.charts, mats.size());
