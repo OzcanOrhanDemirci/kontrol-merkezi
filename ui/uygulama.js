@@ -89,13 +89,16 @@ function buildJourney(views) {
       const eye = at(s);
       const d0 = norm(sub(f0.hedef, eye)), d1 = norm(sub(f1.hedef, eye));
       const ahead = norm(sub(add(at(s + 32), [0, 0.6, 0]), eye));
-      const w0 = 1 - smooth(s / 45), w1 = smooth((s - (total - 70)) / 70);
-      let dir = add(add(mul(d0, w0), mul(d1, w1)), mul(ahead, Math.max(0, 1 - w0 - w1)));
+      // from the middle on the monument draws the eye: the look settles on the arch while still in the lane (the
+      // columns pass in front of it), not on the path's turn back into the aisle
+      const u = s / total, onArch = smooth((u - 0.46) / 0.18);
+      const w0 = 1 - smooth(s / 45), w1 = Math.max(onArch, smooth((s - (total - 70)) / 70));
+      let dir = add(add(mul(d0, w0 * (1 - w1)), mul(d1, w1)), mul(ahead, Math.max(0, 1 - w0 - w1)));
       if (s >= total - 1e-3) dir = d1;
       // in the lane between the rows the camera turns across them (up to ~22 degrees towards the aisle), so the view
-      // opens diagonally over the forest of columns instead of down a second corridor
+      // opens diagonally over the forest of columns instead of down a second corridor; it gives way to the arch
       const lane = clamp((eye[0] - 6) / 8, 0, 1);
-      const yaw = -0.38 * smooth(lane) * Math.sign(eye[0] || 1);
+      const yaw = -0.38 * smooth(lane) * Math.sign(eye[0] || 1) * (1 - onArch);
       const cy = Math.cos(yaw), sy = Math.sin(yaw), d = norm(dir);
       dir = [d[0] * cy - d[2] * sy, d[1], d[0] * sy + d[2] * cy];
       return { eye, dir: norm(dir), fov: lerp(f0.fov || 50, f1.fov || 50, smooth(s / total)) };
