@@ -70,6 +70,12 @@ Recorded with `araclar/nvspy/izle.exe` attached as a debugger to MSI Center 2.0.
 - **MSI saves (0x3F) after every apply**, plain colour changes included. The card's stored state after the session:
   Front+Side off (11:06:05). Volatility of the non-save registers is not shown by this data: step 4 decides it.
 
+## Step 4 (2026-11-16)
+
+Static blue sent at 11:10:57 with MSI's sequence, no 0x3F (`araclar/nvspy/gpu-tek-renk.c`). It went out earlier than
+planned by a mistake (an old build run with an argument it ignored), before MSI's services were stopped; the content was
+the approved step. Power-off check: `docs/GPU_ADIM4_KONTROL.md`.
+
 ## Never
 
 - Write register 0x3F.
