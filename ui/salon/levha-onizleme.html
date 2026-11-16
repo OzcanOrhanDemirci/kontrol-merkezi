@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Salonun yazıları · önizleme</title>
+<!-- Every texture of levha.js with sample data, on a dark page. "Durum" steps every texture through its
+     states; each card can also be set on its own. "Sahnedeki boyut" shows each texture at about the size it
+     takes on a 2560 × 1440 screen (vertical FOV 50°) from the distance it is seen from; there is no scene
+     light, haze or perspective here. -->
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; background: #0d0f0f; color: #d6d8cf; font: 15px/1.4 system-ui, sans-serif }
+  header { padding: 18px 28px; background: #161a1a; border-bottom: 1px solid #2c3332; position: sticky; top: 0; z-index: 2 }
+  h1 { font-size: 20px; margin: 0 0 10px; font-weight: 600 }
+  label { margin-right: 22px }
+  button, select { font: inherit; background: #222928; color: #e2e4da; border: 1px solid #4a5452; padding: 5px 10px }
+  #durum { color: #d9b46c; margin-left: 12px }
+  main { display: flex; flex-wrap: wrap; gap: 20px; padding: 24px 28px }
+  article { background: #141818; border: 1px solid #262d2c; padding: 14px }
+  h2 { font: 600 14px ui-monospace, monospace; margin: 0 0 6px }
+  .meta { color: #8f9a94; font: 12px ui-monospace, monospace; margin: 6px 0 10px }
+  .surface { background: #3b4442; padding: 6px; display: inline-block }
+  .surface.self { background: #000 }
+  canvas { display: block }
+</style>
+<header>
+  <h1>Salonun yazıları</h1>
+  <label>Durum <button id="geri">←</button> <span id="adim">1</span> <button id="ileri">→</button></label>
+  <label>Görünüş <select id="olcek">
+    <option value="sigdir">Sığdır (520 piksel)</option>
+    <option value="sahne">Sahnedeki boyut</option>
+    <option value="tam">Bire bir</option>
+  </select></label>
+  <span id="durum">Yazı tipleri yükleniyor…</span>
+</header>
+<main id="izgara"></main>
+<script src="levha.js"></script>
+<script>
+'use strict';
+// Distances (m) each texture is seen from, for the "Sahnedeki boyut" view: boards and their plates from the
+// landing, signs at the portal, the arch's parts from the RGB view.
+const UZAKLIK = { boya: 16, pano: 22, uyari: 22, tabela: 40, cikis: 14, kilit: 0, durak: 24, plaka: 20, cihaz: 20 };
+const DUR = [['SOĞUK BEYAZ', 38, [.75, .8, 1]], ['SERİN AÇIK MAVİ', 46, [.2, .5, 1]], ['ILIK KOYU MAVİ', 54, [.03, .1, .8]],
+  ['SICAK SARI', 64, [1, .7, .03]], ['ÇOK SICAK TURUNCU', 74, [1, .25, .01]], ['EN YÜKSEK KIRMIZI', 84, [1, .01, .005]]];
+// Sample data for each texture (fixtures for the preview only, not service defaults).
+window.ORNEKLER = function (name) {
+  if (name.startsWith('pano_')) {
+    const gpu = name === 'pano_gpu';
+    const fanlar = gpu ? [{ ad: 'Fan 1', rpm: 0 }, { ad: 'Fan 2', rpm: 1420 }]
+      : [{ ad: 'İşlemci', rpm: 1270 }, { ad: 'Pompa', rpm: 2340 }, { ad: 'Kasa 1', rpm: 960 }, { ad: 'Kasa 3', rpm: 1040 }];
+    const base = { sicaklik: gpu ? 43.4 : 51.2, yuzde: 67, fanlar };
+    const list = ['en_yuksek', 'bios', 'kart', 'geciyor', 'baska']
+      .flatMap(durum => [false, true].map(hover => ({ ad: durum + (hover ? ' · üzerinde' : ''), veri: { ...base, durum, hover } })));
+    list.push({ ad: 'bilgi_yok', veri: { durum: 'bilgi_yok' } });
+    list.push({ ad: 'bilgi_yok · başlatılıyor', veri: { durum: 'bilgi_yok', neden: 'Servis başlatılıyor…' } });
+    list.push({ ad: 'kol çalışamıyor', veri: { ...base, durum: gpu ? 'kart' : 'bios', kullanilabilir: false, neden: 'Bu kol şu an çalışamıyor' } });
+    list.push({ ad: 'ölçüm yok', veri: { durum: gpu ? 'kart' : 'bios', fanlar: [], sicaklik: null, yuzde: null } });
+    return list;
+  }
+  if (name.startsWith('uyari_')) return ['', 'yetki', 'afterburner', 'baska', 'baglanti'].map(uyari => ({ ad: uyari || 'uyarı yok', veri: { uyari } }));
+  if (name === 'kilit_tasi_ekran') return [
+    { ad: 'açık · soğuk beyaz', veri: { ortalama: 47.3, cpu: 51.2, gpu: 43.4, renk: [.75, .8, 1] } },
+    { ad: 'kapalı', veri: { ortalama: 47.3, cpu: 51.2, gpu: 43.4, renk: [.75, .8, 1], kapali: true } },
+    { ad: 'mavi', veri: { ortalama: 55.8, cpu: 61.2, gpu: 50.4, renk: [.03, .1, .8] } },
+    { ad: 'sarı', veri: { ortalama: 64.1, cpu: 70.9, gpu: 57.3, renk: [1, .7, .03] } },
+    { ad: 'kırmızı · üç basamak', veri: { ortalama: 100.4, cpu: 103.2, gpu: 97.6, renk: [1, .01, .005] } },
+    { ad: 'tek basamak', veri: { ortalama: 7.5, cpu: 8.1, gpu: 6.9, renk: [.75, .8, 1] } },
+    { ad: 'ölçüm yok', veri: { ortalama: null, cpu: null, gpu: null } },
+  ];
+  if (name.startsWith('durak_plaka_')) {
+    const [ad, derece, renk] = DUR[+name.slice(-1)];
+    return [false, true].map(secili => ({ ad: secili ? 'seçili' : 'normal', veri: { ad, derece, renk, secili } }));
+  }
+  if (name === 'plaka_rgb') return [
+    { ad: 'açık', veri: { acik: true } }, { ad: 'açık · üzerinde', veri: { acik: true, hover: true } },
+    { ad: 'açık · beklemede', veri: { acik: true, bosta: true } }, { ad: 'kapalı', veri: { acik: false } },
+    { ad: 'kapalı · üzerinde', veri: { acik: false, hover: true } }, { ad: 'bilinmiyor', veri: { acik: null } },
+  ];
+  if (name.startsWith('cihaz_')) return [
+    { ad: 'bağlı', veri: { durum: 'bagli' } }, { ad: 'bağlı değil', veri: { durum: 'bagli_degil' } },
+    { ad: 'kilitli', veri: { durum: 'kilitli' } }, { ad: 'hata', veri: { durum: 'hata', hata: 'Aygıt yanıt vermiyor' } },
+    { ad: 'uzun hata', veri: { durum: 'hata', hata: 'Aygıta erişilemiyor · bağlantıyı denetleyin ve servisi yeniden başlatın' } },
+  ];
+  return [{ ad: 'sabit', veri: {} }];
+};
+function sahneGenislik(name, s) {
+  if (name === 'kilit_tasi_ekran') return 860;            // a third of a 2560 px wide screen
+  const pxPerM = 1440 / (2 * Math.tan(25 * Math.PI / 180) * UZAKLIK[name.split('_')[0]]);
+  return Math.max(8, Math.round(s.w / s.pxPerM * pxPerM));
+}
+const kartlar = []; let adim = 0;
+function goster(k, i) {
+  k.i = ((i % k.ornek.length) + k.ornek.length) % k.ornek.length; k.secim.value = k.i;
+  KM_LEVHA.draw(k.name, k.ornek[k.i].veri, k.canvas);
+}
+function boyutla() {
+  const mod = document.querySelector('#olcek').value;
+  for (const k of kartlar) {
+    const s = KM_LEVHA.sizes[k.name];
+    const gw = mod === 'tam' ? s.w : mod === 'sahne' ? sahneGenislik(k.name, s) : Math.min(520, s.w);
+    k.canvas.style.width = gw + 'px'; k.canvas.style.height = Math.round(gw * s.h / s.w) + 'px';
+  }
+}
+window.HAZIR = KM_LEVHA.ready.then(() => {
+  for (const [name, s] of Object.entries(KM_LEVHA.sizes)) {
+    const a = document.createElement('article');
+    const h = document.createElement('h2'); h.textContent = name; a.append(h);
+    const ornek = ORNEKLER(name), secim = document.createElement('select');
+    ornek.forEach((o, i) => secim.append(new Option(o.ad, i))); a.append(secim);
+    const meta = document.createElement('div'); meta.className = 'meta';
+    meta.textContent = `${s.w} × ${s.h} · ${s.kind} · ${s.pxPerM} px/m · ${(s.w / s.pxPerM).toFixed(1)} × ${(s.h / s.pxPerM).toFixed(1)} m`;
+    a.append(meta);
+    const yuzey = document.createElement('div'); yuzey.className = 'surface' + (s.kind === 'ekran' || s.kind === 'pano' ? ' self' : '');
+    const canvas = document.createElement('canvas'); yuzey.append(canvas); a.append(yuzey);
+    document.querySelector('#izgara').append(a);
+    const k = { name, ornek, secim, canvas, i: 0 }; kartlar.push(k);
+    secim.onchange = () => goster(k, +secim.value); goster(k, 0);
+  }
+  boyutla();
+  document.querySelector('#durum').textContent = `${kartlar.length} doku hazır`;
+});
+function ilerle(d) { adim += d; kartlar.forEach(k => goster(k, adim)); document.querySelector('#adim').textContent = adim + 1; }
+document.querySelector('#ileri').onclick = () => ilerle(1);
+document.querySelector('#geri').onclick = () => ilerle(-1);
+document.querySelector('#olcek').onchange = boyutla;
+</script>
+</html>
