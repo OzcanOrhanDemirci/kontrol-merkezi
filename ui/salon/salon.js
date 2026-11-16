@@ -161,6 +161,7 @@ async function create(canvas, options = {}) {
     tick(file);
     return buf;
   }
+  const T0 = performance.now(), mark = {};   // load phases, logged once (the opening waits on them)
   say(0, 'sahne.json');
   let pack;
   try {
@@ -213,6 +214,7 @@ async function create(canvas, options = {}) {
       return t;
     })),
   ]);
+  mark.indir = performance.now() - T0;
   const bin = Object.fromEntries(binFiles.map((f, i) => [f, bins[i]]));
   const img = Object.fromEntries(imageFiles.map((f, i) => [f, images[i]]));
   const src = Object.fromEntries(SHADER_FILES.map((f, i) => [f, sources[i]]));
@@ -265,6 +267,7 @@ async function create(canvas, options = {}) {
   }
   for (const b of images) b.close();
 
+  mark.doku = performance.now() - T0;
   // light map: layer = page * 3 + group. L0 as RGB9_E5 (4 bytes instead of RGBA16F's 8: a shared exponent keeps
   // 9 bits of every channel relative to the brightest, ~0.2 %, far under one output level), its direction plane B
   // RGBA8, and the openness (the same in every group) once per page as R8: 25 instead of 36 bytes a texel
@@ -299,26 +302,37 @@ async function create(canvas, options = {}) {
       rgb9e5[i] = (((e + 15) & 31) << 27 | (B & 511) << 18 | (G & 511) << 9 | (R & 511)) >>> 0;
     }
   };
+  // KML2 (sahne/araclar/paket_e5.py, at build time) holds what is uploaded; KML1 is converted here (~4.4 s for three
+  // pages on the main thread, the real window's black opening, 11-16)
   for (let p = 0; p < pages; p++) {
-    const file = lmDef.dosya[p], buf = bin[file], dv = new DataView(buf), n = lmW * lmH * 4;
-    if (buf.byteLength < 16 || dv.getUint32(0, true) !== 0x314c4d4b) throw fail(file + ': KML1 başlığı yok');
-    if (dv.getUint32(4, true) !== lmW || dv.getUint32(8, true) !== lmH || dv.getUint32(12, true) !== 3 || buf.byteLength !== 16 + n * 3 * 3)
+    const file = lmDef.dosya[p], buf = bin[file], dv = new DataView(buf), n = lmW * lmH * 4, nt = lmW * lmH;
+    const magic = buf.byteLength >= 16 ? dv.getUint32(0, true) : 0;
+    if (magic !== 0x314c4d4b && magic !== 0x324c4d4b) throw fail(file + ': KML1/KML2 başlığı yok');
+    const v2 = magic === 0x324c4d4b;
+    if (dv.getUint32(4, true) !== lmW || dv.getUint32(8, true) !== lmH || dv.getUint32(12, true) !== 3 ||
+        buf.byteLength !== (v2 ? 16 + nt * 8 * 3 + nt : 16 + n * 3 * 3))
       throw fail(file + ': boyutu sahne.json ile uyuşmuyor');
     let off = 16;
     for (let g = 0; g < 3; g++) {
-      toRgb9e5(new Uint16Array(buf, off, n), g === 0); off += n * 2;
+      let e5;
+      if (v2) { e5 = new Uint32Array(buf, off, nt); off += nt * 4; } else { toRgb9e5(new Uint16Array(buf, off, n), g === 0); off += n * 2; e5 = rgb9e5; }
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmA);
-      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGB, gl.UNSIGNED_INT_5_9_9_9_REV, rgb9e5);
-      if (g === 0) {
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGB, gl.UNSIGNED_INT_5_9_9_9_REV, e5);
+      if (g === 0 && !v2) {
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmO);
         gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p, lmW, lmH, 1, gl.RED, gl.UNSIGNED_BYTE, openness);
       }
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmB);
       gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(buf, off, n)); off += n;
     }
+    if (v2) {
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmO);
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p, lmW, lmH, 1, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(buf, off, nt));
+    }
     delete bin[file];
   }
 
+  mark.isikHaritasi = performance.now() - T0;
   // volumes: one 3D texture each, M | F side by side along x, the groups stacked along z
   const vols = volDefs.map(v => {
     const buf = bin[v.dosya], dv = new DataView(buf);
@@ -534,6 +548,7 @@ async function create(canvas, options = {}) {
     `kg = texture(uVol${i}, c + vec3(0.5, 0, 0)); kb = texture(uVol${i}, c + vec3(0.75, 0, 0)); }\n`;
   volCode += '    else { m = kr = kg = kb = vec4(0.0); }\n}\n';
   const common = src['common.glsl'].replace('// VOLUMES', volCode);
+  mark.hacim = performance.now() - T0;
   const compileT0 = performance.now();
   const programs = {};
   function build(name, vsFile, fsFile, defines = '') {
@@ -580,6 +595,8 @@ async function create(canvas, options = {}) {
     if (bi !== gl.INVALID_INDEX) gl.uniformBlockBinding(pr.p, bi, 0);
   }
   const compileMs = performance.now() - compileT0;
+  mark.derleme = performance.now() - T0;
+  console.info('Salon: yükleme (ms, baştan) ' + Object.entries(mark).map(([k, v]) => k + '=' + Math.round(v)).join(' '));
 
   // texture units: fixed per name, the volumes after them
   const UNIT = { uAlb: 0, uNrm: 1, uArm: 2, uLmA: 3, uLmB: 4, uLmO: 15, uLevha: 5, uRefl: 6, uNoise: 7, uTab: 5, uDepth: 1, uHaze: 2,

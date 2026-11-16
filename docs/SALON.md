@@ -168,6 +168,12 @@ image's top left, `uvOlcek` = 1).
 ### Light map pages `lm_<page>.bin`
 
 Header `uint32 magic 'KML1', uint32 width, uint32 height, uint32 groups`, then for each group two planes, each
+
+**KML2** (what the installed pack holds): `sahne/araclar/paket_e5.py <pack>` rewrites every page once after the bake,
+so the window only uploads: header `uint32 magic 'KML2', width, height, groups`, then per group plane A as `uint32`
+RGB9_E5 of L0's rgb (`GL_UNSIGNED_INT_5_9_9_9_REV`) and plane B unchanged, then the openness plane once (`uint8`, L0's
+alpha of group 0). The arithmetic is the window's own (bit-identical, checked on 16.7 M texels); converting KML1 in
+the window took ~4.4 s of the main thread before the first light (11-16). The window still reads KML1.
 width × height texels, row 0 = top of the page (uv2.v = 0):
 
 - plane A, RGBA16F: **L0** = ∫ L(ω) Y0 dω per channel (rgb), alpha = the openness within 0.5 m (cosine-weighted

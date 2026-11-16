@@ -216,10 +216,16 @@ function stepLevers(dt) {
 // ==================================================================== the texts in the world
 // Each texture is redrawn only when what it shows changes (KM_LEVHA.draw is deterministic).
 const levhaKeys = {};
+// a redraw costs 15-35 ms of the main thread and each one cost a frame (the real window, 11-16: 55 ms frames among
+// 30 ms ones): at most one per frame, and none while the camera travels (no text can be read in flight; whatever
+// changed is drawn on arrival)
+let levhaBudget = 1;
 function putLevha(name, data, opts) {
   if (!S || !window.KM_LEVHA || !KM_LEVHA.sizes[name]) return;
   const key = JSON.stringify(data);
   if (levhaKeys[name] === key) return;
+  if (levhaKeys[name] !== undefined && (levhaBudget <= 0 || travelling())) return;
+  levhaBudget--;
   levhaKeys[name] = key;
   S.setLevha(name, KM_LEVHA.draw(name, data), opts || {});
 }
@@ -493,6 +499,7 @@ function step(dt) {
   for (const n of Object.keys(M.rot)) S.setRotor(n, M.rot[n], M.w[n]);
   updateHaze();
   updateLamps();
+  levhaBudget = 1;
   updateTexts();
 }
 
