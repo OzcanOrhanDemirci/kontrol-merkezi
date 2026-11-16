@@ -230,7 +230,7 @@ void exitDoor(Hall& h) {
     h.box(v3(x + 0.09f, 2.75f, z), v3(0.09f, 0.1f, 0.05f), 0.01f, M_KOYU, 0.3f);
     h.box(c, v3(0.8f, 0.3f, 0.075f), 0.02f, M_KOYU, 0.5f);
     h.levha("cikis_1", "cikis_1", c + v3(0, 0, 0.077f), v3(0, 0, 1), 1.45f, 0.48f, M_EKRAN);
-    h.anchor("cikis_1", "tik", Xform::at(c), v3(0.85f, 0.35f, 0.15f));
+    h.anchor("cikis_1_tik", "tik", Xform::at(c), v3(0.85f, 0.35f, 0.15f));
     h.cagedLamp(v3(x, 3.6f, z + 1.3f), v3(1, 0, 0), kBulbBoard);
 }
 
