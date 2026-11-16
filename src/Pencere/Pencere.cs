@@ -105,6 +105,15 @@ static class PencereUygulamasi
             switch (m.Msg)
             {
                 case WM_NCCALCSIZE when m.WParam != IntPtr.Zero:
+                    // No frame. Maximized, Windows places the window so its (now invisible) resize border hangs off
+                    // the screen; make the client rect exactly the monitor's work area so nothing is cut at the edges.
+                    if (IsZoomed(Handle))
+                    {
+                        var mi = new MONITORINFO { cbSize = Marshal.SizeOf(typeof(MONITORINFO)) };
+                        if (GetMonitorInfo(MonitorFromWindow(Handle, 2), ref mi))
+                            Marshal.StructureToPtr(mi.rcWork, m.LParam, false);
+                    }
+                    m.Result = IntPtr.Zero;
                     return;
                 case WM_NCHITTEST when WindowState != FormWindowState.Maximized:
                     var ht = HitTest(m.LParam);
@@ -342,4 +351,9 @@ static class PencereUygulamasi
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+    [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr hmon, ref MONITORINFO mi);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+    [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
 }
