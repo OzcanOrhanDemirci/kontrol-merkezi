@@ -170,17 +170,16 @@ static class PencereUygulamasi
                 s.AreDefaultScriptDialogsEnabled = false;
                 s.IsSwipeNavigationEnabled = false;
                 s.IsGeneralAutofillEnabled = false;
-                core.SetVirtualHostNameToFolderMapping(HostName, uiDir, CoreWebView2HostResourceAccessKind.Allow);
-                // the hall's data pack (light maps, volumes, geometry; docs/SALON.md), served on the page's own origin
-                // under /sahne/ (a second virtual host would be cross-origin for fetch and WebGL): next to the exe when
-                // installed, the repository's sahne/paket in development
+                // One handler serves the whole origin: ui\ and, under /sahne/, the hall's data pack (light maps, volumes,
+                // geometry; docs/SALON.md), next to the exe when installed, the repository's sahne/paket in development.
+                // Not SetVirtualHostNameToFolderMapping: requests to a mapped host never reach WebResourceRequested, so
+                // the pack under it failed with "Failed to fetch" (first real-window run, 11-16); a second host would
+                // be cross-origin for fetch and WebGL.
+                _uiDir = uiDir;
                 _pack = FindPack();
-                if (_pack != null)
-                {
-                    core.AddWebResourceRequestedFilter("https://" + HostName + "/sahne/*", CoreWebView2WebResourceContext.All);
-                    core.WebResourceRequested += OnPackRequest;
-                }
-                else Program.Log("pencere: sahne paketi bulunamadı (sahne/sahne.json)");
+                if (_pack == null) Program.Log("pencere: sahne paketi bulunamadı (sahne/sahne.json)");
+                core.AddWebResourceRequestedFilter("https://" + HostName + "/*", CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += OnRequest;
                 core.WebMessageReceived += OnWebMessage;
                 core.ProcessFailed += (_, ev) =>
                 {
@@ -200,27 +199,44 @@ static class PencereUygulamasi
             }
         }
 
-        string _pack;
+        string _pack, _uiDir;
 
-        void OnPackRequest(object sender, CoreWebView2WebResourceRequestedEventArgs e)
+        void OnRequest(object sender, CoreWebView2WebResourceRequestedEventArgs e)
         {
             try
             {
-                var uri = new Uri(e.Request.Uri);
-                var rel = Uri.UnescapeDataString(uri.AbsolutePath).Substring("/sahne/".Length).Replace('/', Path.DirectorySeparatorChar);
-                var full = Path.GetFullPath(Path.Combine(_pack, rel));
                 var env = _wv.CoreWebView2.Environment;
-                if (!full.StartsWith(Path.GetFullPath(_pack) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
+                var path = Uri.UnescapeDataString(new Uri(e.Request.Uri).AbsolutePath);
+                bool inPack = path.StartsWith("/sahne/", StringComparison.Ordinal);
+                var root = inPack ? _pack : _uiDir;
+                var rel = (inPack ? path.Substring("/sahne/".Length) : path.TrimStart('/')).Replace('/', Path.DirectorySeparatorChar);
+                var full = root == null ? null : Path.GetFullPath(Path.Combine(root, rel));
+                if (full == null || !full.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
                 {
                     e.Response = env.CreateWebResourceResponse(null, 404, "Not Found", "");
                     return;
                 }
-                var ext = Path.GetExtension(full).ToLowerInvariant();
-                var type = ext == ".json" ? "application/json" : ext == ".jpg" ? "image/jpeg" : ext == ".png" ? "image/png" : "application/octet-stream";
                 var fs = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);
-                e.Response = env.CreateWebResourceResponse(fs, 200, "OK", "Content-Type: " + type + "\r\nContent-Length: " + fs.Length);
+                e.Response = env.CreateWebResourceResponse(fs, 200, "OK", "Content-Type: " + ContentType(full) + "\r\nContent-Length: " + fs.Length);
             }
-            catch (Exception ex) { Program.Log("pencere: sahne dosyası okunamadı: " + ex.Message); }
+            catch (Exception ex) { Program.Log("pencere: dosya okunamadı: " + ex.Message); }
+        }
+
+        static string ContentType(string file)
+        {
+            switch (Path.GetExtension(file).ToLowerInvariant())
+            {
+                case ".html": return "text/html; charset=utf-8";
+                case ".js": return "text/javascript; charset=utf-8";
+                case ".css": return "text/css; charset=utf-8";
+                case ".json": return "application/json";
+                case ".woff2": return "font/woff2";
+                case ".png": return "image/png";
+                case ".jpg": return "image/jpeg";
+                case ".svg": return "image/svg+xml";
+                case ".frag": case ".vert": case ".glsl": case ".txt": return "text/plain; charset=utf-8";
+                default: return "application/octet-stream";
+            }
         }
 
         static string FindPack()
