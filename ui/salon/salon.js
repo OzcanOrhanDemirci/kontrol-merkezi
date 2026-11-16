@@ -728,6 +728,28 @@ async function create(canvas, options = {}) {
   const groupUniform = new Float32Array(9);
   let exposure = 1, time = 0, haze = { density: 1, fans: [] }, hoverName = null, heat = 0;
   const levha = new Map();                       // atlas name -> { t, w, h, emissive }
+  const levhaJobs = new Map();                   // atlas name -> { lv, bytes, row, emissive }: strips still to upload
+  const LEVHA_BYTES_PER_FRAME = 4 << 20;         // ~1 ms of upload a frame (16 MB measured 3.5 ms, 2 MB 0.2 ms)
+  function pumpLevha() {
+    let budget = LEVHA_BYTES_PER_FRAME;
+    for (const [name, j] of levhaJobs) {
+      const { lv } = j, rowBytes = lv.w * 4;
+      const rows = Math.max(1, Math.min(lv.h - j.row, Math.floor(budget / rowBytes)));
+      gl.bindTexture(gl.TEXTURE_2D, lv.next);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, j.row, lv.w, rows, gl.RGBA, gl.UNSIGNED_BYTE,
+        new Uint8Array(j.bytes.buffer || j.bytes, j.row * rowBytes, rows * rowBytes));
+      j.row += rows;
+      budget -= rows * rowBytes;
+      if (j.row >= lv.h) {
+        gl.generateMipmap(gl.TEXTURE_2D);
+        const t = lv.t; lv.t = lv.next; lv.next = t;
+        lv.emissive = j.emissive;
+        levhaJobs.delete(name);
+      }
+      if (budget <= 0) break;
+    }
+  }
   const lamps = new Map();                       // anchor name -> [r, g, b] * k
   const hoverAmt = new Map();                    // anchor name -> 0..1 (eased)
   const linked = {};                             // tik anchor name -> the levha/nokta anchors it lifts
@@ -1000,8 +1022,11 @@ async function create(canvas, options = {}) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, tg.levels - 1);
   }
 
-  let combinedFor = null;
-  function combineVolumes() {
+  let combinedFor = null, combinePhase = 0;
+  // all slices when a colour jumps; otherwise every 4th slice per frame, interleaved in z (the core's breathing and
+  // the smoothed temperature colour move a colour every frame: recombining all of it cost 1.3 ms a frame, 11-17).
+  // A slice lags at most 3 frames; neighbouring slices differ by under 0.5 % then, and the filtering blends them.
+  function combineVolumes(all) {
     const pr = programs.combine;
     gl.useProgram(pr.p);
     gl.bindVertexArray(quad);
@@ -1011,13 +1036,14 @@ async function create(canvas, options = {}) {
       gl.bindTexture(gl.TEXTURE_3D, v.raw);
       gl.uniform3i(pr.u.uN, v.n[0], v.n[1], v.n[2]);
       gl.viewport(0, 0, 4 * v.n[0], v.n[1]);
-      for (let z = 0; z < v.n[2]; z++) {
+      for (let z = all ? 0 : combinePhase; z < v.n[2]; z += all ? 1 : 4) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, v.slices[z]);
         gl.uniform1i(pr.u.uZ, z);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
     }
-    combinedFor = groupUniform.slice();
+    combinePhase = (combinePhase + 1) & 3;
+    if (all || combinePhase === 0) combinedFor = groupUniform.slice();
   }
   function render(dt = 1 / 60, shutter = 1 / 60) {
     if (disposed) return;
@@ -1027,6 +1053,7 @@ async function create(canvas, options = {}) {
     time += Math.max(0, dt || 0);
     pollTimers();
     timing.frame = [];
+    if (levhaJobs.size) pumpLevha();
     // eased hover (a small lift in about a tenth of a second)
     const lift = new Set(hoverName ? (linked[hoverName] || [hoverName]) : []);
     for (const a of holders) {
@@ -1035,9 +1062,13 @@ async function create(canvas, options = {}) {
     }
     for (let g = 0; g < 3; g++) groupUniform.set(scl(groups[g].slice(0, 3), groups[g][3]), g * 3);
     // the volumes follow the light's colours: recombined when a colour moved (by more than a ten-thousandth)
-    let moved = !combinedFor;
-    for (let i = 0; i < 9 && !moved; i++) moved = Math.abs(groupUniform[i] - combinedFor[i]) > 1e-4 * Math.max(1e-3, Math.abs(combinedFor[i]));
-    if (moved) timed('volumes', combineVolumes);
+    let moved = !combinedFor || combinePhase !== 0, jump = !combinedFor;
+    for (let i = 0; i < 9 && combinedFor; i++) {
+      const r = Math.abs(groupUniform[i] - combinedFor[i]) / Math.max(1e-3, Math.abs(combinedFor[i]));
+      if (r > 1e-4) moved = true;
+      if (r > 0.02) jump = true;
+    }
+    if (moved) timed('volumes', () => combineVolumes(jump));
     for (const d of dyn) d.shutter = shutter || 0;
     cam = cameraOf(eye, look, fov, W / H);
 
@@ -1133,8 +1164,30 @@ async function create(canvas, options = {}) {
         lo = Math.max(lo, t0); hi = Math.min(hi, t1);
       }
       if (!ok || hi < Math.max(lo, 0)) continue;
-      const t = Math.max(lo, 0);
+      let t = Math.max(lo, 0);
+      // a fan's box is a slab in front of the whole wall: only its disc counts, at the disc, so what is seen past the
+      // disc (the exit sign beyond the CPU fan, 11-17: every click on it toggled the fan) is picked, not the fan
+      const rot = dyn.find(r => r.rotor && r.name === a.ad + '_rotor');
+      if (rot) {
+        const dn = dot(d, rot.axis);
+        if (Math.abs(dn) < 1e-6) continue;
+        const td = dot(sub(rot.centre, c.eye), rot.axis) / dn;
+        if (td <= 0 || len(sub(add(c.eye, scl(d, td)), rot.centre)) > rot.rmax * 1.02) continue;
+        t = td;
+      }
       if (t < best) { best = t; hit = a.ad; }
+    }
+    // a far small control (the exit sign seen from the entrance is ~70 x 25 px) is also taken within 18 px of its box's
+    // centre on screen, when nothing else is under the pointer
+    if (!hit) {
+      let bd = 18;
+      for (const a of anchorList) {
+        if (a.tur !== 'tik' || !a.kutu) continue;
+        const q = project(a.kutu.merkez);
+        if (!q || q.z <= 0 || q.z > 60) continue;   // not the far end's exit sign from the entrance
+        const dd = Math.hypot(q.x - x, q.y - y);
+        if (dd < bd) { bd = dd; hit = a.ad; }
+      }
     }
     return hit;
   }
@@ -1182,6 +1235,18 @@ async function create(canvas, options = {}) {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
       gl.generateMipmap(gl.TEXTURE_2D);
       lv.emissive = Math.max(0, opts.emissive || 0);
+    },
+    // the same as setLevha from raw RGBA bytes (a worker's drawing), uploaded in strips over the next frames into a
+    // second texture that replaces the shown one when complete: no frame pays for a whole 16 MB upload (11-17)
+    setLevhaBytes(name, w, h, bytes, opts = {}) {
+      const lv = levha.get(name);
+      if (!lv || lv.w !== w || lv.h !== h) return false;
+      if (!lv.next) {
+        lv.next = tex(gl.TEXTURE_2D, { mips: true, aniso: true, bytes: w * h * 4 * 4 / 3 });
+        gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(w, h))) + 1, gl.SRGB8_ALPHA8, w, h);
+      }
+      levhaJobs.set(name, { lv, bytes, row: 0, emissive: Math.max(0, opts.emissive || 0) });
+      return true;
     },
     setLamp(name, c, k) { lamps.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
     setHaze(h) { haze = { ...haze, ...h }; },
