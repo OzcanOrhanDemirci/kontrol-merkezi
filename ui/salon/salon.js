@@ -624,7 +624,7 @@ async function create(canvas, options = {}) {
   let cam = null, eye = pack.gorunumler.fanlar.goz.slice(), look = pack.gorunumler.fanlar.hedef.slice(), fov = pack.gorunumler.fanlar.fov || 50;
   const groups = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]];
   const groupUniform = new Float32Array(9);
-  let exposure = 1, time = 0, haze = { density: 1, fans: [] }, hoverName = null;
+  let exposure = 1, time = 0, haze = { density: 1, fans: [] }, hoverName = null, heat = 0;
   const levha = new Map();                       // atlas name -> { t, w, h, emissive }
   const lamps = new Map();                       // anchor name -> [r, g, b] * k
   const hoverAmt = new Map();                    // anchor name -> 0..1 (eased)
@@ -976,6 +976,13 @@ async function create(canvas, options = {}) {
       gl.uniform1f(u.uBloomMix, 0.04);
       gl.uniform1f(u.uBloomLevels, T.bloom.levels);
       gl.uniform1f(u.uExposure, exposure);
+      const hb = anchors.kemer_agiz && anchors.kemer_agiz.kutu;
+      gl.uniform3fv(u.uHeatC, hb ? hb.merkez : [0, 0, 0]);
+      gl.uniform3fv(u.uHeatX, hb ? hb.x : [0, 0, 0]);
+      gl.uniform3fv(u.uHeatY, hb ? hb.y : [0, 0, 0]);
+      gl.uniform3fv(u.uHeatZ, hb ? hb.z : [0, 0, 0]);
+      gl.uniform1f(u.uHeat, heat);
+      gl.uniform1f(u.uTime, time % 3600);
     }));
     timed('resolve', () => {
       const taps = s => Math.ceil(4 * s) + 1;
@@ -1076,6 +1083,7 @@ async function create(canvas, options = {}) {
     setExposure(ev) { exposure = Math.pow(2, ev || 0); },
     setHover(name) { hoverName = name || null; },
     setTime(t) { time = t; },
+    setHeat(h) { heat = Math.min(1, Math.max(0, h || 0)); },   // the arch opening's shimmer (0..1, from the temperature)
     setQuality(q) { Object.assign(Q, q); T = null; W = 0; resize(); },
     render,
     pick,

@@ -113,10 +113,41 @@ vec3 agxEncoded(vec3 c) {      // Denizalti's post.frag, without the final pow(2
     v = agxContrast((v - minEv) / (maxEv - minEv));
     return clamp(outm * v, 0.0, 1.0);
 }
+// the heat in the arch's opening: the air there bends the light, a slow steady shimmer rising with the temperature.
+// A view ray that crosses the opening's air (an oriented box) before reaching its surface samples the scene a little
+// displaced; the displacement is a smooth sum of slow waves anchored in the air (no noise, no random numbers: nothing
+// flickers), its size from the heat (0..1) and the share of the box the ray crosses.
+uniform vec3 uHeatC, uHeatX, uHeatY, uHeatZ;   // the box: centre, half axes (zero size: none)
+uniform float uHeat, uTime;
+vec2 heatShift(vec2 uv, float dist) {
+    if (uHeat <= 0.0 || dot(uHeatX, uHeatX) < 1e-6) return vec2(0.0);
+    vec3 rd = viewRay(uv), o = uEye - uHeatC;
+    vec3 ax[3] = vec3[3](uHeatX, uHeatY, uHeatZ);
+    float t0 = 0.0, t1 = dist;
+    for (int i = 0; i < 3; i++) {
+        float L = length(ax[i]);
+        vec3 a = ax[i] / L;
+        float ro = dot(o, a), rv = dot(rd, a);
+        if (abs(rv) < 1e-6) { if (abs(ro) > L) return vec2(0.0); continue; }
+        float ta = (-L - ro) / rv, tb = (L - ro) / rv;
+        t0 = max(t0, min(ta, tb));
+        t1 = min(t1, max(ta, tb));
+    }
+    if (t1 <= t0) return vec2(0.0);
+    vec3 p = uEye + rd * (0.5 * (t0 + t1));
+    float share = clamp((t1 - t0) / (2.0 * length(uHeatZ)), 0.0, 1.0);
+    // waves rising through the air, two scales; the hotter, the faster and stronger
+    float rise = uTime * (0.35 + 0.9 * uHeat);
+    vec2 w = vec2(sin(p.x * 0.9 + p.y * 1.7 - rise * 2.1) + 0.6 * sin(p.x * 2.3 - p.y * 2.9 - rise * 3.3),
+                  sin(p.y * 1.3 - rise * 1.7 + p.x * 0.4) + 0.5 * sin(p.y * 3.1 + p.x * 1.9 - rise * 2.7));
+    float px = (0.4 + 2.6 * uHeat) * uHeat * share;   // display pixels
+    return w * px / vec2(textureSize(uScene, 0)) * 2.0;   // the scene is supersampled (~2x the display)
+}
 void main() {
     ivec2 px = ivec2(gl_FragCoord.xy);
-    vec3 s = texelFetch(uScene, px, 0).rgb;
     float z = viewZ(texelFetch(uDepth, px, 0).r);
+    vec2 sh = heatShift(vUv, z / max(dot(viewRay(vUv), uCamF), 1e-4));
+    vec3 s = sh == vec2(0.0) ? texelFetch(uScene, px, 0).rgb : texture(uScene, vUv + sh).rgb;
     vec4 h = hazeAt(vUv, z);
     vec3 c = s * h.a + h.rgb;
     vec3 b = texture(uBloom, vUv).rgb / uBloomLevels;

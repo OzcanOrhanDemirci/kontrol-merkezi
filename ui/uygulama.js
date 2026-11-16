@@ -155,7 +155,13 @@ function updateLights(dt) {
   M.lit = approach(M.lit == null ? 1 : M.lit, rgbOn() || !linked() ? 1 : 0, dt, rgbOn() ? 0.5 : 1.4);
   if (!S) return;
   S.setGroup(0, M.col.temp, GK[0] * strike * conn * close * lerp(0.07, 1, M.lit));
-  S.setGroup(1, add(M.col.arch, mul(M.col.temp, 0.06)), GK[1] * archIn * conn * close);
+  // the heat core: brighter and more alive as it gets hotter (0 at the coldest stop, 1 at the hottest), breathing
+  // slowly (a 7 s period, a few percent); the shimmer in the opening's air grows with it. Bounded: never blows out
+  const st = stops(), c0 = st ? st[0].c : 52, c1 = st ? st[st.length - 1].c : 80.5;
+  M.heat = approach(M.heat == null ? 0 : M.heat, linked() ? clamp((M.temp - c0 + 6) / (c1 - c0 + 6), 0, 1) : 0, dt, 1.5);
+  const breath = 1 + (0.03 + 0.05 * M.heat) * Math.sin(M.t * 2 * Math.PI / 7);
+  S.setGroup(1, add(M.col.arch, mul(M.col.temp, 0.06)), GK[1] * archIn * conn * close * lerp(0.75, 1.45, M.heat) * breath);
+  if (S.setHeat) S.setHeat(M.heat * (rgbOn() ? 1 : 0.3));
   S.setGroup(2, NEUTRAL_LAMP, GK[2] * smooth((it - 0.1) / 0.5) * close * lerp(0.7, 1, M.lit));
 }
 
