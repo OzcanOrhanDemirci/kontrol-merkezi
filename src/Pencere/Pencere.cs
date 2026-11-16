@@ -84,12 +84,27 @@ static class PencereUygulamasi
             Bounds = new Rectangle(wa.Left + (wa.Width - w) / 2, wa.Top + (wa.Height - h) / 2, w, h);
             MinimumSize = new Size(Math.Min(900, w), Math.Min(560, h));
             Padding = new Padding(LogicalToDeviceUnits(5));
+            if (Denetim)
+            {
+                // the check beside someone at work: a 1280x720 page in the work area's bottom-right corner
+                int pad = LogicalToDeviceUnits(5);
+                Size sz = new Size(1280 + 2 * pad, 720 + 2 * pad);
+                MinimumSize = sz;
+                Bounds = new Rectangle(wa.Right - sz.Width, wa.Bottom - sz.Height, sz.Width, sz.Height);
+            }
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             Load += OnLoadAsync;
             Activated += (_, _) => PostVis();
             Deactivate += (_, _) => PostVis();
             Resize += (_, _) => PostVis();
         }
+
+        // Development only: the real-window check (araclar/salon-denetim.ps1 -Pencereli) sets KM_DENETIM=1 for the
+        // window it starts. The window then never takes the focus, sits small in a corner and opens a local DevTools
+        // port (KM_DENETIM_PORT, default 9333) through which the script moves the camera and reads the page's log.
+        // The installed product never sets the variable.
+        static readonly bool Denetim = Environment.GetEnvironmentVariable("KM_DENETIM") == "1";
+        protected override bool ShowWithoutActivation => Denetim;
 
         protected override CreateParams CreateParams
         {
@@ -155,8 +170,12 @@ static class PencereUygulamasi
                 _wv = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
                 Controls.Add(_wv);
                 string uiDir = PrepareUi();
-                var dataDir = Path.Combine(Program.DataDir, "WebView2");
-                var opts = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
+                var dataDir = Path.Combine(Program.DataDir, Denetim ? "WebView2-denetim" : "WebView2");
+                var args = "--autoplay-policy=no-user-gesture-required";
+                // the check's window keeps drawing while other windows cover it (it is never in front)
+                if (Denetim) args += " --remote-debugging-port=" + (Environment.GetEnvironmentVariable("KM_DENETIM_PORT") ?? "9333") +
+                                     " --disable-features=CalculateNativeWinOcclusion --disable-renderer-backgrounding --disable-background-timer-throttling";
+                var opts = new CoreWebView2EnvironmentOptions(args);
                 var env = await CoreWebView2Environment.CreateAsync(null, dataDir, opts);
                 await _wv.EnsureCoreWebView2Async(env);
                 var core = _wv.CoreWebView2;
@@ -166,7 +185,7 @@ static class PencereUygulamasi
                 s.AreBrowserAcceleratorKeysEnabled = false;
                 s.IsZoomControlEnabled = false;
                 s.IsPinchZoomEnabled = false;
-                s.AreDevToolsEnabled = false;
+                s.AreDevToolsEnabled = Denetim;
                 s.AreDefaultScriptDialogsEnabled = false;
                 s.IsSwipeNavigationEnabled = false;
                 s.IsGeneralAutofillEnabled = false;

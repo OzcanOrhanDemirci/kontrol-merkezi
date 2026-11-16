@@ -21,6 +21,14 @@
 # the video at the moments in olaylar.txt), olaylar.txt (timeline: wall clock and seconds into the video),
 # tempo.txt (the page's perf lines), ozet.txt (everything the run found, Turkish).
 #
+# -Pencereli: the check beside someone at work (Özcan, 11-16). The window is 1280x720 in the bottom-right corner,
+# never takes the focus and is never put on top; no key or mouse input at all, no recording. It is driven through
+# the service's pipe (fans, RGB, onizle) and a local DevTools port the window opens only when the script starts it
+# with KM_DENETIM=1 (Pencere.cs: dev only, the installed product never sets it): the camera is moved with the page's
+# own window.__km.go(), and the page's console, errors and long tasks are read there. Runs alongside a bake. Its
+# pacing numbers are recorded but not valid (his programs share the GPU). -Paket <folder> serves another scene pack
+# (e.g. .tmp\paket-on of the main folder).
+#
 # Safety (docs and the project notebook): the window holds no hardware, the running service does. The script refuses
 # to start unless the service's pipe is there, so the window never falls back to starting a service of its own from
 # the copy. Fans are toggled through the window's own levers and each is put back to the state it was found in, also
@@ -33,8 +41,12 @@ param(
     [double]$Sicaklik = 72,
     [int]$Ekran = 0,
     [int]$BosSure = 300,
-    [switch]$KayitYok
+    [switch]$KayitYok,
+    [switch]$Pencereli,
+    [string]$Paket = "",
+    [int]$Port = 9333
 )
+if ($Pencereli) { $KayitYok = [switch]$true }
 $ErrorActionPreference = "Stop"
 $inv = [Globalization.CultureInfo]::InvariantCulture
 $kok = Split-Path -Parent $PSScriptRoot
@@ -44,7 +56,7 @@ $cikti = Join-Path $kok (".tmp\denetim\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 $kopya = Join-Path $kok ".tmp\denetim\uygulama"
 $gunluk = Join-Path $env:LOCALAPPDATA "KontrolMerkezi\gunluk.txt"
 
-Add-Type -ReferencedAssemblies System.Drawing, System.Core @"
+Add-Type -ReferencedAssemblies System.Drawing, System.Core, System.Web.Extensions @"
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -169,6 +181,65 @@ public sealed class DnBoru : IDisposable {
   public void Send(string json) { lock (this) { _w.Write(json + "\n"); _w.Flush(); } }
   public void Dispose() { _end = true; try { _p.Dispose(); } catch { } }
 }
+
+/// <summary>A minimal DevTools (CDP) client for the -Pencereli mode: evaluates JavaScript in the page and keeps the
+/// console messages and exceptions it reports.</summary>
+public sealed class DnCdp : IDisposable {
+  System.Net.WebSockets.ClientWebSocket _ws; Thread _t; int _id; volatile bool _end;
+  readonly System.Collections.Generic.Dictionary<int, string> _yanit = new System.Collections.Generic.Dictionary<int, string>();
+  public readonly System.Collections.Generic.List<string> Olaylar = new System.Collections.Generic.List<string>();
+  public static string SayfaAdresi(int port) {
+    using (var wc = new System.Net.WebClient()) {
+      wc.Encoding = Encoding.UTF8;
+      string j = wc.DownloadString("http://127.0.0.1:" + port + "/json");
+      var m = System.Text.RegularExpressions.Regex.Matches(j, "\"type\":\\s*\"page\"[\\s\\S]*?\"webSocketDebuggerUrl\":\\s*\"([^\"]+)\"|\"webSocketDebuggerUrl\":\\s*\"([^\"]+)\"[\\s\\S]*?\"type\":\\s*\"page\"");
+      foreach (System.Text.RegularExpressions.Match x in m) return x.Groups[1].Success ? x.Groups[1].Value : x.Groups[2].Value;
+      return null;
+    }
+  }
+  public DnCdp(string url) {
+    _ws = new System.Net.WebSockets.ClientWebSocket();
+    _ws.ConnectAsync(new Uri(url), CancellationToken.None).Wait(5000);
+    _t = new Thread(Read); _t.IsBackground = true; _t.Start();
+  }
+  void Read() {
+    var buf = new byte[1 << 16];
+    var sb = new MemoryStream();
+    try {
+      while (!_end && _ws.State == System.Net.WebSockets.WebSocketState.Open) {
+        var r = _ws.ReceiveAsync(new ArraySegment<byte>(buf), CancellationToken.None).Result;
+        sb.Write(buf, 0, r.Count);
+        if (!r.EndOfMessage) continue;
+        string s = Encoding.UTF8.GetString(sb.ToArray()); sb.SetLength(0);
+        var m = System.Text.RegularExpressions.Regex.Match(s, "^\\{\"id\":(\\d+),");
+        if (m.Success) { lock (_yanit) { _yanit[int.Parse(m.Groups[1].Value)] = s; System.Threading.Monitor.PulseAll(_yanit); } }
+        else if (s.Contains("\"Runtime.consoleAPICalled\"") || s.Contains("\"Runtime.exceptionThrown\"") || s.Contains("\"Log.entryAdded\"")) {
+          lock (Olaylar) Olaylar.Add(DateTime.Now.ToString("HH:mm:ss.fff") + " " + s);
+        }
+      }
+    } catch { }
+  }
+  public string Call(string method, string paramsJson, int timeoutMs) {
+    int id = Interlocked.Increment(ref _id);
+    var b = Encoding.UTF8.GetBytes("{\"id\":" + id + ",\"method\":\"" + method + "\",\"params\":" + (paramsJson ?? "{}") + "}");
+    lock (this) _ws.SendAsync(new ArraySegment<byte>(b), System.Net.WebSockets.WebSocketMessageType.Text, true, CancellationToken.None).Wait();
+    var until = DateTime.Now.AddMilliseconds(timeoutMs);
+    lock (_yanit) {
+      while (!_yanit.ContainsKey(id)) {
+        var left = until - DateTime.Now;
+        if (left <= TimeSpan.Zero) return null;
+        System.Threading.Monitor.Wait(_yanit, left);
+      }
+      string s = _yanit[id]; _yanit.Remove(id); return s;
+    }
+  }
+  /// <summary>Evaluates an expression (promises awaited) and returns the CDP reply as JSON.</summary>
+  public string Eval(string expr, int timeoutMs) {
+    var js = new System.Web.Script.Serialization.JavaScriptSerializer();
+    return Call("Runtime.evaluate", "{\"expression\":" + js.Serialize(expr) + ",\"returnByValue\":true,\"awaitPromise\":true}", timeoutMs);
+  }
+  public void Dispose() { _end = true; try { _ws.Abort(); } catch { } }
+}
 "@
 
 # ------------------------------------------------------------------ small helpers
@@ -253,6 +324,36 @@ function VarisBekle([string]$ad, [double]$enAz, [double]$enCok) {
 $script:bulgular = New-Object System.Collections.Generic.List[string]
 function Bulgu([string]$m) { $script:bulgular.Add($m); Olay "BULGU: $m" }
 
+# puts the fans, the preview and the RGB state back as they were found and closes the window (also on error)
+function GeriAlVeKapat {
+    if ($script:boru) {
+        try {
+            if ($onizlemeVerildi) {
+                $script:boru.Send('{"komut":"onizle"}')
+                $script:boru.Send('{"komut":"rgb","acik":' + ([bool]$ilk.rgb).ToString().ToLowerInvariant() + '}')
+                Olay "finally: önizleme temizlendi, rgb geri"
+            }
+            foreach ($k in "kasa", "gpu") {
+                if (-not $ilk[$k]) { continue }
+                $s = FanBekle $k @("max", "bios", "oto", "baska") 60
+                if ($s -ne $ilk[$k] -and @("max", "bios", "oto") -contains $s) {
+                    $script:boru.Send('{"komut":"fan-' + $k + '"}')
+                    $s = FanBekle $k @($ilk[$k]) 60
+                    Olay "finally: $k fanı boru üzerinden geri alındı: $s"
+                }
+                if ($s -ne $ilk[$k]) { Bulgu "$k fanı başladığı duruma ('$($ilk[$k])') dönmedi: '$s'" }
+            }
+            $d = Durum
+            if ($d -and [bool]$d.rgb.acik -ne [bool]$ilk.rgb) { $script:boru.Send('{"komut":"rgb","acik":' + ([bool]$ilk.rgb).ToString().ToLowerInvariant() + '}'); Olay "finally: rgb geri" }
+            Olay "sonda: $(FanOzet) | rgb açık=$((Durum).rgb.acik)"
+        } catch { Bulgu ("geri alma hatası: " + $_.Exception.Message) }
+    }
+    if ($script:h -ne [IntPtr]::Zero) { [void][Dn]::PostMessage($script:h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
+    if ($p) { if (-not $p.WaitForExit(4000)) { $p.Kill() } ; Olay "pencere kapandı" -Kare }
+    # nothing from the copy may stay behind (and never a service from it)
+    Get-Process KontrolMerkezi -ErrorAction SilentlyContinue | Where-Object { $yol = $null; try { $yol = $_.Path } catch { }; $yol -and $yol.StartsWith($kopya, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Olay "kopyadan kalan süreç kapatıldı: $($_.Id)"; $_.Kill() }
+}
+
 # ------------------------------------------------------------------ checks before anything starts
 if (Get-Process KontrolMerkezi -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ceq "Kontrol Merkezi" }) {
     "Kontrol Merkezi penceresi zaten açık (Özcan'ın penceresi olabilir); kapatılmadan denetim başlamaz."; exit 1
@@ -261,11 +362,11 @@ if (-not (Test-Path "\\.\pipe\KontrolMerkezi")) {
     "Servisin borusu yok: servis çalışmıyor. Pencere bu durumda kendi servisini başlatmaya kalkar; denetim başlamaz."; exit 1
 }
 $bos = [Dn]::IdleMs() / 1000
-if ($bos -lt $BosSure) {
+if (-not $Pencereli -and $bos -lt $BosSure) {
     "Son klavye/fare girdisi $([int]$bos) sn önce: masada biri olabilir. Pencere ekranın tamamını alır; en az $BosSure sn girdi olmadan başlar (-BosSure)."; exit 1
 }
 $bake = @(Get-Process salon -ErrorAction SilentlyContinue)
-if ($bake.Count) { "salon.exe (fırın) çalışıyor; GPU onun. Bitince yeniden deneyin."; exit 1 }
+if ($bake.Count -and -not $Pencereli) { "salon.exe (fırın) çalışıyor; GPU onun. Bitince yeniden deneyin."; exit 1 }
 if (-not (Test-Path (Join-Path $Kaynak "KontrolMerkezi.exe"))) { "KontrolMerkezi.exe yok: $Kaynak"; exit 1 }
 $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue)
 if (-not $ffmpeg -and -not $KayitYok) { "ffmpeg bulunamadı (-KayitYok ile kayıtsız koşulur)"; exit 1 }
@@ -280,7 +381,12 @@ if (Test-Path $kopya) {
 New-Item -ItemType Directory -Force $kopya | Out-Null
 Get-ChildItem $Kaynak -Force | Where-Object { $_.Name -cne "sahne" } | ForEach-Object { Copy-Item -Recurse $_.FullName $kopya }
 $paket = $null
-if (Test-Path (Join-Path $Kaynak "sahne\sahne.json")) {
+if ($Paket) {
+    $Paket = (Resolve-Path $Paket).Path
+    if (-not (Test-Path (Join-Path $Paket "sahne.json"))) { "Pakette sahne.json yok: $Paket"; exit 1 }
+    cmd /c mklink /J "$(Join-Path $kopya 'sahne')" "$Paket" | Out-Null
+    $paket = $Paket
+} elseif (Test-Path (Join-Path $Kaynak "sahne\sahne.json")) {
     cmd /c mklink /J "$(Join-Path $kopya 'sahne')" "$(Join-Path $Kaynak 'sahne')" | Out-Null
     $paket = Join-Path $Kaynak "sahne"
 } else {
@@ -304,6 +410,9 @@ $ff = $null; $p = $null
 $script:boru = $null
 $ilk = @{}          # the state found at the start: kasa, gpu, rgb
 $onizlemeVerildi = $false
+$script:cdp = $null
+if ($Pencereli) { . (Join-Path $PSScriptRoot "salon-denetim-pencereli.ps1") }
+else {
 try {
     $script:boru = New-Object DnBoru
     for ($i = 0; $i -lt 30 -and -not $script:boru.Durum; $i++) { Bekle 0.1 }
@@ -455,33 +564,7 @@ catch {
     Bulgu ("HATA: " + $_.Exception.Message)
 }
 finally {
-    # ---------------------------------------------------------- put everything back
-    if ($script:boru) {
-        try {
-            if ($onizlemeVerildi) {
-                $script:boru.Send('{"komut":"onizle"}')
-                $script:boru.Send('{"komut":"rgb","acik":' + ([bool]$ilk.rgb).ToString().ToLowerInvariant() + '}')
-                Olay "finally: önizleme temizlendi, rgb geri"
-            }
-            foreach ($k in "kasa", "gpu") {
-                if (-not $ilk[$k]) { continue }
-                $s = FanBekle $k @("max", "bios", "oto", "baska") 60
-                if ($s -ne $ilk[$k] -and @("max", "bios", "oto") -contains $s) {
-                    $script:boru.Send('{"komut":"fan-' + $k + '"}')
-                    $s = FanBekle $k @($ilk[$k]) 60
-                    Olay "finally: $k fanı boru üzerinden geri alındı: $s"
-                }
-                if ($s -ne $ilk[$k]) { Bulgu "$k fanı başladığı duruma ('$($ilk[$k])') dönmedi: '$s'" }
-            }
-            $d = Durum
-            if ($d -and [bool]$d.rgb.acik -ne [bool]$ilk.rgb) { $script:boru.Send('{"komut":"rgb","acik":' + ([bool]$ilk.rgb).ToString().ToLowerInvariant() + '}'); Olay "finally: rgb geri" }
-            Olay "sonda: $(FanOzet) | rgb açık=$((Durum).rgb.acik)"
-        } catch { Bulgu ("geri alma hatası: " + $_.Exception.Message) }
-    }
-    if ($script:h -ne [IntPtr]::Zero) { [void][Dn]::PostMessage($script:h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
-    if ($p) { if (-not $p.WaitForExit(4000)) { $p.Kill() } ; Olay "pencere kapandı" -Kare }
-    # nothing from the copy may stay behind (and never a service from it)
-    Get-Process KontrolMerkezi -ErrorAction SilentlyContinue | Where-Object { $yol = $null; try { $yol = $_.Path } catch { }; $yol -and $yol.StartsWith($kopya, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Olay "kopyadan kalan süreç kapatıldı: $($_.Id)"; $_.Kill() }
+    GeriAlVeKapat
     if ($ff) {
         Bekle 1.5
         try { $ff.StandardInput.Write("q"); $ff.StandardInput.Flush() } catch { }
@@ -490,6 +573,8 @@ finally {
     }
     if ($script:boru) { $script:boru.Dispose() }
 }
+
+}   # not -Pencereli
 
 # ------------------------------------------------------------------ after the run: video, pacing, summary
 $ErrorActionPreference = "Continue"     # ffmpeg talks on stderr
@@ -552,6 +637,7 @@ foreach ($s in $tempo) {
 }
 if ($p50.Count) {
     $s50 = $p50 | Sort-Object; $s99 = $p99 | Sort-Object
+    if ($Pencereli) { $ozet.Add("UYARI: -Pencereli koşusunun tempo sayıları GEÇERLİ DEĞİL (1280x720, Özcan'ın programları ve fırın GPU'yu paylaşıyor); yalnız kayıt için.") }
     $ozet.Add(("Kare temposu ({0} pencere, {1} kare): p50 {2} ms (10 sn'lik pencerelerin ortancası), p99 en kötü pencerede {3} ms, ortanca pencerede {4} ms" -f
         $p50.Count, $toplamN, $s50[[int]($s50.Count / 2)], $s99[-1], $s99[[int]($s99.Count / 2)]))
     if ($dinlenme.Count) { $ozet.Add("Dinlenmede (yakalama ve tuş yok): " + (($dinlenme | ForEach-Object { ($_ -csplit "pencere: kare ")[1] }) -join " || ")) }
