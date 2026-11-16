@@ -454,7 +454,7 @@ sealed class Servis : IDisposable
             if (_fan != null) { var s = _fan.Snapshot(); lock (_lock) _kasaSnap = s; }
             if (_gpuFan != null) { try { var s = _gpuFan.Oku(); lock (_lock) _gpuSnap = s; } catch (Exception ex) { Program.Log("ekran kartı fan okuması: " + ex.Message); } }
         }
-        if (tick % 10 == 0) _ab.Yenile();
+        if (tick % 10 == 0) { _ab.Yenile(); Takili(); }
 
         if (DateTime.UtcNow - _lastHistory > TimeSpan.FromSeconds(60))
         {
@@ -462,6 +462,20 @@ sealed class Servis : IDisposable
             WriteHistory(g);
         }
         Publish();
+    }
+
+    readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _takili = new();
+
+    /// <summary>Which devices are plugged in: USB enumeration only (no handle opened, nothing sent to a device).</summary>
+    void Takili()
+    {
+        try
+        {
+            var list = HidSharp.DeviceList.Local;
+            _takili["aio"] = list.GetHidDevices(0x2516, 0x0173).Any();
+            _takili["klavye"] = list.GetHidDevices(0x1038, 0x161A).Any();
+        }
+        catch (Exception ex) { Program.Log("usb listesi okunamadı: " + ex.Message); }
     }
 
     void WriteHistory(Girdi g)
@@ -603,7 +617,12 @@ sealed class Servis : IDisposable
              JarvisDurum.Kapali => "kapali", JarvisDurum.Yeniden => "yeniden", _ => "yok",
          });
         j.Arr("cihazlar");
-        foreach (var d in _rgb) j.Obj().Str("kimlik", d.Kimlik).Str("ad", d.Ad).Bool("bagli", d.Bagli).Str("hata", d.Hata).End();
+        foreach (var d in _rgb)
+        {
+            // While the lights are off the devices are never opened; "connected" then means present on USB.
+            bool present = d.Bagli || (_takili.TryGetValue(d.Kimlik, out var t) && t);
+            j.Obj().Str("kimlik", d.Kimlik).Str("ad", d.Ad).Bool("bagli", present).Str("hata", present ? null : d.Hata).End();
+        }
         if (!_rgb.Any(d => d.Kimlik == "gpu"))
             j.Obj().Str("kimlik", "gpu").Str("ad", "MSI RTX 4080 Gaming X Trio").Bool("bagli", false).Bool("kilitli", true).Null("hata").End();
         j.End().Arr("duraklar");

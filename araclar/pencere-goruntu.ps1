@@ -1,4 +1,4 @@
-# Kontrol Merkezi penceresinin görüntüsünü alır (PrintWindow, PW_RENDERFULLCONTENT): pencere başka pencerelerin
+﻿# Kontrol Merkezi penceresinin görüntüsünü alır (PrintWindow, PW_RENDERFULLCONTENT): pencere başka pencerelerin
 # altında kalsa da içeriği doğru yakalanır. Kullanım: powershell -File araclar\pencere-goruntu.ps1 <cikti.png>
 param([string]$Cikti = "pencere.png")
 Add-Type -AssemblyName System.Drawing

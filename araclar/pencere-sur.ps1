@@ -1,4 +1,4 @@
-# Kontrol Merkezi penceresini sürer (geliştirme): büyüt, öne getir, tuş gönder.
+﻿# Kontrol Merkezi penceresini sürer (geliştirme): büyüt, öne getir, tuş gönder.
 #   powershell -File araclar\pencere-sur.ps1 buyut | normal | tus "{TAB}"
 param([string]$Is = "buyut", [string]$Tus = "")
 Add-Type @"

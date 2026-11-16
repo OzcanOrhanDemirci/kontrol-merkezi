@@ -18,19 +18,16 @@ Bu bilgisayarın fanlarını ve RGB ışıklarını tek pencereden yöneten masa
 
 Bilgisayar her açıldığında ışıklar kapalı başlar. Pencere kapalıyken ekran kartına hiç iş yüklemez.
 
-## Kurulum (bir kez, yönetici)
+## Kurulum (bir kez)
 
-```powershell
-cd C:\dev\kontrol-merkezi
-dotnet build -c Release
-powershell -ExecutionPolicy Bypass -File kur.ps1
-```
+`C:\dev\kontrol-merkezi\Kurulum.cmd`'ye çift tıkla, Windows'un sorusuna "Evet" de. Komut yazmak ya da derlemek
+gerekmez: hazır derlenmiş program kurulur.
 
-Betik programı `C:\Program Files\KontrolMerkezi`'ye kopyalar, oturum açılışında servisi UAC sormadan yönetici
+Kurulum programı `C:\Program Files\KontrolMerkezi`'ye kopyalar, oturum açılışında servisi UAC sormadan yönetici
 olarak başlatan `KontrolMerkezi` görevini kaydeder, masaüstüne ve Başlat menüsüne "Kontrol Merkezi" kısayolunu koyar,
 servisi başlatır ve salt okuma bir döküm alır (sonuç `kur-gunluk.txt`). Fan Anahtarı'na ve PawnIO'ya dokunmaz;
-Fan Anahtarı sen yenisini kabul edene kadar kurulu kalır. Güncellemek için aynı komut; kaldırmak için
-`kur.ps1 -Kaldir`.
+Fan Anahtarı sen yenisini kabul edene kadar kurulu kalır. Güncellemek için aynı dosya; kaldırmak için yönetici
+PowerShell'de `kur.ps1 -Kaldir`.
 
 ## Nasıl çalışır
 
@@ -58,6 +55,10 @@ Fan Anahtarı sen yenisini kabul edene kadar kurulu kalır. Güncellemek için a
 `%LOCALAPPDATA%\KontrolMerkezi\`: `gunluk.txt` (ne olduysa), `isi-gecmisi.csv` (dakikada bir sıcaklık; renk
 duraklarını gerçek günlere göre ayarlamak için), `ayarlar.json` (renk durakları, iki özel durumun rengi, cihaz başına
 renk eşleme çarpanları; servis yeniden başlayınca geçerli), `okuma.txt` (`KontrolMerkezi.exe oku` dökümü).
+
+Pencerede ara ara kısa donma görülürse: `araclar\donma-testi.ps1` ölçer; RTSS (RivaTuner) penceredeki kancası
+yüzünden olduğu anlaşılırsa `araclartss-istisna.cmd` RTSS'e yalnız bu pencere için "kanca yok" profili ekler
+(`rtss-istisna.cmd geri` kaldırır).
 
 Işık denemeleri: `KontrolMerkezi.exe rgb-dene aio renk FF0000 5`, `rgb-dene aio dalga 30` (LED sırasını gösterir),
 `rgb-dene klavye dalga 15`, `rgb-dene aio sondur`.

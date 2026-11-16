@@ -1,4 +1,4 @@
-﻿# Kontrol Merkezi kurulum betiği. YÖNETİCİ PowerShell'de çalışır:
+﻿# Kontrol Merkezi kurulum betiği. Kurulum.cmd çağırır (tek UAC onayı); elle de YÖNETİCİ PowerShell'de çalışır:
 #   powershell -ExecutionPolicy Bypass -File kur.ps1            kurar ya da günceller (tek adım)
 #   powershell -ExecutionPolicy Bypass -File kur.ps1 -Kaldir    görevi, kısayolları ve program klasörünü kaldırır
 #
@@ -63,7 +63,7 @@ try {
     }
 
     $cikti = Join-Path $kaynak 'bin\Release'
-    if (-not (Test-Path (Join-Path $cikti 'KontrolMerkezi.exe'))) { throw "Derleme yok: önce 'dotnet build -c Release' ($cikti)" }
+    if (-not (Test-Path (Join-Path $cikti 'KontrolMerkezi.exe'))) { throw "Hazır derleme bulunamadı ($cikti). Claude'dan derlemesini isteyin." }
 
     # PawnIO (işlemci sıcaklığı ve fan çipi için) Fan Anahtarı'yla birlikte kuruldu; yoksa söyle, kurma.
     $pawn = Get-Service PawnIO -ErrorAction SilentlyContinue
