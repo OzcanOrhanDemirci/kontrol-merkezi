@@ -133,7 +133,7 @@ const Fallback kFallback[M_COUNT] = {
     {{0.80f, 0.80f, 0.80f}, 0.9f, 0.0f, 1.0f},     // kemer_isik
     {{0.80f, 0.80f, 0.80f}, 0.9f, 0.0f, 1.0f},     // kuyu_isik
     {{0.60f, 0.58f, 0.50f}, 0.7f, 0.0f, 1.0f},     // boya (the live texture's alpha decides where it shows)
-    {{0.04f, 0.04f, 0.04f}, 0.3f, 0.0f, 1.0f},     // pano_yuz (dark glass; self-lit live)
+    {{0.04f, 0.04f, 0.04f}, 0.6f, 0.0f, 1.0f},     // pano_yuz (satin black engraved panel; its lights self-lit live)
     {{0.03f, 0.03f, 0.03f}, 0.25f, 0.0f, 1.0f},    // ekran_yuz
     {{0.12f, 0.12f, 0.11f}, 0.6f, 0.0f, 1.0f},     // tabela_yuz
     {{0.30f, 0.30f, 0.30f}, 0.1f, 0.0f, 1.0f},     // mercek

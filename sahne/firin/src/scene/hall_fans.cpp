@@ -1,9 +1,8 @@
 // The two wall fans of the entrance gallery (docs/SALON.md): left = CPU + case at x = -12, right = GPU at x = +12,
 // centre y 8.5, z -24, 10 m across, axis along x. Each: a square concrete recess 2.5 m deep with a chamfered frame,
 // a steel barrel through its back into the duct, a bolted bell-mouth inlet, a welded guard grille, the motor nacelle on
-// stator vanes behind the rotor, and the rotor itself (Scene::dyn, its own frame). Beside each fan on the portal side
-// (the wall between the landing and the fans lies outside the fanlar view): the board on brackets turned towards the
-// landing, its warning plate, the knife-switch lever box and a caged lamp; the stencilled identity above the fan.
+// stator vanes behind the rotor, and the rotor itself (Scene::dyn, its own frame). Beside each fan on the portal side:
+// the stencilled identity and a caged lamp. Each fan's control is a desk on the landing (its panel and great lever).
 #include "scene/hall_kit.h"
 
 #include <algorithm>
@@ -282,86 +281,54 @@ void fan(Hall& h, const FanSpec& f) {
     }
 
 
-    // ---- the board: a steel cabinet on brackets, turned 35 degrees towards the landing; its face square as its texture
-    // (2048 x 2048: a 5.4 x 3.2 m face stretched the letters, review 1, B4); the details are read at the desk
-    const float turn = 35.0f * kPi / 180.0f;
-    const float3 nb = normalize(v3(-side * std::cos(turn), 0, std::sin(turn)));
-    const Xform B0 = facing(v3(0, 0, 0), nb);
-    const float3 ein = side > 0 ? -B0.x : B0.x;   // along the board from its wall end to its outer end
-    const float yc = 5.3f, bw = 4.4f, bh = 4.4f, bd = 0.4f;
-    const float3 E = v3(side * (12.0f - 0.3f), yc, -32.8f);   // the cabinet back's wall end
-    const float3 C = E + ein * (0.5f * bw) + nb * (0.5f * bd);
-    const Xform Bf = axes(C, B0.x, B0.y, B0.z);
-    h.box(Bf, v3(0.5f * bw, 0.5f * bh, 0.5f * bd), 0.03f, f.paint, 1.0f);
-    // the face, recessed in a bezel
-    const float fw = 4.1f, fh = 4.1f;
-    h.levha(std::string("pano_") + f.tag, std::string("pano_") + f.tag, C + nb * (0.5f * bd + 0.003f), nb, fw, fh, M_PANO);
-    for (int s = -1; s <= 1; s += 2) {
-        h.box(Bf * Xform::at(v3(0, s * (0.5f * fh + 0.075f), 0.5f * bd + 0.02f)), v3(0.5f * bw, 0.075f, 0.02f), 0.01f, f.paint, 1.0f);
-        h.box(Bf * Xform::at(v3(s * (0.5f * fw + 0.075f), 0, 0.5f * bd + 0.02f)), v3(0.075f, 0.5f * fh, 0.02f), 0.01f, f.paint, 1.0f);
-    }
-    // a rain hood over it (water drips in a flood tunnel)
-    h.box(Bf * Xform::at(v3(0, 0.5f * bh + 0.06f, 0.08f)) * Xform::rotX(0.26f), v3(0.5f * bw + 0.08f, 0.008f, 0.5f * bd + 0.12f),
-          0.004f, M_SAC, 1.0f);
-    // brackets: arms from the wall to the cabinet's back at both ends, top and bottom, a strut under the outer end
-    for (float yy : {yc + 1.2f, yc - 1.2f})
-        for (float along : {0.15f, bw - 0.15f}) {
-            const float3 back = E + ein * along + v3(0, yy - yc, 0);
-            const float3 wall = v3(side * 12.0f, back.y, back.z);
-            h.bar(wall, back, 0.08f, 0.08f, v3(0, 1, 0), M_KOYU);
-            h.box(axes(wall + v3(-side * 0.008f, 0, 0), v3(0, 0, float(side)), v3(0, 1, 0), n), v3(0.1f, 0.1f, 0.008f), 0.003f, M_KOYU, 0.3f);
-        }
-    {
-        const float3 back = E + ein * (bw - 0.15f) + v3(0, -1.2f, 0);
-        h.bar(v3(side * 12.0f, back.y - 1.2f, back.z + 0.6f), back, 0.07f, 0.07f, v3(0, 1, 0), M_KOYU);
-    }
-    // the warning plate under the cabinet, on two straps
-    {
-        const float3 pc = C + v3(0, -0.5f * bh - 0.42f, 0) + nb * 0.1f;
-        h.box(axes(pc - nb * 0.008f, B0.x, B0.y, B0.z), v3(0.83f, 0.28f, 0.006f), 0.003f, M_SAC, 1.0f);
-        h.levha(std::string("uyari_") + f.tag, std::string("uyari_") + f.tag, pc + nb * 0.001f, nb, 1.6f, 0.5f, M_TABELA);
-        for (int s = -1; s <= 1; s += 2) {
-            const float3 top = C + B0.x * (s * 0.6f) + v3(0, -0.5f * bh, 0) + nb * 0.1f;
-            h.bar(top, top + v3(0, -0.2f, 0), 0.04f, 0.006f, nb, M_SAC);
-        }
-    }
-    // the lever box on the wall below the board's wall end, its knife switch, the conduit up into the cabinet
-    {
-        const float zl = E.z - 0.6f;
-        const float3 lb = v3(side * (12.0f - 0.15f), 1.45f, zl);
-        h.box(lb, v3(0.15f, 0.6f, 0.4f), 0.03f, f.paint, 0.5f);
-        const float front = side * (12.0f - 0.30f);
-        // insulators: the hinge jaws below, the contact jaws above
-        for (float yy : {1.1f, 1.72f})
-            h.box(v3(front - side * 0.035f, yy, zl), v3(0.035f, 0.06f, 0.12f), 0.012f, M_KABLO, 0.2f);
-        dz::pipeRun(h.at(Xform(), M_KOYU, 0.5f),
-                    {v3(side * 11.97f, 2.05f, zl + 0.25f), v3(side * 11.97f, 2.75f, zl + 0.25f),
-                     v3(side * (12.0f - 0.33f), 2.75f, zl + 0.25f), v3(side * (12.0f - 0.33f), yc - 0.5f * bh + 0.1f, zl + 0.25f)},
-                    0.028f, 0.1f);
-    }
-    // ---- the desk on the landing: the fan's controls in the foreground (review 1, B4 and A3: the boards alone were
-    // read at 33 m). A steel console by the landing's front rail in the fan's paint, its slanted top turned to the eye,
-    // a display with the board's own texture, the knife switch's great lever beside it.
+    // ---- the desk on the landing: the fan's whole control (review 1, A3 and B4). The boards that used to hang beside
+    // the fans were read at 33 m and said what the desks said; the desks carry it alone. A steel pult by the landing's
+    // front rail in the fan's paint: a body, a head whose face slopes 60 degrees from level towards the eye (the face
+    // is seen nearly square on), an engraved black panel with the state's lit window, the readings and the warning
+    // window, and the knife switch's great lever beside it. In the desk's frame: x its right, y up, z towards the eye.
     {
         const float3 eye = v3(0, 4.65f, -1.6f);                      // the fanlar view's eye (hall.cpp)
-        const float3 base = v3(side * 2.55f, 3.0f, -5.55f);
+        const float3 base = v3(side * 2.35f, 3.0f, -5.45f);
         const float3 t = normalize(v3(eye.x - base.x, 0, eye.z - base.z));   // towards the eye, horizontal
         const float3 up = v3(0, 1, 0);
         const float3 r = normalize(cross(up, t));                    // the desk's right
         const Xform D = axes(base, r, up, t);
-        // the pedestal and the slanted top (40 degrees from level, rising away from the viewer)
-        h.box(D * Xform::at(v3(0, 0.45f, 0)), v3(0.42f, 0.45f, 0.22f), 0.02f, f.paint, 0.5f);
-        h.box(D * Xform::at(v3(0, 0.03f, 0)), v3(0.46f, 0.03f, 0.26f), 0.01f, M_KOYU, 0.5f);
-        const float tilt = 40.0f * kPi / 180.0f;
-        const float3 tn = normalize(up * std::cos(tilt) + t * std::sin(tilt));      // the top's normal
+        auto Dp = [&](float x, float y, float z) { return D.point(v3(x, y, z)); };
+        const float hw = 0.49f;                                      // half width
+        const float zf = 0.24f, zb = -0.10f, y0 = 0.74f;             // the front, the back; the slope's lower edge
+        const float tilt = 60.0f * kPi / 180.0f;
+        const float run = zf - zb, y1 = y0 + run * std::tan(tilt);   // the slope's upper edge (1.33)
+        const float3 tn = normalize(up * std::cos(tilt) + t * std::sin(tilt));      // the face's normal
         const float3 tv = normalize(cross(tn, r));                                    // up the slope
-        const float3 tc = base + up * 0.98f;
-        h.box(axes(tc, r, tv, tn), v3(0.48f, 0.34f, 0.035f), 0.012f, f.paint, 0.5f);
-        h.levha(std::string("masa_ekran_") + f.tag, std::string("pano_") + f.tag, tc + tn * 0.038f + tv * 0.02f, tn, 0.56f, 0.56f, M_PANO, tv);
-        // the lever: hinge across the desk at its outer end, the handle rising and pulled towards the viewer
-        const float3 pivot = base + up * 1.02f + r * (float(-side) * 0.6f) - t * 0.05f;   // the inner end: in frame
+        // the foot, the body, the head's back and its two cheeks
+        h.box(D * Xform::at(v3(0, 0.03f, 0.5f * (zf + zb))), v3(hw + 0.04f, 0.03f, 0.5f * run + 0.04f), 0.01f, M_KOYU, 0.5f);
+        h.box(D * Xform::at(v3(0, 0.5f * y0, 0.5f * (zf + zb))), v3(hw, 0.5f * y0, 0.5f * run), 0.02f, f.paint, 0.5f);
+        h.box(D * Xform::at(v3(0, 0.5f * (y0 + y1) - 0.01f, zb + 0.015f)), v3(hw, 0.5f * (y1 - y0) - 0.01f, 0.015f), 0.006f,
+              f.paint, 0.5f);
+        for (int s = -1; s <= 1; s += 2) {
+            const float x = s * hw;
+            // a triangle as a patch: the bottom edge front to back, the slope's foot (1 cm) to the upper back corner
+            h.patch(Dp(x, y0, zf), Dp(x, y0, zb), Dp(x, y0 + 0.01f * std::sin(tilt), zf - 0.01f * std::cos(tilt)),
+                    Dp(x, y1, zb), D.dir(v3(float(s), 0, 0)), f.paint, 0.5f);
+        }
+        // the slope: a steel plate, its top in the slope's plane; the panel face on it in a dark bezel
+        const float3 sm = Dp(0, 0.5f * (y0 + y1), 0.5f * (zf + zb));  // the slope's middle
+        const float sl = 0.5f * run / std::cos(tilt);                   // half its length (0.34)
+        h.box(axes(sm - tn * 0.0175f, r, tv, tn), v3(hw + 0.01f, sl + 0.01f, 0.0175f), 0.006f, f.paint, 0.5f);
+        const float fw = 0.86f, fh = 0.60f;                             // the face (masa_ekran_*: 2150 x 1500 px)
+        h.levha(std::string("masa_ekran_") + f.tag, std::string("masa_ekran_") + f.tag, sm + tn * 0.004f, tn, fw, fh,
+                M_PANO, tv);
+        for (int s = -1; s <= 1; s += 2) {
+            h.box(axes(sm + tv * (s * (0.5f * fh + 0.012f)) + tn * 0.006f, r, tv, tn), v3(0.5f * fw + 0.024f, 0.012f, 0.006f),
+                  0.003f, M_KOYU, 0.5f);
+            h.box(axes(sm + r * (s * (0.5f * fw + 0.012f)) + tn * 0.006f, r, tv, tn), v3(0.012f, 0.5f * fh, 0.006f), 0.003f,
+                  M_KOYU, 0.5f);
+        }
+        // the lever: hinge across the desk at its inner end, the handle rising and pulled towards the viewer
+        const float xi = float(-side) * 0.6f;                           // the inner end: in frame
+        const float3 pivot = base + up * 1.02f + r * xi - t * 0.05f;
         h.box(pivot - up * 0.08f, v3(0.12f, 0.09f, 0.12f), 0.015f, M_KABLO, 0.2f);
-        h.box(axes(base + r * (float(-side) * 0.6f) + up * 0.47f, r, up, t), v3(0.09f, 0.47f, 0.09f), 0.015f, f.paint, 0.5f);
+        h.box(axes(base + r * xi + up * 0.47f, r, up, t), v3(0.09f, 0.47f, 0.09f), 0.015f, f.paint, 0.5f);
         Dynamic d;
         d.name = std::string("kol_") + f.tag;
         d.centre = pivot;
@@ -375,31 +342,34 @@ void fan(Hall& h, const FanSpec& f) {
         an.pivot = pivot;
         an.axis = r;
         h.s.anchors.push_back(an);
-        h.anchor(std::string("masa_") + f.tag, "tik", D * Xform::at(v3(float(-side) * 0.1f, 0.8f, 0.0f)), v3(0.8f, 0.85f, 0.45f));
-        // its lamp: a small hooded light on a stalk over the display (group 2)
-        const float3 lp = tc + tv * 0.45f + tn * 0.3f;
-        h.rod(tc + tv * 0.32f - tn * 0.02f, lp, 0.012f, M_KOYU);
-        h.at(facing(lp, normalize(tc - lp)) * Xform::at(v3(0, 0, -0.04f)), M_KOYU, 0.1f).roundedCylinder(0.07f, -0.05f, 0.0f, 0.01f);
+        h.anchor(std::string("masa_") + f.tag, "tik", D * Xform::at(v3(float(-side) * 0.1f, 0.72f, 0.07f)), v3(0.8f, 0.72f, 0.4f));
+        // its lamp: a small hooded light on a stalk behind the lever's post, aimed steeply down at the lever (group 2).
+        // Not over the panel: a lamp up the slope from the face is mirrored by it into the eye (a washed highlight), and
+        // the self-lit panel needs no light of its own
+        const float xl = float(-side) * 0.62f;
+        const float3 lp = Dp(xl, 1.8f, -0.15f);
+        const float3 aim = normalize(Dp(float(-side) * 0.56f, 0.98f, 0.12f) - lp);   // the lever's root and handle
+        h.rod(Dp(xl, 0.6f, -0.105f), Dp(xl, 1.9f, -0.105f), 0.012f, M_KOYU);
+        h.rod(Dp(xl, 1.9f, -0.105f), lp - aim * 0.09f, 0.012f, M_KOYU);
+        h.at(facing(lp, aim) * Xform::at(v3(0, 0, -0.001f)), M_KOYU, 0.1f).roundedCylinder(0.07f, -0.08f, 0.0f, 0.01f);
         Emitter e;
         e.type = Emitter::DISC;
         e.group = GROUP_LAMBA;
-        e.c = lp + normalize(tc - lp) * 0.002f;
-        e.u = normalize(cross(normalize(tc - lp), r)) * 0.055f;
-        e.n = normalize(tc - lp);
+        e.c = lp + aim * 0.002f;
+        e.u = normalize(cross(aim, r)) * 0.055f;
+        e.n = aim;
         e.L = kDeskLampL;
-        e.lobe = 3.0f;
+        e.lobe = 6.0f;
         h.s.lights.push_back(e);
-        h.at(facing(lp + normalize(tc - lp) * 0.001f, normalize(tc - lp)), M_CAM_LAMBA, 0.05f).ring(0.0f, 0.055f, 0.0f, true);
+        h.at(facing(lp + aim * 0.001f, aim), M_CAM_LAMBA, 0.05f).ring(0.0f, 0.055f, 0.0f, true);
     }
 
-    // the lamp above the board's wall end
-    h.cagedLamp(v3(side * 12.0f, 7.3f, E.z + 0.6f), n, kBulbBoard);
-    // the stencilled identity on the wall over its board, beside the fan (the wall above the fan lies at the fanlar
-    // view's top edge)
-    h.levha(std::string("boya_") + f.tag, std::string("boya_") + f.tag, v3(side * (12.0f - 0.002f), 7.9f, E.z - 2.4f), n, 5.0f,
+    // the stencilled identity on the side wall towards the portal, beside the fan (the wall above the fan lies at the
+    // fanlar view's top edge), and a caged lamp over it
+    h.cagedLamp(v3(side * 12.0f, 7.3f, -32.2f), n, kBulbBoard);
+    h.levha(std::string("boya_") + f.tag, std::string("boya_") + f.tag, v3(side * (12.0f - 0.002f), 7.9f, -35.2f), n, 5.0f,
             1.0f, M_BOYA);
 
-    // the click box: the fan, its board and lever
     // two floor floodlights before the recess (group 2, the fixed warm light): they light the fan from below, so the
     // machine reads in the dark gallery and its blades catch a warm light against the shaft's temperature colour
     for (int q = -1; q <= 1; q += 2) {
@@ -421,8 +391,9 @@ void fan(Hall& h, const FanSpec& f) {
         e.lobe = 10.0f;
         h.s.lights.push_back(e);
     }
-    h.anchorBox(std::string("fan_") + f.tag, "tik", v3(std::min(side * 14.6f, side * 7.9f), 0.0f, -38.0f),
-                v3(std::max(side * 14.6f, side * 7.9f), 15.7f, -16.8f));
+    // the click box: the fan in its recess
+    h.anchorBox(std::string("fan_") + f.tag, "tik", v3(std::min(side * 14.6f, side * 7.9f), 0.0f, -31.4f),
+                v3(std::max(side * 14.6f, side * 7.9f), 15.7f, -16.6f));
 }
 
 }   // namespace

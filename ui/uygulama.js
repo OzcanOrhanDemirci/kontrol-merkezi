@@ -1,6 +1,6 @@
 // Kontrol Merkezi: the window. One diegetic scene, the underground hall (docs/SALON.md): there is no UI layer, every
 // control and every text is an object in the world. This file talks to the host (WebView2) or to the simulated
-// service, keeps the state, turns it into the world (light colours, rotors, levers, haze, the texts on signs, boards and
+// service, keeps the state, turns it into the world (light colours, rotors, levers, haze, the texts on signs, desks and
 // the arch's display), flies the camera between the two places and picks what the mouse points at. The renderer is
 // ui/salon/salon.js, the texts are drawn by ui/salon/levha.js.
 'use strict';
@@ -225,8 +225,8 @@ function putLevha(name, data, opts) {
 }
 const RPM_AD = ad => ad === 'CPU_FAN' ? 'İşlemci' : ad === 'PUMP_FAN' ? 'Pompa' : (/^SYS_FAN(\d+)$/.exec(ad) ? 'Kasa ' + /^SYS_FAN(\d+)$/.exec(ad)[1] : ad);
 // the data shapes are levha.js' (documented at its top); a state the service did not report is never shown
-const BOARD_STATE = { max: 'en_yuksek', bios: 'bios', oto: 'kart', geciyor: 'geciyor', baska: 'baska' };
-function fanBoard(i) {
+const DESK_STATE = { max: 'en_yuksek', bios: 'bios', oto: 'kart', geciyor: 'geciyor', baska: 'baska' };
+function fanDesk(i) {
   const fan = D.durum && D.durum.fan ? (i ? D.durum.fan.gpu : D.durum.fan.kasa) : null;
   const isi = (D.durum && D.durum.isi) || {};
   const v = { durum: 'bilgi_yok', hover: i ? (M.hover === 'fan_gpu' || M.hover === 'masa_gpu') : (M.hover === 'fan_kasa' || M.hover === 'masa_kasa') };
@@ -236,7 +236,7 @@ function fanBoard(i) {
     return v;
   }
   const busy = fan.durum === 'geciyor' || M.pend[i ? 'gpu' : 'kasa'] > 0;
-  v.durum = busy ? 'geciyor' : (BOARD_STATE[fan.durum] || 'bilgi_yok');
+  v.durum = busy ? 'geciyor' : (DESK_STATE[fan.durum] || 'bilgi_yok');
   v.sicaklik = i ? (isi.gpu != null ? isi.gpu : null) : (isi.cpu != null ? isi.cpu : null);
   if (!i) v.fanlar = (fan.rpm || []).map(r => ({ ad: RPM_AD(r.ad), rpm: r.rpm }));
   else {
@@ -248,16 +248,16 @@ function fanBoard(i) {
 }
 function warning(i) {
   const d = D.durum;
-  if (!linked()) return { uyari: 'baglanti' };
-  if (!d || !d.fan) return { uyari: '' };
+  if (!linked()) return 'baglanti';
+  if (!d || !d.fan) return '';
   const f = i ? d.fan.gpu : d.fan.kasa;
-  if (d.servis && d.servis.yonetici === false && f && f.kullanilabilir === false) return { uyari: 'yetki' };
+  if (d.servis && d.servis.yonetici === false && f && f.kullanilabilir === false) return 'yetki';
   if (i && f) {
     const ab = f.afterburner || {};
-    if (ab.fanKontrolu) return { uyari: 'afterburner' };
-    if (f.durum === 'baska') return { uyari: 'baska' };
+    if (ab.fanKontrolu) return 'afterburner';
+    if (f.durum === 'baska') return 'baska';
   }
-  return { uyari: '' };
+  return '';
 }
 function deviceState(c) {
   if (!linked() || !c) return { durum: 'bagli_degil' };
@@ -269,10 +269,8 @@ function deviceState(c) {
 const round1 = x => (x == null ? null : Math.round(x * 10) / 10);
 function updateTexts() {
   const d = D.durum, isi = (d && d.isi) || {}, rgb = d && d.rgb;
-  putLevha('pano_kasa', fanBoard(0), { emissive: 1 });
-  putLevha('pano_gpu', fanBoard(1), { emissive: 1 });
-  putLevha('uyari_kasa', warning(0));
-  putLevha('uyari_gpu', warning(1));
+  putLevha('masa_ekran_kasa', { ...fanDesk(0), uyari: warning(0) }, { emissive: 1 });
+  putLevha('masa_ekran_gpu', { ...fanDesk(1), uyari: warning(1) }, { emissive: 1 });
   putLevha('boya_kasa', {});
   putLevha('boya_gpu', {});
   putLevha('tabela_rgb', {});
