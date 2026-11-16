@@ -283,7 +283,10 @@ function updateTexts() {
     ortalama: linked() && (isi.yumusak != null || isi.ort != null) ? round1(M.temp) : null,
     cpu: linked() ? round1(isi.cpu) : null, gpu: linked() ? round1(isi.gpu) : null, renk: tc, kapali: !on,
   }, { emissive: on ? 1.6 : 0.7 });
-  putLevha('plaka_rgb', { acik: linked() && rgb ? on : null, bosta: idle, hover: M.hover === 'anahtar_rgb' });
+  putLevha('plaka_rgb', {
+    acik: linked() && rgb ? on : null, bosta: idle,
+    beklemeDakika: idle ? (rgb.beklemeDakika ?? 15) : null, hover: M.hover === 'anahtar_rgb',
+  });
   const st = (stops() || []).filter(s => !s.gizli).slice(0, 6);
   const valid = linked() && (isi.yumusak != null || isi.ort != null);
   const cur = valid ? st.reduce((k, s, i) => (M.temp >= s.c ? i : k), -1) : -1;
@@ -293,7 +296,10 @@ function updateTexts() {
   }));
   for (let k = 0; k < 6; k++) if (!used.has(k)) putLevha('durak_plaka_' + k, { derece: null, ad: '', renk: [0, 0, 0], secili: false });
   const devs = (rgb && rgb.cihazlar) || [];
-  [['aio', 'cihaz_aio'], ['klavye', 'cihaz_klavye'], ['gpu', 'cihaz_gpu']].forEach(([k, n]) => putLevha(n, deviceState(devs.find(c => c.kimlik === k))));
+  [['aio', 'cihaz_aio'], ['klavye', 'cihaz_klavye'], ['gpu', 'cihaz_gpu']].forEach(([k, n]) => {
+    const c = devs.find(c => c.kimlik === k);
+    putLevha(n, { ...deviceState(c), ad: c && c.ad });
+  });
 }
 // the small lamps: the colour scale's stops around the arch light up to the temperature; device lamps by state
 function stopSlots(n) {               // which of the arch's six lamps carries stop i of n
