@@ -29,17 +29,19 @@ void addVolume(Scene& s, const char* name, float3 lo, float3 hi, float cell) {
 }
 
 // the journey: a smooth line from fanlar's eye to rgb's eye, rising over the landing's railing first. In the middle of
-// the hall it leaves the aisle through a gap of the inner row (x = 8) into the lane between the rows at x = 8 and 22,
-// runs down the lane and comes back through another gap before the plaza: the view opens diagonally across the forest
-// of columns instead of down one corridor (11-16, for grandeur). The inner columns span z +-3.5 m about -60, -80, ...;
-// the crossings of x 6..10 lie inside the gaps (z -83.5..-96.5 and -183.5..-196.5); geo_onizle.py checks clearance.
+// the first half it leaves the aisle through a gap of the inner row (x = 8) into the lane between the rows at x = 8 and
+// 22, runs down the lane and comes back through the next gap but one by the hall's middle: the view opens diagonally
+// across the forest of columns instead of down one corridor (11-16, for grandeur); the second half runs straight down
+// the aisle with the monument centred and growing (from the lane the inner row hid its opening). The inner columns span
+// z +-3.5 m about -60, -80, ...; the crossings of x 6..10 lie inside the gaps (z -83.5..-96.5 and -123.5..-136.5);
+// geo_onizle.py checks clearance.
 std::vector<float3> journey(const View& a, const View& b) {
     const std::vector<float3> ctl = {a.eye,
                                      {0.0f, 5.35f, -4.2f}, {0.0f, 6.05f, -6.0f}, {0.0f, 6.6f, -10.0f}, {0.0f, 7.0f, -25.0f},
                                      {0.0f, 7.2f, -44.0f}, {0.0f, 7.6f, -66.0f}, {2.0f, 8.0f, -82.0f}, {8.0f, 8.4f, -90.0f},
-                                     {14.0f, 8.8f, -98.0f}, {15.0f, 9.0f, -112.0f}, {15.0f, 9.0f, -150.0f},
-                                     {15.0f, 8.6f, -168.0f}, {14.0f, 8.0f, -182.0f}, {8.0f, 7.4f, -190.0f},
-                                     {2.0f, 6.8f, -198.0f}, {0.0f, 6.0f, -208.0f}, {0.0f, 4.4f, -216.0f}, {0.0f, b.eye.y + 0.25f, -221.5f}, b.eye};
+                                     {14.0f, 8.8f, -98.0f}, {15.0f, 9.0f, -110.0f}, {14.0f, 8.8f, -122.0f},
+                                     {8.0f, 8.4f, -130.0f}, {2.0f, 8.0f, -138.0f}, {0.0f, 7.6f, -150.0f},
+                                     {0.0f, 7.2f, -175.0f}, {0.0f, 5.6f, -200.0f}, {0.0f, 4.0f, -211.0f}, {0.0f, b.eye.y + 0.25f, -217.5f}, b.eye};
     // Catmull-Rom (centripetal enough at these spacings), sampled finely, then resampled every ~2 m of arc
     std::vector<float3> fine;
     const int n = int(ctl.size());
@@ -92,9 +94,10 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
         for (const Dynamic& d : s.dyn) std::printf("hall dyn %-16s %7zu triangles\n", d.name.c_str(), d.mesh.tris());
 
         // the views: on the landing at eye height (1.65 m over the deck) looking down the gallery into the hall; at the
-        // plaza, low (5.5 m), the arch centred and filling the 16:9 frame at 50 degrees
+        // plaza, low (3 m, 35 m before the piers), the monument centred and filling the frame's height at 50 degrees:
+        // the ceiling over the hoist bay at the top, the console's plates at the bottom, the gap under the gate over it
         s.fanlar = {make_float3(0, 4.65f, -1.6f), make_float3(0, 7.5f, -60.0f), 50.0f};   // back on the landing: the desks by its rail in frame
-        s.rgb = {make_float3(0, 3.0f, -224.0f), make_float3(0, 13.4f, -256.0f), 50.0f};   // low: the monument towers
+        s.rgb = {make_float3(0, 3.0f, -220.0f), make_float3(0, 13.9f, -256.0f), 50.0f};   // low: the monument towers
         s.path = journey(s.fanlar, s.rgb);
 
         // baked light in the air: the whole hall coarse; finer round the shaft's beam, the fans and the arch
@@ -102,7 +105,9 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
         addVolume(s, "kuyu", make_float3(-5.2f, 0.0f, -43.0f), make_float3(5.2f, 33.6f, -25.5f), 0.15f);   // 0.1 m was 6.1 M cells (~290 MB for 3 groups)
         addVolume(s, "fan_kasa", make_float3(-16.6f, 2.0f, -31.0f), make_float3(-4.0f, 15.2f, -17.0f), 0.2f);
         addVolume(s, "fan_gpu", make_float3(4.0f, 2.0f, -31.0f), make_float3(16.6f, 15.2f, -17.0f), 0.2f);
-        addVolume(s, "kemer", make_float3(-21.0f, 0.0f, -294.0f), make_float3(21.0f, kHallH, -238.0f), 0.3f);   // through the chamber to the core
+        // the monument: the chamber, the opening, the hoist bay and the air in front where its glow rises, up to the ceiling
+        // (0.33 m: 2.1 M cells; 0.3 m was 2.9 M)
+        addVolume(s, "kemer", make_float3(-21.0f, 0.0f, -294.0f), make_float3(21.0f, kHallH, -238.0f), 0.33f);
 
         // finishing: displacement normals and tangents; the light map's chart coordinates (levha faces keep the metres
         // their builder put in uv2, their uv0 runs 0..1; models, whose materials follow the hall's own, keep their

@@ -27,7 +27,7 @@
  *   uyari_kasa, uyari_gpu: { uyari: '' | 'yetki' | 'afterburner' | 'baska' | 'baglanti' }   ('' = plain plate)
  *   kilit_tasi_ekran: { ortalama, cpu, gpu: number|null (°C), renk: [r,g,b] LINEAR 0..1 (the temperature
  *     colour; its hue is shown at full brightness), kapali: boolean (RGB off: dimmed, still legible) }
- *   durak_plaka_0..5: { derece: number|null, ad: string, renk: [r,g,b] LINEAR, secili: boolean }
+ *   durak_plaka_0..4: { derece: number|null, ad: string, renk: [r,g,b] LINEAR, secili: boolean }
  *   plaka_rgb: { acik: true|false|null (null = unknown, nothing marked), bosta: boolean (lights idle),
  *     beklemeDakika: number (configured idle minutes, default 15), hover: boolean }
  *   cihaz_aio, cihaz_klavye, cihaz_gpu: { durum: 'bagli' | 'bagli_degil' | 'kilitli' | 'hata',

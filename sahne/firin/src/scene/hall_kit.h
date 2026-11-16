@@ -36,11 +36,10 @@ constexpr float kKuyuEmitL = kKuyuL * (kKuyuLobe + 1.0f) / 7.0f;
 // the diffuse sky through the same opening (lobe 2): twice the beam's flux, kKuyuL * 2 * (2 + 1) / 7
 constexpr float kKuyuSkyL = kKuyuL * 6.0f / 7.0f;
 constexpr float kKuyuTilt = 10.0f;   //   the beam's slant towards -z (degrees)
-constexpr float kKemerL = 2.0f;      // group 1: kemer_isik, the floodlights' glass as seen (their beams below)
-constexpr float kCekirdekL = 8.0f;   // group 1: the heat core's heart behind the gate (cekirdek_isik and its four RECT
-                                     //   emitters, 3.4 x 13.8 m each): the monument's one light
-constexpr float kKemerFloodL = 700.0f;  // group 1: each plinth floodlight's radiance (lobe 24, a 0.9 x 0.36 m slot): a dim
-                                        //   fill on the piers' faces, four together ~5 % of the heart's flux (was 2600)
+constexpr float kKemerL = 2.0f;      // group 1: kemer_isik (unused since the plinth floodlights went, 11-16)
+constexpr float kCekirdekL = 8.0f;   // group 1: the heat core's heart behind the gate (cekirdek_isik and its 20 RECT
+                                     //   emitters: the column's four faces 4 x 18.4 m, the fins' sides): the monument's
+                                     //   one light, ~580 m2 (was 188): its power comes from area, the radiance stays
 constexpr float kFanFloodL = 300.0f;  // group 2: each fan floodlight (a 0.5 x 0.36 m glass, lobe 10)
 constexpr float kColUpL = 330.0f;    // group 2: each column uplight (a 0.5 x 0.3 m glass, lobe 14), dimmer than the fans'
 constexpr float kSignLampL = 60.0f;  // group 2: a hanging sign's light strip (0.05 x 4 m, lobe 4) onto its face
