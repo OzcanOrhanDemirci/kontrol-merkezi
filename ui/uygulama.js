@@ -228,7 +228,7 @@ function updateLights(dt) {
     const busy = f.durum === 'geciyor' || M.pend[i ? 'gpu' : 'kasa'] > 0;
     if (f.durum === 'baska') return mul([1.0, 0.55, 0.18], 0.55);
     if (busy) return mul([1.0, 0.86, 0.7], 0.5 + 0.45 * Math.sin(M.t * 10));
-    if (f.durum === 'max') return mul([1.0, 0.62, 0.3], 3.2);
+    if (f.durum === 'max') return mul([1.0, 0.62, 0.3], 6.0);
     return mul([0.75, 0.86, 1.0], 0.24);
   };
   const fan = D.durum && D.durum.fan;

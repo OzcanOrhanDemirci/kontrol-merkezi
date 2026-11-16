@@ -420,6 +420,10 @@ void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out
     vec3 e = smoothstep(h - 0.14, h, abs(q)) * sign(q) * (1.0 - abs(n));
     if (dot(abs(n), vec3(1.0)) > 0.99 && abs(n.x) + abs(n.y) + abs(n.z) < 1.01) n = normalize(n + 1.4 * e);
     alb = vec3(0.03, 0.031, 0.034); F0 = vec3(0.05); a = m == M_PLINTH ? 0.2 : 0.17;
+    if (m == M_PLINTH && n.z > 0.5) {         // the plinth top is brushed along its length
+      a = 0.07;
+      n = normalize(n + vec3(0.0, 1.0, 0.0) * (rnd() * 2.0 - 1.0) * 0.5);
+    }
     if (m == M_FRAME && length(q.xz) < FBR + 0.02) { a = 0.32; alb = vec3(0.01); }
     if (m == M_FRAME && n.y < -0.5) {          // four titanium screws in the corners, hex recess
       vec2 sc = abs(q.xz) - vec2(5.05);
@@ -434,7 +438,14 @@ void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out
   } else if (m == M_ROTOR) {
     alb = vec3(0.30, 0.31, 0.33); F0 = vec3(0.045); a = 0.22; gTr = 0.72;   // frosted, translucent like ARGB fan blades
   } else if (m == M_HUB || m == M_TI) {
-    alb = vec3(0.0); F0 = vec3(0.56, 0.52, 0.47); a = m == M_HUB ? 0.07 : (f == 1 ? 0.34 : 0.11);   // spokes brushed
+    alb = vec3(0.0); F0 = vec3(0.56, 0.52, 0.47); a = m == M_HUB ? 0.07 : (f == 1 ? 0.3 : 0.06);
+    if (m == M_TI) {
+      // brushed: spokes along their length, lips and bezel around the ring axis
+      vec3 q = p - HC;
+      vec3 brush = f == 1 ? vec3(1.0, 0.0, 0.0) : normalize(vec3(-q.z, 0.0, q.x));
+      vec3 across = normalize(cross(n, brush));
+      n = normalize(n + across * (rnd() * 2.0 - 1.0) * 0.55);
+    }
     if (m == M_HUB && n.y < -0.5) {           // domed cap with concentric machining
       vec2 q = p.xz - (f == 0 ? FCL.xz : FCR.xz);
       float r = length(q);
@@ -442,7 +453,8 @@ void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out
       a = 0.06 + 0.05 * (0.5 + 0.5 * sin(r * 60.0));
     }
   } else if (m == M_BAND) {
-    alb = vec3(0.0); F0 = vec3(0.5, 0.47, 0.43); a = 0.13;
+    alb = vec3(0.0); F0 = vec3(0.5, 0.47, 0.43); a = 0.07;
+    { vec3 q = p - HC; vec3 brush = normalize(vec3(-q.z, 0.0, q.x)); n = normalize(n + normalize(cross(n, brush)) * (rnd() * 2.0 - 1.0) * 0.5); }
     float tk; bandEmit(p, n, tk);
     if (tk > 0.5) { alb = vec3(0.55); F0 = vec3(0.04); a = 0.5; }
   } else if (m == M_HALO) {
