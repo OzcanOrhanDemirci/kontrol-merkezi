@@ -29,7 +29,7 @@
  *     colour; its hue is shown at full brightness), kapali: boolean (RGB off: dimmed, still legible) }
  *   durak_plaka_0..5: { derece: number|null, ad: string, renk: [r,g,b] LINEAR, secili: boolean }
  *   plaka_rgb: { acik: true|false|null (null = unknown, nothing marked), bosta: boolean (lights idle),
- *     hover: boolean }
+ *     beklemeDakika: number (configured idle minutes, default 15), hover: boolean }
  *   cihaz_aio, cihaz_klavye, cihaz_gpu: { durum: 'bagli' | 'bagli_degil' | 'kilitli' | 'hata',
  *     hata: string (the error text, for 'hata'), ad: string (overrides the device name) }
  * Unknown states throw: a plate never shows a state the service did not report.
@@ -808,7 +808,15 @@
         p.fillStyle = ink; const tx = i ? x - 330 : x + 330;
         p.beginPath(); p.moveTo(tx + (i ? 40 : -40), 525); p.lineTo(tx - (i ? 30 : -30), 490); p.lineTo(tx - (i ? 30 : -30), 560); p.closePath(); p.fill();
       });
-      if (d.bosta) engrave(p, 'KLAVYEYE YA DA FAREYE DOKUNUNCA YANAR', w / 2, 812, 'KMKond', 92, ink, 'center', w - 360, 3);
+      if (d.acik === true && d.bosta) {
+        const minutes = finite(d.beklemeDakika) ? d.beklemeDakika.toLocaleString('tr-TR') : '15';
+        engrave(p, `${minutes} DAKİKADIR KLAVYE VE FARE KULLANILMADI`, w / 2, 730, 'KMKond', 84, ink, 'center', w - 360, 2);
+        engrave(p, 'IŞIKLAR YUMUŞAKÇA SÖNDÜ', w / 2, 820, 'KMKond', 84, ink, 'center', w - 360, 2);
+        engrave(p, 'KLAVYEYE YA DA FAREYE DOKUNUNCA YANAR', w / 2, 910, 'KMKond', 78, ink, 'center', w - 360, 2);
+      } else if (d.acik === false) {
+        engrave(p, 'IŞIKLAR KAPALIYKEN DE', w / 2, 782, 'KMKond', 100, ink, 'center', w - 360, 3);
+        engrave(p, 'RENK HESAPLANIYOR', w / 2, 886, 'KMKond', 100, ink, 'center', w - 360, 3);
+      }
     }, wear), 0, 0);
     holes.forEach(([x, y], i) => screw(c, x, y, 16, h32(i, 4, seed) * 3));
   }
@@ -830,16 +838,19 @@
       p.strokeStyle = metal; p.lineWidth = 8; p.strokeRect(92, 26, w - 184, h - 52);
       put(p, up(d.ad || DEVICES[name]), 140, 186, 'KMKond', 128, metal, 'left', w - 280, 3);
       p.fillStyle = metal; p.fillRect(140, 236, w - 280, 5);
-      put(p, 'DURUM', 140, 380, 'KMMono', 64, metal, 'left', 300, 6);
+      put(p, 'DURUM', 140, state === 'kilitli' ? 342 : 380, 'KMMono', 64, metal, 'left', 300, 6);
+      if (state === 'kilitli') put(p, 'BU DERLEMEDE KARTA YOL YOK', w / 2, 458, 'KMKond', 96, metal, 'center', w - 280, 2);
     }, wear), 0, 0);
     // the state flag behind a small window
     const [word, flag, ink] = FLAGS[state], text = word || up(d.hata || 'CİHAZ HATASI');
-    const fx = 420, fy = 284, fw = w - fx - 140, fh = 152;
+    const fx = 420, fy = state === 'kilitli' ? 264 : 284, fw = w - fx - 140, fh = state === 'kilitli' ? 104 : 152;
     c.fillStyle = '#050505'; c.fillRect(fx - 10, fy - 10, fw + 20, fh + 20);
     c.fillStyle = flag; c.fillRect(fx, fy, fw, fh);
     const sh = c.createLinearGradient(0, fy, 0, fy + fh); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(.25, 'rgba(0,0,0,0)');
     c.fillStyle = sh; c.fillRect(fx, fy, fw, fh);
-    const Lw = wrap(c, text, 'KMKond', 112, fw - 60, 2), lh = Lw.px * 1.02;
+    const Lw = wrap(c, text, 'KMKond', Math.min(112, fh * .8), fw - 60, 2);
+    Lw.px = Math.min(Lw.px, Math.floor(fh / (Lw.lines.length * 1.12)));
+    const lh = Lw.px * 1.02;
     const y0 = fy + fh / 2 - (Lw.lines.length - 1) * lh / 2 + Lw.px * .34;
     Lw.lines.forEach((s, i) => put(c, s, fx + 30, y0 + i * lh, 'KMKond', Lw.px, ink, 'left', fw - 60, 2));
     holes.forEach(([x, y], i) => { c.fillStyle = '#0a0a0a'; c.beginPath(); c.arc(x, y, 18, 0, 7); c.fill();
