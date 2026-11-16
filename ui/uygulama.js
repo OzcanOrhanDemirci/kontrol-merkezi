@@ -532,7 +532,7 @@ function step(dt) {
   const pose = W ? W.camera(dt, drift(journey.pose(M.s))) : drift(journey.pose(M.s));
   S.setCamera(pose.eye, add(pose.eye, pose.dir), pose.fov);
   // the eye half adapts to the dark when the lights are out
-  S.setExposure(exposureAt(W ? W.s(M.s) : M.s) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
+  S.setExposure((W ? W.exposure(exposureAt(M.s)) : exposureAt(M.s)) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
   for (const n of Object.keys(M.rot)) S.setRotor(n, M.rot[n], M.w[n]);
   updateHaze();
   updateLamps();
@@ -660,7 +660,7 @@ window.__km = {
     if (window.KM_LEVHA) await KM_LEVHA.ready;
     S = await window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2) });
     journey = buildJourney(S.views);
-    if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick });
+    if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick, exposureAt });
     S.ready = true;
   } catch (err) {
     console.error(err);

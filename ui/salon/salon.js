@@ -969,6 +969,94 @@ async function create(canvas, options = {}) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, tg.levels - 1);
   }
 
+  // the frame's own brightness (eye adaptation, ui/yuruyus.js): bloom level 0 (the scene composited with the haze at
+  // the haze's size, before exposure) halved by linear blits (exact 2x2 means) down to at most 64 texels wide, so
+  // the whole screen is measured; read into a PBO behind a fence and picked up a frame or two later, never with a
+  // synchronous readPixels. Off until setMeter(true). (Not the bloom chain's own smallest level: the down pass
+  // takes its texel step from the wrong level there, so that level samples a few points, not the screen.)
+  const meter = { on: false, every: 4, ring: [], next: 0, n: 0, data: null, value: null, chain: [], src: '', readMs: 0 };
+  function meterChain() {
+    const key = T.bloom.w + 'x' + T.bloom.h;
+    if (meter.src === key) return meter.chain;
+    for (const c of meter.chain) { gl.deleteFramebuffer(c.fb); gl.deleteTexture(c.t); }
+    meter.chain = []; meter.src = key;
+    let w = T.bloom.w, h = T.bloom.h;
+    while (w > 64) {
+      w = Math.max(1, w >> 1); h = Math.max(1, h >> 1);
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA16F, w, h);
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      meter.chain.push({ t, fb, w, h });
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return meter.chain;
+  }
+  // three PBOs in a ring: a buffer is written again only after it was read (one written while its fence was pending
+  // lost Chromium's readback shadow and turned the read into a stall)
+  function meterPoll() {
+    for (let k = 0; k < meter.ring.length; k++) {
+      const r = meter.ring[(meter.next + k) % meter.ring.length];   // oldest first
+      if (!r.sync) continue;
+      const st = gl.clientWaitSync(r.sync, 0, 0);
+      if (st === gl.TIMEOUT_EXPIRED) return;
+      if (st !== gl.WAIT_FAILED && r.n === meter.n) {
+        const t0 = performance.now();
+        gl.bindBuffer(gl.COPY_READ_BUFFER, r.pbo);
+        gl.getBufferSubData(gl.COPY_READ_BUFFER, 0, meter.data, 0, r.n * 4);
+        meter.readMs = performance.now() - t0;
+        gl.bindBuffer(gl.COPY_READ_BUFFER, null);
+        let lsum = 0, sum = 0, max = 0;
+        for (let i = 0; i < r.n; i++) {
+          const y = 0.2126 * meter.data[i * 4] + 0.7152 * meter.data[i * 4 + 1] + 0.0722 * meter.data[i * 4 + 2];
+          const v = y > 0 && isFinite(y) ? y : 0;
+          lsum += Math.log(v + 1e-5); sum += v; if (v > max) max = v;
+        }
+        meter.value = { logAvg: Math.exp(lsum / r.n), mean: sum / r.n, max, frame: r.frame, readMs: meter.readMs };
+      }
+      gl.deleteSync(r.sync); r.sync = null;
+    }
+  }
+  function meterSample() {
+    const chain = meterChain();
+    let src = T.bloom.fbs[0], sw = T.bloom.w, sh = T.bloom.h;
+    const last = chain.length ? chain[chain.length - 1] : null, n = last ? last.w * last.h : sw * sh;
+    if (meter.n !== n) {
+      for (const r of meter.ring) { if (r.sync) gl.deleteSync(r.sync); gl.deleteBuffer(r.pbo); }
+      meter.n = n; meter.data = new Float32Array(n * 4);
+      meter.ring = [0, 1, 2].map(() => {
+        const pbo = gl.createBuffer();
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, n * 16, gl.STREAM_READ);
+        return { pbo, sync: null, n, frame: -1 };
+      });
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      meter.next = 0;
+    }
+    const slot = meter.ring[meter.next];
+    if (slot.sync) return;                       // all three in flight: skip this frame's measurement
+    if (frames % meter.every) return;            // the read costs 0.2-0.7 ms of the main thread (measured headless)
+    for (const c of chain) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, c.fb);
+      gl.blitFramebuffer(0, 0, sw, sh, 0, 0, c.w, c.h, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+      src = c.fb; sw = c.w; sh = c.h;
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, src);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.pbo);
+    gl.readPixels(0, 0, sw, sh, gl.RGBA, gl.FLOAT, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    slot.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    slot.frame = frames;
+    meter.next = (meter.next + 1) % meter.ring.length;
+    gl.flush();
+  }
+
   let combinedFor = null, combinePhase = 0;
   // all slices when a colour jumps; otherwise every 4th slice per frame, interleaved in z (the core's breathing and
   // the smoothed temperature colour move a colour every frame: recombining all of it cost 1.3 ms a frame, 11-17).
@@ -999,6 +1087,7 @@ async function create(canvas, options = {}) {
     resize();
     time += Math.max(0, dt || 0);
     pollTimers();
+    if (meter.on) meterPoll();
     timing.frame = [];
     if (levhaJobs.size) pumpLevha();
     // eased hover (a small lift in about a tenth of a second)
@@ -1043,6 +1132,7 @@ async function create(canvas, options = {}) {
         bindTex(UNIT.uScene, gl.TEXTURE_2D, T.scene.t);
         bindTex(UNIT.uHaze, gl.TEXTURE_2D, T.haze.t);
       });
+      if (meter.on) meterSample();
       mipChain(T.bloom);
       bloomUp(T.bloom);
     });
@@ -1151,6 +1241,8 @@ async function create(canvas, options = {}) {
     disposed = true;
     for (const f of timing.frames) for (const [, q] of f) gl.deleteQuery(q);
     while (owned.length) { const [kind, o] = owned.pop(); gl['delete' + kind](o); }
+    for (const r of meter.ring) { if (r.sync) gl.deleteSync(r.sync); gl.deleteBuffer(r.pbo); }
+    for (const c of meter.chain) { gl.deleteFramebuffer(c.fb); gl.deleteTexture(c.t); }
     bytes = 0;
   }
 
@@ -1197,6 +1289,8 @@ async function create(canvas, options = {}) {
     setExposure(ev) { exposure = Math.pow(2, ev || 0); },
     setHover(name) { hoverName = name || null; },
     setTime(t) { time = t; },
+    setMeter(on, every) { meter.on = !!on; if (every) meter.every = Math.max(1, every | 0); if (!on) meter.value = null; },        // the frame's brightness, read back asynchronously (meter())
+    meter() { if (meter.on) meterPoll(); return meter.value; },   // { logAvg, mean, max (linear, before exposure), frame } or null
     setHeat(h) { heat = Math.min(1, Math.max(0, h || 0)); },   // the arch opening's shimmer (0..1, from the temperature)
     setQuality(q) { Object.assign(Q, q); T = null; W = 0; resize(); },
     render,
