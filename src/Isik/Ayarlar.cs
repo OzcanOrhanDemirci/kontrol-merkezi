@@ -67,9 +67,14 @@ public sealed class Ayarlar
     public bool GpuAcilistaKarart = true;
 
     /// <summary>Pause after each write to the card's light controller, ms (MSI's pace 30 = ~8 colour changes/s).</summary>
-    public int GpuYazmaArasiMs = 30;
+    public int GpuYazmaArasiMs = 25;
     /// <summary>Pause after the card's steady-mode write instead of GpuYazmaArasiMs, ms; -1 = the same.</summary>
     public int GpuSabitSonrasiMs = -1;
+
+    /// <summary>The card gets eye-encoded (sRGB) values instead of linear light: its chip shows the dark end of each
+    /// colour coarsely, and a transition stepped visibly with linear values (A/B on the card 11-16, Özcan: "basamaklanma
+    /// var ama azaldı [...] kabul edilebilir").</summary>
+    public bool GpuGozeGore = true;
 
 
     /// <summary>Lights fade out after this many minutes without real mouse/keyboard input (0 = never). Özcan 11-16:
@@ -137,6 +142,7 @@ public sealed class Ayarlar
             if (d.TryGetValue("gpuAcilistaKarart", out var gk) && gk is bool gkb) a.GpuAcilistaKarart = gkb;
             if (d.TryGetValue("gpuYazmaArasiMs", out var gm)) a.GpuYazmaArasiMs = Math.Max(0, Math.Min(50, Convert.ToInt32(gm)));
             if (d.TryGetValue("gpuSabitSonrasiMs", out var gs)) a.GpuSabitSonrasiMs = Math.Max(-1, Math.Min(100, Convert.ToInt32(gs)));
+            if (d.TryGetValue("gpuGozeGore", out var gg) && gg is bool ggb) a.GpuGozeGore = ggb;
             var all = a.Duraklar.Select(x => x.Renk)
                 .Concat(a.CihazRenkleri.Values.SelectMany(c => c.Duraklar ?? new int[0][]))
                 .Where(x => x != null);
@@ -156,7 +162,7 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: kapali = true ise hiçbir efekt yok, yalnız sıcaklık rengi (90 °C uyarısı kalır); yerel model (0 = yok, 1-5) ve işlemci yükü (1-2) efektinin adayı. gpuAcilistaKarart: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra onu karartır (RGB açıksa sıcaklık rengine geçirir). gpuYazmaArasiMs: karta her yazmadan sonraki bekleme (ms; MSI'ınki 30, saniyede ~8 renk adımı); canlı uygulanır. beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: kapali = true ise hiçbir efekt yok, yalnız sıcaklık rengi (90 °C uyarısı kalır); yerel model (0 = yok, 1-5) ve işlemci yükü (1-2) efektinin adayı. gpuAcilistaKarart: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra onu karartır (RGB açıksa sıcaklık rengine geçirir). gpuYazmaArasiMs: karta her yazmadan sonraki bekleme (ms; 25 = saniyede ~10 renk adımı, kartın aldığı en hızlısı; 20 ve altında renk değişmez); canlı uygulanır. gpuGozeGore: karta göze göre kodlanmış değer gider (geçiş daha az basamaklı). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => { var o = new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }; if (x.Gizli) o["gizli"] = true; return o; }).ToList(),
                 ["uyariDerece"] = UyariDerece,
                 ["beklemeDakika"] = BeklemeDakika,
@@ -164,6 +170,7 @@ public sealed class Ayarlar
                 ["gpuAcilistaKarart"] = GpuAcilistaKarart,
                 ["gpuYazmaArasiMs"] = GpuYazmaArasiMs,
                 ["gpuSabitSonrasiMs"] = GpuSabitSonrasiMs,
+                ["gpuGozeGore"] = GpuGozeGore,
                 ["kazanc"] = Kazanc,
                 ["cihazRenkleri"] = CihazRenkleri.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
                 {

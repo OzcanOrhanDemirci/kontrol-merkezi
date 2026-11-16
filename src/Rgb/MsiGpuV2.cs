@@ -50,7 +50,7 @@ public sealed class MsiGpuV2 : IRgbCihaz
     /// (ayarlar.json gpuYazmaArasiMs, live reload): Özcan 11-16 wants it raised in stages, like an overclock, and kept
     /// a step below the first stage that misbehaves.</summary>
     public int YazmaArasiMs { get => yazmaArasi; set => yazmaArasi = Math.Max(0, Math.Min(50, value)); }
-    volatile int yazmaArasi = 30;
+    volatile int yazmaArasi = 25;
 
     /// <summary>Pause after the steady-mode write (22=13) instead of YazmaArasiMs; -1 = the same. Stages 11-16: 25 ms after
     /// every write is taken, 10 and 5 ms are silently ignored (the card stays on its colour, no error); this tests

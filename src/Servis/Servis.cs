@@ -578,10 +578,13 @@ sealed class Servis : IDisposable
             Lin[] src = d.Kimlik == "aio" ? _motor.Aio : d.Kimlik == "klavye" ? _motor.Klavye : _motor.Gpu;
             if (!_frames.TryGetValue(d, out var frame) || frame.Length != d.LedSayisi) _frames[d] = frame = new Rgb.Rgb[d.LedSayisi];
             var gain = _ayar.Kazanc.TryGetValue(d.Kimlik, out var k) ? k : new[] { 1.0, 1.0, 1.0 };
+            bool goz = d.Kimlik == "gpu" && _ayar.GpuGozeGore;   // the card's chip wants eye-encoded values (Ayarlar.GpuGozeGore)
             for (int j = 0; j < frame.Length; j++)
             {
                 var c = src[j < src.Length ? j : src.Length - 1];
-                frame[j] = new Rgb.Rgb(B8(c.R * gain[0]), B8(c.G * gain[1]), B8(c.B * gain[2]));
+                var k2 = new Lin(c.R * gain[0], c.G * gain[1], c.B * gain[2]);
+                if (goz) { k2.ToSrgb(out int r, out int g, out int b); frame[j] = new Rgb.Rgb((byte)r, (byte)g, (byte)b); }
+                else frame[j] = new Rgb.Rgb(B8(k2.R), B8(k2.G), B8(k2.B));
             }
             w.Kare(frame);
         }
