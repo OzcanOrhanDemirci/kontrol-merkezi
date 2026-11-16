@@ -219,7 +219,7 @@ chains); the rotors 37 k and 43 k triangles, the levers 3 k each. Anchors (40): 
 `git_fanlar`, `cikis_1`, `cikis_2`, `anahtar_rgb` (tik); `boya_*`, `pano_*`, `uyari_*`, `tabela_rgb`, `tabela_fanlar`,
 `cikis_1`, `cikis_2`, `kilit_tasi_ekran`, `durak_plaka_0..5`, `plaka_rgb`, `cihaz_aio|klavye|gpu` (levha); `kol_kasa`,
 `kol_gpu`, `kol_rgb`, `durak_0..5` (cold to hot from lower left to lower right), `lamba_aio|klavye|gpu` (nokta).
-Volumes: `salon` 0.5 m (122 × 69 × 563 cells), `kuyu` 0.1 m (104 × 336 × 175), `fan_kasa`, `fan_gpu` 0.2 m
+Volumes: `salon` 0.5 m (122 × 69 × 563 cells), `kuyu` 0.15 m (70 × 224 × 117; 0.1 m was 6.1 M cells, ~290 MB), `fan_kasa`, `fan_gpu` 0.2 m
 (63 × 66 × 70 each), `kemer` 0.25 m (120 × 104 × 92).
 
 `salon.exe dump --out DIR` writes the scene as plain binaries + JSON; `python sahne/araclar/geo_onizle.py DIR` renders the

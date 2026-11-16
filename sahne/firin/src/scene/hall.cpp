@@ -90,7 +90,7 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
 
         // baked light in the air: the whole hall coarse; finer round the shaft's beam, the fans and the arch
         addVolume(s, "salon", make_float3(-30.5f, -0.5f, -276.0f), make_float3(30.5f, 34.0f, 5.5f), 0.5f);
-        addVolume(s, "kuyu", make_float3(-5.2f, 0.0f, -43.0f), make_float3(5.2f, 33.6f, -25.5f), 0.1f);
+        addVolume(s, "kuyu", make_float3(-5.2f, 0.0f, -43.0f), make_float3(5.2f, 33.6f, -25.5f), 0.15f);   // 0.1 m was 6.1 M cells (~290 MB for 3 groups)
         addVolume(s, "fan_kasa", make_float3(-16.6f, 2.0f, -31.0f), make_float3(-4.0f, 15.2f, -17.0f), 0.2f);
         addVolume(s, "fan_gpu", make_float3(4.0f, 2.0f, -31.0f), make_float3(16.6f, 15.2f, -17.0f), 0.2f);
         addVolume(s, "kemer", make_float3(-15.0f, 0.0f, -268.0f), make_float3(15.0f, 26.0f, -245.0f), 0.25f);
