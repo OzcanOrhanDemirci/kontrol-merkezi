@@ -969,8 +969,11 @@ async function create(canvas, options = {}) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, tg.levels - 1);
   }
 
-  let combinedFor = null;
-  function combineVolumes() {
+  let combinedFor = null, combinePhase = 0;
+  // all slices when a colour jumps; otherwise every 4th slice per frame, interleaved in z (the core's breathing and
+  // the smoothed temperature colour move a colour every frame: recombining all of it cost 1.3 ms a frame, 11-17).
+  // A slice lags at most 3 frames; neighbouring slices differ by under 0.5 % then, and the filtering blends them.
+  function combineVolumes(all) {
     const pr = programs.combine;
     gl.useProgram(pr.p);
     gl.bindVertexArray(quad);
@@ -980,13 +983,14 @@ async function create(canvas, options = {}) {
       gl.bindTexture(gl.TEXTURE_3D, v.raw);
       gl.uniform3i(pr.u.uN, v.n[0], v.n[1], v.n[2]);
       gl.viewport(0, 0, 4 * v.n[0], v.n[1]);
-      for (let z = 0; z < v.n[2]; z++) {
+      for (let z = all ? 0 : combinePhase; z < v.n[2]; z += all ? 1 : 4) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, v.slices[z]);
         gl.uniform1i(pr.u.uZ, z);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
     }
-    combinedFor = groupUniform.slice();
+    combinePhase = (combinePhase + 1) & 3;
+    if (all || combinePhase === 0) combinedFor = groupUniform.slice();
   }
   function render(dt = 1 / 60, shutter = 1 / 60) {
     if (disposed) return;
@@ -1005,9 +1009,13 @@ async function create(canvas, options = {}) {
     }
     for (let g = 0; g < 3; g++) groupUniform.set(scl(groups[g].slice(0, 3), groups[g][3]), g * 3);
     // the volumes follow the light's colours: recombined when a colour moved (by more than a ten-thousandth)
-    let moved = !combinedFor;
-    for (let i = 0; i < 9 && !moved; i++) moved = Math.abs(groupUniform[i] - combinedFor[i]) > 1e-4 * Math.max(1e-3, Math.abs(combinedFor[i]));
-    if (moved) timed('volumes', combineVolumes);
+    let moved = !combinedFor || combinePhase !== 0, jump = !combinedFor;
+    for (let i = 0; i < 9 && combinedFor; i++) {
+      const r = Math.abs(groupUniform[i] - combinedFor[i]) / Math.max(1e-3, Math.abs(combinedFor[i]));
+      if (r > 1e-4) moved = true;
+      if (r > 0.02) jump = true;
+    }
+    if (moved) timed('volumes', () => combineVolumes(jump));
     for (const d of dyn) d.shutter = shutter || 0;
     cam = cameraOf(eye, look, fov, W / H);
 

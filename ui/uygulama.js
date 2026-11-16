@@ -598,6 +598,7 @@ function reportPerf() {
        (gm != null ? ` gpu=${gm.toFixed(1)}ms` : '') + ` n=${a.length} k=${PACE.k} yenileme=${PACE.refresh.toFixed(2)} yer=${M.place} s=${M.s.toFixed(0)}` +
        ` uzun-gorev=${PACE.lt.n}${PACE.lt.n ? '/' + PACE.lt.max.toFixed(0) + 'ms@' + PACE.lt.at.toFixed(2) + 's' : ''}`);
   PACE.lt = { n: 0, max: 0 };
+  PACE.missN = 0;
 }
 function frame(now) {
   raf = 0;
@@ -617,7 +618,14 @@ function frame(now) {
   S.render(dt, Math.min(dt, PACE.k * PACE.refresh / 1000));
   const st = S.stats();
   if (st && st.gpuMs > 0) { GPU.push(st.gpuMs); if (GPU.length > 240) GPU.shift(); }
-  if (lastFrameNow) { const iv = now - lastFrameNow; perfWin.push(iv); PACE.recent.push(iv); }
+  if (lastFrameNow) {
+    const iv = now - lastFrameNow; perfWin.push(iv); PACE.recent.push(iv);
+    // every late frame, with what it did: the witness for the hitches (at most 12 lines per 10 s window)
+    if (host && iv > (PACE.k + 0.5) * PACE.refresh && (PACE.missN = (PACE.missN || 0) + 1) <= 12)
+      send(`perf:gec iv=${iv.toFixed(1)} gpu=${st && st.gpuMs != null ? st.gpuMs.toFixed(1) : '?'} js=${(performance.now() - now).toFixed(1)}` +
+           ` onceki-js=${(PACE.lastJs || 0).toFixed(1)} levha=${Object.keys(levhaFlight).length} s=${M.s.toFixed(0)} v=${M.v.toFixed(1)}`);
+  }
+  PACE.lastJs = performance.now() - now;
   lastFrameNow = now;
   if (host && now - perfAt > 10000) { perfAt = now; reportPerf(); }
   if (window.__km && window.__km.onFrame) window.__km.onFrame(now);
