@@ -7,7 +7,7 @@ in vec3 vN;
 in vec4 vT;
 in vec2 vUv;
 in vec2 vLm;
-flat in int vEm;
+in float vOwn;
 layout(location = 0) out vec4 outColor;
 
 uniform sampler2DArray uAlb, uNrm, uArm;   // material textures, one layer per Poly Haven set
@@ -16,7 +16,6 @@ uniform sampler2DArray uLmO;               // the openness within 0.5 m, layer =
 uniform sampler2D uLevha;                  // the live texture of this draw (signs, boards, displays)
 uniform sampler2D uRefl;                   // the floor's reflection (mip chain)
 uniform sampler3D uNoise;                  // smooth tiled noise (the puddles)
-uniform sampler2D uEmitTab;                // the small emitters (salon.js emitterTable): row 6, the lens' own share
 
 layout(std140) uniform Materials {
     vec4 uMatA[64];   // uv scale (m per repeat), texture layer (-1: none), roughness (-1: map), metal (-1: map)
@@ -176,7 +175,7 @@ void main() {
         }
     }
     // a small lens' emission goes partly or wholly to its footprint (emit.frag): what is left of it here
-    float own = vEm > 0 ? texelFetch(uEmitTab, ivec2(vEm - 1, 6), 0)[uMirror > 0.5 ? 1 : 0] : 1.0;
+    float own = vOwn;
     if (C.x >= 0.0) emit += own * uGroup[int(C.x + 0.5)] * B.rgb * B.w;
     emit += own * uLamp * (1.0 + 0.3 * hover);
 
