@@ -103,14 +103,18 @@ void main() {
     s.albedo *= 1.0 + 0.18 * hover;
     emit *= 1.0 + 0.3 * hover;
 
-    // the wet floor: puddles (a smooth fixed mask) are near-mirrors and darker, the rest stays rough
+    // the wet floor: puddles (a smooth fixed mask) are near-mirrors and darker, the rest stays rough. Their outline
+    // follows the concrete's own low, smooth spots (its roughness map: water gathers where the surface is worn smooth),
+    // so the edges are irregular, not noise blobs; round each puddle a damp margin: darker, glossier concrete
     float puddle = 0.0;
     if (wet) {
         float m = texture(uNoise, vec3(vP.xz * 0.021, 0.37)).r * 0.65 + texture(uNoise, vec3(vP.xz * 0.083, 0.71)).r * 0.35;
-        puddle = smoothstep(0.54, 0.62, m);
-        s.albedo *= mix(0.85, 0.45, puddle);
-        s.rough = mix(s.rough * 0.85, 0.04, puddle);
-        s.n = normalize(mix(s.n, Ng, 0.85 * puddle));
+        m += (0.55 - s.rough) * 0.16;
+        puddle = smoothstep(0.575, 0.615, m);
+        float damp = smoothstep(0.50, 0.575, m) * (1.0 - puddle);
+        s.albedo *= mix(mix(0.85, 0.6, damp), 0.45, puddle);
+        s.rough = mix(mix(s.rough * 0.85, s.rough * 0.45, damp), 0.04, puddle);
+        s.n = normalize(mix(s.n, Ng, 0.85 * puddle + 0.3 * damp));
     }
     s.rough = clamp(s.rough, 0.03, 1.0);
     s.metal = clamp(s.metal, 0.0, 1.0);
