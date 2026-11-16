@@ -50,7 +50,7 @@ constexpr float kBulbBoard = 0.085f; //   bulb radius by the fans' stencils, the
 constexpr float kBulbHall = 0.055f;  //   bulb radius of the sparse row along the hall's walls: dimmer by the area
 // Phase 2, all group 0 (kuyu): the facility's own light circuit, always in the temperature colour (group 1 is the
 // arch's and falls to an ember with RGB off; group 2 is fixed warm white). The fake daylight's circuit lights the way up
-constexpr float kMerdivenL = 12.0f;  // group 0: each stair lamp's lens (a 6 cm disc, Lambertian): dim pools on the treads
+constexpr float kMerdivenL = 24.0f;  // group 0 (x2 after the 11-17 preview: too faint to pool on the treads): each stair lamp's lens (a 6 cm disc, Lambertian): dim pools on the treads
 constexpr float kCatiL = 0.06f;      // group 0: the roof lamp's roof-side glow under its louvres (6 % of the daylight)
 constexpr float kFenerL = 60.0f;     // group 0: the mast lamp's globe (r 0.1 m): a point seen far through the fog
 
