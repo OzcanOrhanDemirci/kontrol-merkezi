@@ -79,6 +79,7 @@ struct Anchor {
     std::string atlas;         // levha: which drawn texture goes on it
     float size[2] = {0, 0};    // levha: the face's width and height (m)
     int material = -1;         // levha: the material of the face it is drawn on
+    float3 pivot{0, 0, 0}, axis{1, 0, 0}; // moving nokta: world hinge pivot / axis
 };
 
 struct View {
