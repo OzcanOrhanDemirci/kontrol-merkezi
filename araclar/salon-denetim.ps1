@@ -33,7 +33,8 @@ param(
     [double]$Sicaklik = 72,
     [int]$Ekran = 0,
     [int]$BosSure = 300,
-    [switch]$KayitYok
+    [switch]$KayitYok,
+    [int]$Hz = 30
 )
 $ErrorActionPreference = "Stop"
 $inv = [Globalization.CultureInfo]::InvariantCulture
@@ -317,7 +318,7 @@ try {
         $mkv = Join-Path $cikti "kayit.mkv"
         $ffLog = Join-Path $cikti "ffmpeg.txt"
         # ddagrab hands D3D11 frames straight to NVENC; mkv survives a hard stop
-        $arg = "-hide_banner -y -f lavfi -i ddagrab=output_idx=${Ekran}:framerate=30:draw_mouse=0 " +
+        $arg = "-hide_banner -y -f lavfi -i ddagrab=output_idx=${Ekran}:framerate=${Hz}:draw_mouse=0 " +
                "-c:v h264_nvenc -preset p4 -rc vbr -cq 27 -b:v 8M -maxrate 16M -g 60 `"$mkv`""
         $psi = New-Object System.Diagnostics.ProcessStartInfo "cmd.exe", "/c `"`"$($ffmpeg.Source)`" $arg 2> `"$ffLog`"`""
         $psi.UseShellExecute = $false; $psi.RedirectStandardInput = $true; $psi.CreateNoWindow = $true

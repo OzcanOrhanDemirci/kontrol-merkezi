@@ -675,6 +675,28 @@ async function create(canvas, options = {}) {
   const groupUniform = new Float32Array(9);
   let exposure = 1, time = 0, haze = { density: 1, fans: [] }, hoverName = null, heat = 0;
   const levha = new Map();                       // atlas name -> { t, w, h, emissive }
+  const levhaJobs = new Map();                   // atlas name -> { lv, bytes, row, emissive }: strips still to upload
+  const LEVHA_BYTES_PER_FRAME = 4 << 20;         // ~1 ms of upload a frame (16 MB measured 3.5 ms, 2 MB 0.2 ms)
+  function pumpLevha() {
+    let budget = LEVHA_BYTES_PER_FRAME;
+    for (const [name, j] of levhaJobs) {
+      const { lv } = j, rowBytes = lv.w * 4;
+      const rows = Math.max(1, Math.min(lv.h - j.row, Math.floor(budget / rowBytes)));
+      gl.bindTexture(gl.TEXTURE_2D, lv.next);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, j.row, lv.w, rows, gl.RGBA, gl.UNSIGNED_BYTE,
+        new Uint8Array(j.bytes.buffer || j.bytes, j.row * rowBytes, rows * rowBytes));
+      j.row += rows;
+      budget -= rows * rowBytes;
+      if (j.row >= lv.h) {
+        gl.generateMipmap(gl.TEXTURE_2D);
+        const t = lv.t; lv.t = lv.next; lv.next = t;
+        lv.emissive = j.emissive;
+        levhaJobs.delete(name);
+      }
+      if (budget <= 0) break;
+    }
+  }
   const lamps = new Map();                       // anchor name -> [r, g, b] * k
   const hoverAmt = new Map();                    // anchor name -> 0..1 (eased)
   const linked = {};                             // tik anchor name -> the levha/nokta anchors it lifts
@@ -974,6 +996,7 @@ async function create(canvas, options = {}) {
     time += Math.max(0, dt || 0);
     pollTimers();
     timing.frame = [];
+    if (levhaJobs.size) pumpLevha();
     // eased hover (a small lift in about a tenth of a second)
     const lift = new Set(hoverName ? (linked[hoverName] || [hoverName]) : []);
     for (const a of holders) {
@@ -1079,8 +1102,30 @@ async function create(canvas, options = {}) {
         lo = Math.max(lo, t0); hi = Math.min(hi, t1);
       }
       if (!ok || hi < Math.max(lo, 0)) continue;
-      const t = Math.max(lo, 0);
+      let t = Math.max(lo, 0);
+      // a fan's box is a slab in front of the whole wall: only its disc counts, at the disc, so what is seen past the
+      // disc (the exit sign beyond the CPU fan, 11-17: every click on it toggled the fan) is picked, not the fan
+      const rot = dyn.find(r => r.rotor && r.name === a.ad + '_rotor');
+      if (rot) {
+        const dn = dot(d, rot.axis);
+        if (Math.abs(dn) < 1e-6) continue;
+        const td = dot(sub(rot.centre, c.eye), rot.axis) / dn;
+        if (td <= 0 || len(sub(add(c.eye, scl(d, td)), rot.centre)) > rot.rmax * 1.02) continue;
+        t = td;
+      }
       if (t < best) { best = t; hit = a.ad; }
+    }
+    // a far small control (the exit sign seen from the entrance is ~70 x 25 px) is also taken within 18 px of its box's
+    // centre on screen, when nothing else is under the pointer
+    if (!hit) {
+      let bd = 18;
+      for (const a of anchorList) {
+        if (a.tur !== 'tik' || !a.kutu) continue;
+        const q = project(a.kutu.merkez);
+        if (!q || q.z <= 0 || q.z > 60) continue;   // not the far end's exit sign from the entrance
+        const dd = Math.hypot(q.x - x, q.y - y);
+        if (dd < bd) { bd = dd; hit = a.ad; }
+      }
     }
     return hit;
   }
@@ -1126,6 +1171,18 @@ async function create(canvas, options = {}) {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
       gl.generateMipmap(gl.TEXTURE_2D);
       lv.emissive = Math.max(0, opts.emissive || 0);
+    },
+    // the same as setLevha from raw RGBA bytes (a worker's drawing), uploaded in strips over the next frames into a
+    // second texture that replaces the shown one when complete: no frame pays for a whole 16 MB upload (11-17)
+    setLevhaBytes(name, w, h, bytes, opts = {}) {
+      const lv = levha.get(name);
+      if (!lv || lv.w !== w || lv.h !== h) return false;
+      if (!lv.next) {
+        lv.next = tex(gl.TEXTURE_2D, { mips: true, aniso: true, bytes: w * h * 4 * 4 / 3 });
+        gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(w, h))) + 1, gl.SRGB8_ALPHA8, w, h);
+      }
+      levhaJobs.set(name, { lv, bytes, row: 0, emissive: Math.max(0, opts.emissive || 0) });
+      return true;
     },
     setLamp(name, c, k) { lamps.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
     setHaze(h) { haze = { ...haze, ...h }; },

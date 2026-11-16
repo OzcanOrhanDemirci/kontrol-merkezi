@@ -50,10 +50,29 @@ let S = null;                      // the renderer
 let journey = null;                // the camera path (built from the pack's views)
 
 // ==================================================================== the journey
-// The path is the pack's centre line from the fanlar eye to the rgb eye; the camera's look is a function of where it
-// is (s), so going back is the same picture in reverse: a slow pull back from the monument, the arch receding.
+// The path runs straight down the central aisle (Özcan, 11-17: "Kameranın betonların etrafından dolaşmasına gerek
+// yok, direk dümdüz rgb alana gidebilir"): the pack's own path only for its first stretch off the landing (it clears
+// the desks and the rail), then x = 0 at a gentle rise to ~7.6 m and a glide down onto the rgb eye over the last 70 m
+// (clearance checked against the dump: the aisle leaves >= 6 m to the columns, nothing hangs in it). The look turns
+// from the entrance's view onto the arch over the first ~45 m and stays on it: the monument grows the whole way, and
+// going back is the same picture in reverse.
+function straightPath(views) {
+  const old = (views.yol && views.yol.length >= 2) ? views.yol : [views.fanlar.goz, views.rgb.goz];
+  const head = old.filter(p => p[2] >= -43.3).map(p => [0, p[1], p[2]]);
+  const end = views.rgb.goz;
+  if (head.length < 2 || end[2] > -100) return old;
+  const z0 = head[head.length - 1][2], y0 = head[head.length - 1][1], ymid = 7.6;
+  const pts = head.slice();
+  for (let z = z0 - 2; z > end[2]; z -= 2) {
+    let y = y0 + (ymid - y0) * smooth((z0 - z) / 60);
+    y += (end[1] - y) * smooth((z - (end[2] + 70)) / -70);
+    pts.push([0, y, z]);
+  }
+  pts.push(end.slice());
+  return pts;
+}
 function buildJourney(views) {
-  const P = (views.yol && views.yol.length >= 2) ? views.yol.slice() : [views.fanlar.goz, views.rgb.goz];
+  const P = straightPath(views);
   const pts = [P[0], ...P, P[P.length - 1]];
   const seg = (i, t) => {                       // Catmull-Rom (uniform) between pts[i+1] and pts[i+2]
     const p0 = pts[i], p1 = pts[i + 1], p2 = pts[i + 2], p3 = pts[i + 3];
@@ -64,7 +83,7 @@ function buildJourney(views) {
   let acc = 0, prev = seg(0, 0);
   for (let i = 0; i < P.length - 1; i++) {
     for (let j = 0; j < 24; j++) {
-      const q = seg(i, (j + (i === 0 && j === 0 ? 0 : 0)) / 24);
+      const q = seg(i, j / 24);
       acc += len3(sub(q, prev)); prev = q;
       table.push({ s: acc, p: q });
     }
@@ -88,20 +107,9 @@ function buildJourney(views) {
     pose(s) {
       const eye = at(s);
       const d0 = norm(sub(f0.hedef, eye)), d1 = norm(sub(f1.hedef, eye));
-      const ahead = norm(sub(add(at(s + 32), [0, 0.6, 0]), eye));
-      // through the middle the lane's view across the rows (the hall's width); as the path crosses back through a gap
-      // of the inner row the look swings onto the arch, revealed between the columns, and stays on it, growing
-      const u = s / total, onArch = smooth((u - 0.6) / 0.16);
-      const w0 = 1 - smooth(s / 45), w1 = Math.max(onArch, smooth((s - (total - 70)) / 70));
-      let dir = add(add(mul(d0, w0 * (1 - w1)), mul(d1, w1)), mul(ahead, Math.max(0, 1 - w0 - w1)));
-      if (s >= total - 1e-3) dir = d1;
-      // in the lane between the rows the camera turns across them (up to ~22 degrees towards the aisle), so the view
-      // opens diagonally over the forest of columns instead of down a second corridor; it gives way to the arch
-      const lane = clamp((eye[0] - 6) / 8, 0, 1);
-      const yaw = -0.38 * smooth(lane) * Math.sign(eye[0] || 1) * (1 - onArch);
-      const cy = Math.cos(yaw), sy = Math.sin(yaw), d = norm(dir);
-      dir = [d[0] * cy - d[2] * sy, d[1], d[0] * sy + d[2] * cy];
-      return { eye, dir: norm(dir), fov: lerp(f0.fov || 50, f1.fov || 50, smooth(s / total)) };
+      const w = smooth(s / 45);
+      const dir = s >= total - 1e-3 ? d1 : norm(add(mul(d0, 1 - w), mul(d1, w)));
+      return { eye, dir, fov: lerp(f0.fov || 50, f1.fov || 50, smooth(s / total)) };
     },
   };
 }
@@ -216,14 +224,42 @@ function stepLevers(dt) {
 // ==================================================================== the texts in the world
 // Each texture is redrawn only when what it shows changes (KM_LEVHA.draw is deterministic).
 const levhaKeys = {};
-// a redraw costs 15-35 ms of the main thread and each one cost a frame (the real window, 11-16: 55 ms frames among
-// 30 ms ones): at most one per frame, and none while the camera travels (no text can be read in flight; whatever
-// changed is drawn on arrival)
+// A redraw costs 15-40 ms (the keystone display: 20-25 ms of drawing, 7-22 ms of canvas upload), and on the main
+// thread each one cost frames (his window's log, 11-17: 55-78 ms stalls every few seconds). The first drawing of each
+// texture happens here at start; every redraw after it goes to a worker (levha-isci.js, the same levha.js) and comes
+// back as bytes that the renderer uploads in strips over the next frames. One request per texture in flight; a newer
+// state waiting behind it replaces any older one. Without a worker the old way: one redraw a frame, none in flight.
 let levhaBudget = 1;
+let levhaWorker = null;
+try { levhaWorker = new Worker('salon/levha-isci.js'); } catch (e) { levhaWorker = null; }
+const levhaFlight = {}, levhaWaiting = {};
+let levhaId = 0;
+if (levhaWorker) {
+  levhaWorker.onmessage = e => {
+    const m = e.data;
+    const f = levhaFlight[m.name];
+    delete levhaFlight[m.name];
+    if (m.error || !f) { if (f && m.error) console.error('levha: ' + m.error); levhaWorker.fallback = !!m.error; }
+    else if (S && S.setLevhaBytes && S.setLevhaBytes(m.name, m.w, m.h, new Uint8Array(m.buf), f.opts)) levhaKeys[m.name] = f.key;
+    const w = levhaWaiting[m.name];
+    if (w) { delete levhaWaiting[m.name]; askLevha(m.name, w.data, w.key, w.opts); }
+  };
+  levhaWorker.onerror = () => { levhaWorker.fallback = true; };
+}
+function askLevha(name, data, key, opts) {
+  if (levhaFlight[name]) { levhaWaiting[name] = { data, key, opts }; return; }
+  levhaFlight[name] = { key, opts };
+  levhaWorker.postMessage({ id: ++levhaId, name, data });
+}
 function putLevha(name, data, opts) {
   if (!S || !window.KM_LEVHA || !KM_LEVHA.sizes[name]) return;
   const key = JSON.stringify(data);
   if (levhaKeys[name] === key) return;
+  if (levhaKeys[name] !== undefined && levhaWorker && !levhaWorker.fallback && S.setLevhaBytes) {
+    if ((levhaFlight[name] && levhaFlight[name].key === key) || (levhaWaiting[name] && levhaWaiting[name].key === key)) return;
+    askLevha(name, data, key, opts || {});
+    return;
+  }
   if (levhaKeys[name] !== undefined && (levhaBudget <= 0 || travelling())) return;
   levhaBudget--;
   levhaKeys[name] = key;
@@ -530,24 +566,26 @@ requestAnimationFrame(measureRefresh);
 PACE.lt = { n: 0, max: 0 };
 try { new PerformanceObserver(l => l.getEntries().forEach(e => { PACE.lt.n++; if (e.duration > PACE.lt.max) { PACE.lt.max = e.duration; PACE.lt.at = (e.startTime - bootT) / 1000; } })).observe({ type: 'longtask' }); } catch (e) { /* not supported */ }
 function choosePace() {
-  // never faster than ~30 fps (Özcan, 11-16: "2K da 30 fps yeterli"; there is no free movement): the largest whole
-  // number of refreshes that still gives 30+ (165 Hz: 5 = 33 fps; 60 Hz: 2); the GPU time this frees goes to quality
-  const cap = Math.max(1, Math.floor(1000 / 30 / PACE.refresh + 0.02));
+  // An even cadence of k refreshes, as fast as the GPU allows with margin but never above ~60 fps (11-17: at 165 Hz,
+  // 3 = 55 fps; the 30 fps of the first build stepped visibly at the journey's speed: "takıla takıla akıcı"). The GPU's
+  // work runs beside the next frame's script, so the budget is the whole period less the compositor's share.
+  const kmin = Math.max(1, Math.ceil((1000 / 60 - 0.3) / PACE.refresh));
   const g = GPU.slice(-60);
   if (g.length >= 12) {
     const s2 = g.slice().sort((x, y) => x - y), med = s2[s2.length >> 1];
-    const k = Math.max(cap, clamp(Math.ceil((med * 1.3 + 2.0) / PACE.refresh - 0.02), 1, 8));
+    const need = med * 1.15 + 1.5;
+    const k = Math.max(kmin, clamp(Math.ceil(need / PACE.refresh - 0.02), 1, 8));
     if (!PACE.decided) { PACE.decided = true; PACE.k = k; return; }
     if (k > PACE.k) { PACE.down = 0; if (++PACE.up >= 2) { PACE.k = k; PACE.up = 0; } }
-    else if (k < PACE.k && (med * 1.3 + 2.0) < (PACE.k - 1) * PACE.refresh * 0.85) { PACE.up = 0; if (++PACE.down >= 3) { PACE.k = k; PACE.down = 0; } }
+    else if (k < PACE.k && need < (PACE.k - 1) * PACE.refresh * 0.85) { PACE.up = 0; if (++PACE.down >= 3) { PACE.k = k; PACE.down = 0; } }
     else { PACE.up = 0; PACE.down = 0; }
     return;
   }
-  if (!PACE.decided) { PACE.decided = true; PACE.k = cap; PACE.recent.length = 0; return; }
+  if (!PACE.decided) { PACE.decided = true; PACE.k = Math.max(kmin, 3); PACE.recent.length = 0; return; }
   const iv = PACE.recent.splice(0);
   if (iv.length < 20) return;
   const miss = iv.filter(x => x > (PACE.k + 0.5) * PACE.refresh).length / iv.length;
-  if (miss > 0.04) { if (++PACE.up >= 2) { PACE.k = Math.min(cap + 3, PACE.k + 1); PACE.up = 0; } } else PACE.up = 0;
+  if (miss > 0.04) { if (++PACE.up >= 2) { PACE.k = Math.min(kmin + 4, PACE.k + 1); PACE.up = 0; } } else PACE.up = 0;
 }
 function reportPerf() {
   const a = perfWin.slice().sort((x, y) => x - y);
@@ -570,7 +608,10 @@ function frame(now) {
     PACE.last = now;
   }
   if (++PACE.n % 60 === 0) choosePace();
-  const dt = lastT ? Math.min(0.1, (now - lastT) / 1000) : 1 / 60;
+  // the world advances by whole refreshes: rAF timestamps jitter by a fraction of a refresh, and a frame shown for k
+  // refreshes must have moved the camera by exactly k refreshes' worth, or even pacing still judders
+  const nRef = lastT ? Math.max(1, Math.round((now - lastT) / PACE.refresh)) : PACE.k;
+  const dt = Math.min(0.1, nRef * PACE.refresh / 1000);
   lastT = now;
   step(dt);
   S.render(dt, Math.min(dt, PACE.k * PACE.refresh / 1000));
