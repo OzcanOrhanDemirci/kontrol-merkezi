@@ -45,5 +45,5 @@ void main() {
     float eps = 3.0 * vZ * vZ / (uNearFar.x * 16777216.0);   // the depth's step there (fener.vert)
     float front = mix(vHaloVis.x, smoothstep(vZ - uHaloR - eps, vZ - 0.3 * uHaloR - eps, sz), vHaloVis.y);
     c += vHalo.rgb * h * front;
-    outColor = vec4(c, 1.0);
+    outColor = vec4(c, 0.0);   // added over the masts (salon.js): no cover of its own
 }

@@ -8,7 +8,7 @@ const SCRIPT_BASE = new URL('.', document.currentScript ? document.currentScript
 // the pack is read straight from its files each start; nothing of its ~900 MB goes into the browser's disk cache
 const NO_STORE = { cache: 'no-store' };
 const SHADER_FILES = ['common.glsl', 'scene.vert', 'scene.frag', 'depth.frag', 'rotor.vert', 'rotor.frag', 'quad.vert',
-  'haze.frag', 'post.frag', 'combine.frag', 'dis.vert', 'dis.frag', 'fener.vert', 'fener.frag'];
+  'haze.frag', 'post.frag', 'combine.frag', 'dis.vert', 'dis.frag', 'fener.vert', 'fener.frag', 'direk.vert', 'direk.frag'];
 
 // ==================================================================== small maths (column-major 4x4)
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -650,6 +650,7 @@ async function create(canvas, options = {}) {
   build('dis', 'dis.vert', 'dis.frag', '', DYN_VOLS);   // the lid is lit from the volumes round it
   build('disDepth', 'dis.vert', 'depth.frag');
   build('fener', 'fener.vert', 'fener.frag');
+  build('direk', 'direk.vert', 'direk.frag');
   for (const pass of ['BLOOMPRE', 'DOWN', 'UP', 'REFLCOMP', 'COMPOSE', 'RESOLVEH', 'RESOLVEV'])
     build(pass.toLowerCase(), 'quad.vert', 'post.frag', '#define PASS_' + pass + '\n');
   if (extPar) {
@@ -1162,6 +1163,7 @@ async function create(canvas, options = {}) {
     force: null,                                // tests: true / false overrides the automatic switch
     lampsOff: false,                            // tests: the frame without the lamps' sprites (their own light alone)
     lampsBare: false,                           // tests: the lamps unhidden by the scene (their full light)
+    mastsOff: false,                            // tests: without the far masts' lines
     on: false, inBlock: true, homeHaze: 1, n: 0, lamps: 0, drawn: [0, 0, 0], noInterior: false,
   };
   const voidOn = () => VOID.on;
@@ -1175,18 +1177,28 @@ async function create(canvas, options = {}) {
   const fenerMat = mats.find(m => m.ad === 'dis_fener');
   const lampR = fenerLight ? fenerLight.yaricap : 0.1;
   const lampL = fenerMat ? scl(fenerMat.renk || [1, 1, 1], fenerMat.isima || 0) : [0, 0, 0];
+  // the mast under every lamp (sahne/firin hall_outside.cpp, mast()): 18 m of steel 0.15-0.22 m thick, its top 0.07 m
+  // under the globe; lit only by the fog (dis.frag's ambient: the sky's light from all round x uAmb x its albedo)
+  const koyuMat = mats.find(m => m.ad === 'dis_koyu');
+  const MAST = { below: lampR + 0.07 + 18.0, width: 0.17, top: 0.07 };
+  const mastL = () => {
+    const a = koyuMat && koyuMat.ortalamaAlbedo ? koyuMat.ortalamaAlbedo : [0.03, 0.024, 0.017], f = VOID.fog;
+    return [0, 1, 2].map(i => a[i] * f.amb * 0.5 * (f.up[i] + f.down[i]));
+  };
   const bCentre = boundsBox ? scl(add(boundsBox[0], boundsBox[1]), 0.5) : [0, 0, 0];
   const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) : 1;
-  // the detail by distance: near (every range), mid (no lamp globe: its sprite is it), far (walls, columns, deck)
+  // the detail by distance: near (every range), mid (no lamp globe: its sprite is it; no mast and dark steel: under
+  // a pixel, the mast is drawn as a line instead), far (walls, columns, deck)
   const nameOf = it => (mats[it.malzeme] || {}).ad || '';
   const LOD = [
     disItems,
-    disItems.filter(it => nameOf(it) !== 'dis_fener'),
+    disItems.filter(it => !/^dis_(fener|koyu)$/.test(nameOf(it))),   // the mast: a line of its width (direk.vert)
     disItems.filter(it => /^dis_(duvar|kolon|zemin|isik)$/.test(nameOf(it))),
   ];
   const LOD_D = [260, 700];                     // nearest distance (m) to a facility's bounds below which near / mid
   const INST_F = 8;                             // floats per instance: offset, yaw, colour (C k), the globe's mesh share
-  let instData = new Float32Array(INST_F * 64), lampData = new Float32Array(8 * 64);
+  const LAMP_F = 12;                            // per lamp: centre, radius, colour, the sprite's core share, mast (1: a line)
+  let instData = new Float32Array(INST_F * 64), lampData = new Float32Array(LAMP_F * 64);
   const instBuf = own('Buffer', gl.createBuffer()), lampBuf = own('Buffer', gl.createBuffer());
   function instancedVao(m) {
     const vao = own('VertexArray', gl.createVertexArray());
@@ -1206,8 +1218,8 @@ async function create(canvas, options = {}) {
   const lampVao = own('VertexArray', gl.createVertexArray());
   gl.bindVertexArray(lampVao);
   gl.bindBuffer(gl.ARRAY_BUFFER, lampBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, 32, gl.STREAM_DRAW);
-  for (const i of [0, 1]) { gl.enableVertexAttribArray(i); gl.vertexAttribPointer(i, 4, gl.FLOAT, false, 32, i * 16); gl.vertexAttribDivisor(i, 1); }
+  gl.bufferData(gl.ARRAY_BUFFER, LAMP_F * 4, gl.STREAM_DRAW);
+  for (const i of [0, 1, 2]) { gl.enableVertexAttribArray(i); gl.vertexAttribPointer(i, 4, gl.FLOAT, false, LAMP_F * 4, i * 16); gl.vertexAttribDivisor(i, 1); }
   gl.bindVertexArray(null);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
   const VG = [{ first: 0, count: 0 }, { first: 0, count: 0 }, { first: 0, count: 0 }];
@@ -1248,13 +1260,16 @@ async function create(canvas, options = {}) {
       const col = fac.home ? ours : scl(fac.col, VOID.kOthers);
       // the offset that turns the facility about its own centre: p' = R p + (o + c - R c), exact for ours (yaw 0)
       const off = yaw ? add(fac.o, sub(bCentre, rot(bCentre))) : fac.o;
-      let share = 0;
+      let share = 0, lampAt = -1;
       if (fenerAnchor) {
         const lp = add(rot(fenerAnchor), off);
         const q = sub(lp, e), d = len(q), z = dot(q, c.F);
         share = smoothstep(1.0, 2.2, lampR / Math.max(d, 1e-3) / pxAngle);
-        if (d < rLamp && z > -1 && Math.abs(dot(q, c.R)) < z * c.tx + 2 * sx && Math.abs(dot(q, c.U)) < z * c.ty + 2 * sy && share < 1)
-          lamps.push(lp[0], lp[1], lp[2], lampR, col[0] * lampL[0], col[1] * lampL[1], col[2] * lampL[2], 1 - share);
+        // in view, or its mast (18 m below it) is
+        if (d < rLamp && z > -1 && Math.abs(dot(q, c.R)) < z * c.tx + 2 * sx && Math.abs(dot(q, c.U)) < z * c.ty + 20 * sy && share < 1) {
+          lampAt = lamps.length;
+          lamps.push(lp[0], lp[1], lp[2], lampR, col[0] * lampL[0], col[1] * lampL[1], col[2] * lampL[2], 1 - share, 0, 0, 0, 0);
+        }
       }
       // the body: its bounds' sphere against the frustum, the box's nearest distance against the fog's reach
       const q = sub(add(rot(bCentre), off), e);
@@ -1269,6 +1284,7 @@ async function create(canvas, options = {}) {
       if (dn > rGeo) continue;
       const rec = [off[0], off[1], off[2], yaw, col[0], col[1], col[2], share];
       const lod = dn < LOD_D[0] || (fac.home && dn < LOD_D[1]) ? 0 : dn < LOD_D[1] ? 1 : 2;
+      if (lod > 0 && lampAt >= 0) lamps[lampAt + 8] = 1;      // its mesh has no mast: the line
       lists[lod].push(rec);
       if (lod === 0) { if (!off[0] && !off[1] && !off[2] && !yaw) homeLid = rec; else lids.push(rec); }
     }
@@ -1285,11 +1301,11 @@ async function create(canvas, options = {}) {
     VOID.n = n;
     gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
     gl.bufferData(gl.ARRAY_BUFFER, instData.subarray(0, Math.max(1, n) * INST_F), gl.STREAM_DRAW);
-    VOID.lamps = lamps.length / 8;
+    VOID.lamps = lamps.length / LAMP_F;
     if (lampData.length < lamps.length) lampData = new Float32Array(lamps.length * 2);
     lampData.set(lamps);
     gl.bindBuffer(gl.ARRAY_BUFFER, lampBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, lampData.subarray(0, Math.max(8, lamps.length)), gl.STREAM_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, lampData.subarray(0, Math.max(LAMP_F, lamps.length)), gl.STREAM_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     VOID.drawn = [VG[0].count, VG[1].count, VG[2].count];
   }
@@ -1368,8 +1384,24 @@ async function create(canvas, options = {}) {
     gl.uniform3fv(u.uFogUp, VOID.fog.up); gl.uniform3fv(u.uFogDown, VOID.fog.down);
     gl.uniform1f(u.uMaxPx, 420);
     gl.uniform1f(u.uOcc, VOID.lampsBare ? 0 : 1);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
     gl.bindVertexArray(lampVao);
+    gl.enable(gl.BLEND);
+    // the far masts first, laid over (premultiplied); the lamps on them, added (their alpha is 0)
+    const pm = programs.direk, um = pm.u;
+    gl.useProgram(pm.p);
+    camUniforms(pm, c);
+    bindTex(UNIT.uDepth, gl.TEXTURE_2D, T.scene.depth);
+    gl.uniform2f(um.uSize, T.glow.w, T.glow.h);
+    gl.uniform1f(um.uPxAngle, 2 * c.ty / T.glow.h);
+    gl.uniform1f(um.uSigma, VOID.fog.sigma);
+    gl.uniform1f(um.uExposure, exposure * (1 - 0.04));
+    gl.uniform3fv(um.uFogUp, VOID.fog.up); gl.uniform3fv(um.uFogDown, VOID.fog.down);
+    gl.uniform3fv(um.uMastL, mastL());
+    gl.uniform3f(um.uMastS, MAST.below, MAST.width, MAST.top);
+    gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    if (!VOID.mastsOff) gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, VOID.lamps);
+    gl.useProgram(pr.p);
+    gl.blendFunc(gl.ONE, gl.ONE);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, VOID.lamps);
     gl.bindVertexArray(null);
     gl.disable(gl.BLEND);
@@ -1644,8 +1676,9 @@ async function create(canvas, options = {}) {
       if ('force' in o) VOID.force = o.force;
       if ('lampsOff' in o) VOID.lampsOff = !!o.lampsOff;
       if ('lampsBare' in o) VOID.lampsBare = !!o.lampsBare;
+      if ('mastsOff' in o) VOID.mastsOff = !!o.mastsOff;
     },
-    // tests: the lamps' display light (fener.vert, the glow target) summed over a square round canvas pixel (x, y), from
+    // tests: the lamps' display light (fener.vert, the glow target) summed round canvas point (x, y), from
     // the top left as S.project gives it; exact float, before the 8-bit canvas
     voidGlow(x, y, r) {
       if (!T) return 0;
@@ -1655,8 +1688,14 @@ async function create(canvas, options = {}) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, T.glow.fb);
       gl.readPixels(x0, y0, n, n, gl.RGBA, gl.FLOAT, px);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      // weighted by a smooth window centred on the exact point (a square's whole-pixel edge would cut a halo's tail
+      // by a different amount at each sub-pixel place)
       let sum = 0;
-      for (let i = 0; i < n * n; i++) sum += 0.2126 * px[4 * i] + 0.7152 * px[4 * i + 1] + 0.0722 * px[4 * i + 2];
+      const sw = r / 2.5;
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+        const k = 4 * (j * n + i), dx = x0 + i + 0.5 - x, dy = (T.glow.h - (y0 + j + 0.5)) - y;
+        sum += Math.exp(-0.5 * (dx * dx + dy * dy) / (sw * sw)) * (0.2126 * px[k] + 0.7152 * px[k + 1] + 0.0722 * px[k + 2]);
+      }
       return sum;
     },
     voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog } }),

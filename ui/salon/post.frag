@@ -208,7 +208,7 @@ float lanczos2(float x) {
 }
 #ifdef PASS_RESOLVEV
 uniform sampler2D uDither;
-// ---- the void: the lamps' light (fener.vert), already in display light at the canvas' resolution, added here
+// ---- the void: the lamps' light (fener.vert) and the far masts (direk.vert), in display light at the canvas' resolution
 uniform sampler2D uGlow;
 uniform float uGlowOn;
 #endif
@@ -239,7 +239,10 @@ void main() {
 #ifdef PASS_RESOLVEH
     outColor = vec4(r, 1.0);
 #else
-    if (uGlowOn > 0.5) r += texelFetch(uGlow, o, 0).rgb;   // the void's lamps (display light; see fener.vert)
+    if (uGlowOn > 0.5) {       // the void's far masts (laid over: a) and lamps (added), in display light (fener.vert)
+        vec4 g = texelFetch(uGlow, o, 0);
+        r = r * (1.0 - g.a) + g.rgb;
+    }
     r = clamp(r, 0.0, 1.0);
     r = mix(12.92 * r, 1.055 * pow(r, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), r));
     r += (texelFetch(uDither, o & 63, 0).r - 0.5) / 255.0;
