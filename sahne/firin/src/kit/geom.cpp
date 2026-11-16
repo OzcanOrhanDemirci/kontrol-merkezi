@@ -560,6 +560,20 @@ void mirrorX(Mesh& m) {
 
 // ---- finishing
 void finishMesh(Mesh& m) {
+    // Remove collapsed grid halves and other zero-area primitives before tangents, atlas and pack. Work in double
+    // on the stored positions: float cross products can lose tiny but valid triangles far from the origin.
+    // Stable index-only compaction preserves every surviving triangle, vertex attribute and chart id. Draw ranges
+    // are constructed later by the pack writer from these indices, never patched after the fact.
+    size_t out = 0;
+    for (size_t k = 0; k + 2 < m.idx.size(); k += 3) {
+        const float3 a = m.v[m.idx[k]].p, b = m.v[m.idx[k + 1]].p, c = m.v[m.idx[k + 2]].p;
+        const double ux = double(b.x) - a.x, uy = double(b.y) - a.y, uz = double(b.z) - a.z;
+        const double vx = double(c.x) - a.x, vy = double(c.y) - a.y, vz = double(c.z) - a.z;
+        const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        if (nx * nx + ny * ny + nz * nz < 1e-20) continue; // doubled area < 1e-10 m^2
+        for (size_t j = 0; j < 3; ++j) m.idx[out++] = m.idx[k + j];
+    }
+    m.idx.resize(out);
     // displacement normals: the average over every vertex at one position (quantised to 10 µm)
     struct Key {
         int64_t x, y, z;
