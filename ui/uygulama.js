@@ -230,17 +230,28 @@ const levhaKeys = {};
 // texture happens here at start; every redraw after it goes to a worker (levha-isci.js, the same levha.js) and comes
 // back as bytes that the renderer uploads in strips over the next frames. One request per texture in flight; a newer
 // state waiting behind it replaces any older one. Without a worker the old way: one redraw a frame, none in flight.
+// The first set is drawn by the worker too, while the pack loads (11-17: drawn here in the first frame it held the
+// main thread 1.3 s, 18 drawings); each is parked until the renderer exists, then uploaded at once (installLevha),
+// and the first frame waits for the set (the start, at most 3 s; a texture still missing is drawn here as before).
 let levhaBudget = 1;
 let levhaWorker = null;
 try { levhaWorker = new Worker('salon/levha-isci.js'); } catch (e) { levhaWorker = null; }
-const levhaFlight = {}, levhaWaiting = {};
+const levhaFlight = {}, levhaWaiting = {}, levhaParked = {}, levhaFirst = new Set();
 let levhaId = 0;
+function installLevha(name, p) {
+  S.setLevha(name, new ImageData(new Uint8ClampedArray(p.buf), p.w, p.h), p.opts);
+  levhaKeys[name] = p.key;
+}
 if (levhaWorker) {
   levhaWorker.onmessage = e => {
     const m = e.data;
     const f = levhaFlight[m.name];
     delete levhaFlight[m.name];
     if (m.error || !f) { if (f && m.error) console.error('levha: ' + m.error); levhaWorker.fallback = !!m.error; }
+    else if (levhaKeys[m.name] === undefined) {
+      const p = { w: m.w, h: m.h, buf: m.buf, key: f.key, opts: f.opts };
+      if (S && S.ready) installLevha(m.name, p); else levhaParked[m.name] = p;
+    }
     else if (S && S.setLevhaBytes && S.setLevhaBytes(m.name, m.w, m.h, new Uint8Array(m.buf), f.opts)) levhaKeys[m.name] = f.key;
     const w = levhaWaiting[m.name];
     if (w) { delete levhaWaiting[m.name]; askLevha(m.name, w.data, w.key, w.opts); }
@@ -253,9 +264,17 @@ function askLevha(name, data, key, opts) {
   levhaWorker.postMessage({ id: ++levhaId, name, data });
 }
 function putLevha(name, data, opts) {
-  if (!S || !window.KM_LEVHA || !KM_LEVHA.sizes[name]) return;
+  if (!window.KM_LEVHA || !KM_LEVHA.sizes[name]) return;
   const key = JSON.stringify(data);
   if (levhaKeys[name] === key) return;
+  if (!S || !S.ready) {                          // before the renderer: the first set, to the worker
+    if (!levhaWorker || levhaWorker.fallback) return;
+    if ((levhaParked[name] && levhaParked[name].key === key) || (levhaFlight[name] && levhaFlight[name].key === key) ||
+        (levhaWaiting[name] && levhaWaiting[name].key === key)) return;
+    levhaFirst.add(name);
+    askLevha(name, data, key, opts || {});
+    return;
+  }
   if (levhaKeys[name] !== undefined && levhaWorker && !levhaWorker.fallback && S.setLevhaBytes) {
     if ((levhaFlight[name] && levhaFlight[name].key === key) || (levhaWaiting[name] && levhaWaiting[name].key === key)) return;
     askLevha(name, data, key, opts || {});
@@ -671,18 +690,31 @@ function reportOpening(marks) {
 (async () => {
   const base = params.get('paket') || (host ? '/sahne/' : '../sahne/paket/');   // the window: its pack's own host
   const marks = { betik: bootT };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // connected first: the service's state arrives while the pack loads, so the first set of signs already shows it
+  if (host) send('ready'); else sim.connect();
   try {
     await document.fonts.ready;
     sound.init();
     if (window.KM_LEVHA) await KM_LEVHA.ready;
     marks.yazilar = performance.now();
     const opening = window.KM_ACILIS;
-    S = await window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2), packBytes: +params.get('bayt') || 0,
+    const loading = window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2), packBytes: +params.get('bayt') || 0,
       onProgress: f => opening && opening.progress(f) });
+    // the first set of signs, drawn in the worker meanwhile: with the service's state if it comes within 0.8 s
+    for (let t = performance.now(); !D.durum && performance.now() - t < 800;) await wait(20);
+    updateTexts();
+    marks.levhaIstendi = performance.now();
+    S = await loading;
     journey = buildJourney(S.views);
     if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick });
     S.ready = true;
     marks.hazir = performance.now();
+    for (const n of Object.keys(levhaParked)) { installLevha(n, levhaParked[n]); delete levhaParked[n]; }
+    // no sign pops in during the opening: the first frame waits for the set (any still missing after 3 s is drawn
+    // by the first frame itself)
+    for (let t = performance.now(); [...levhaFirst].some(n => levhaKeys[n] === undefined) && performance.now() - t < 3000;) await wait(10);
+    marks.levha = performance.now();
   } catch (err) {
     console.error(err);
     send('perf:sahne-yuklenemedi ' + (err && err.message));
@@ -691,7 +723,6 @@ function reportOpening(marks) {
     if (fb) fb.textContent = 'Sahne yüklenemedi: ' + (err && err.message);
     if (window.KM_ACILIS) KM_ACILIS.skip();
   }
-  if (host) send('ready'); else sim.connect();
   kick();
   if (params.has('still') && S) { if (window.KM_ACILIS) KM_ACILIS.skip(); window.__km.still(+(params.get('still') || 0)); }
   else if (S) {
