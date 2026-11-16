@@ -5,6 +5,8 @@
 'use strict';
 (() => {
 const SCRIPT_BASE = new URL('.', document.currentScript ? document.currentScript.src : location.href);
+// the pack is read straight from its files each start; nothing of its ~900 MB goes into the browser's disk cache
+const NO_STORE = { cache: 'no-store' };
 const SHADER_FILES = ['common.glsl', 'scene.vert', 'scene.frag', 'depth.frag', 'rotor.vert', 'rotor.frag', 'quad.vert',
   'haze.frag', 'post.frag', 'combine.frag'];
 
@@ -148,27 +150,65 @@ async function create(canvas, options = {}) {
   if (options.quality) Object.assign(Q, options.quality);
 
   // ---------------------------------------------------------------- loading
-  let done = 0, total = 1;
-  const tick = text => { done++; say(Math.min(0.9, done / total * 0.9), text); };
-  async function fetchBytes(file) {
-    let r;
-    try { r = await fetch(new URL(file, base)); } catch (e) { throw fail(file + ': okunamadı (' + e.message + ')'); }
-    if (!r.ok) throw fail(file + ': bulunamadı (HTTP ' + r.status + ')');
+  const files = {};                            // per file: [ms from T0 when its bytes were in, bytes on the wire]
+  // The loading screen's progress: bytes off the wire of every file against their sizes; the wire is 0..0.85 of the
+  // load, uploads and shaders the rest. The window's mapped host sends no Content-Length, so it tells the pack's
+  // size itself (options.packBytes); otherwise the sizes are the responses' (all requests start at once).
+  const wire = { got: new Map(), size: new Map(), n: 0, f: 0 };
+  function onWire(file, got, size) {
+    if (size) wire.size.set(file, size);
+    if (got != null) wire.got.set(file, got);
+    if (!options.packBytes && wire.size.size < wire.n) return;
+    let g = 0, s = options.packBytes || 0;
+    for (const v of wire.got.values()) g += v;
+    if (!s) for (const v of wire.size.values()) s += v;
+    const f = s ? 0.85 * Math.min(1, g / s) : 0;
+    if (f >= wire.f + 0.005) { wire.f = f; say(f, 'paket'); }
+  }
+  // The big files (geometry, light map pages, volumes) go to a worker each (paket-isci.js): fetched and inflated on
+  // their own cores, not on this thread; the small ones (moving parts, ~1 MB) stay here. A volume also comes back in
+  // its texture's layout (M | F side by side, the groups stacked: the copy was ~0.3 s here for the hall's volume).
+  const laidOut = new Set();
+  function fetchInWorker(file, kmv1) {
+    return new Promise((resolve, reject) => {
+      let w;
+      try { w = new Worker(new URL('paket-isci.js', SCRIPT_BASE)); } catch (e) { reject(e); return; }
+      w.onmessage = e => {
+        const m = e.data;
+        if (m.error) { w.terminate(); reject(fail(file + (m.status ? ': bulunamadı (' + m.error + ')' : ': okunamadı (' + m.error + ')'))); return; }
+        onWire(file, m.got, m.size);
+        if (m.buf) { w.terminate(); if (m.laidOut) laidOut.add(file); resolve(m.buf); }
+      };
+      w.onerror = e => { w.terminate(); reject(fail(file + ': okunamadı (' + (e.message || 'işçi') + ')')); };
+      w.postMessage({ url: new URL(file, base).href, kmv1 });
+    });
+  }
+  async function fetchBytes(file, big, kmv1) {
     let buf;
-    if (/\.gz$/.test(file)) buf = await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
-    else if (/\.z$/.test(file)) buf = await new Response(r.body.pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();
-    else buf = await r.arrayBuffer();
-    tick(file);
+    if (big && typeof Worker === 'function') {
+      buf = await fetchInWorker(file, kmv1);
+    } else {
+      let r;
+      try { r = await fetch(new URL(file, base), NO_STORE); } catch (e) { throw fail(file + ': okunamadı (' + e.message + ')'); }
+      if (!r.ok) throw fail(file + ': bulunamadı (HTTP ' + r.status + ')');
+      onWire(file, 0, +(r.headers.get('Content-Length') || 0));
+      if (/\.gz$/.test(file)) buf = await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+      else if (/\.z$/.test(file)) buf = await new Response(r.body.pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();
+      else buf = await r.arrayBuffer();
+      onWire(file, wire.size.get(file), null);
+    }
+    files[file] = [performance.now() - T0, wire.size.get(file) || buf.byteLength];
     return buf;
   }
   const T0 = performance.now(), mark = {};   // load phases, logged once (the opening waits on them)
   say(0, 'sahne.json');
   let pack;
   try {
-    const r = await fetch(new URL('sahne.json', base));
+    const r = await fetch(new URL('sahne.json', base), NO_STORE);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     pack = await r.json();
   } catch (e) { throw fail('sahne.json okunamadı: ' + e.message); }
+  mark.json = performance.now() - T0;
   if (pack.surum !== 1) throw fail('sahne.json: desteklenmeyen sürüm ' + pack.surum);
   const lmDef = pack.isikHaritasi;
   if (!lmDef || lmDef.gruplar !== 3) throw fail('sahne.json: ışık haritası üç grup içermeli');
@@ -188,13 +228,20 @@ async function create(canvas, options = {}) {
   for (const m of mats) { const k = texKey(m); if (k && !layerOf.has(k)) { layerOf.set(k, sets.length); sets.push(m); } }
   const imageFiles = [...new Set(sets.flatMap(m => [m.albedo, m.normal, m.arm]).filter(Boolean))];
   const binFiles = [pack.geometri.dosya, ...dynDefs.map(d => d.dosya), ...lmDef.dosya, ...volDefs.map(v => v.dosya)];
-  total = binFiles.length + imageFiles.length + SHADER_FILES.length + 3;
-  const [bins, images, sources] = await Promise.all([
-    Promise.all(binFiles.map(fetchBytes)),
-    Promise.all(imageFiles.map(async f => {
-      const r = await fetch(new URL(f, base)).catch(e => { throw fail(f + ': okunamadı (' + e.message + ')'); });
+  wire.n = binFiles.length + imageFiles.length;
+  const small = new Set(dynDefs.map(d => d.dosya));
+  // Every request starts now; each part below waits only for its own files and is built as they arrive (textures,
+  // meshes, volumes, the light map last: about their order off the wire), so the uploads run while the big files
+  // are still being inflated in their workers instead of after the last of them (11-17: ~1.2 s off the opening).
+  const later = p => { p.catch(() => {}); return p; };   // a failure is reported where it is awaited
+  const volFiles = new Set(volDefs.map(v => v.dosya));
+  const binP = new Map(binFiles.map(f => [f, later(fetchBytes(f, !small.has(f), volFiles.has(f)))]));
+  const imgP = new Map(imageFiles.map(f => [f, later((async () => {
+      const r = await fetch(new URL(f, base), NO_STORE).catch(e => { throw fail(f + ': okunamadı (' + e.message + ')'); });
       if (!r.ok) throw fail(f + ': doku bulunamadı (HTTP ' + r.status + ')');
+      onWire(f, 0, +(r.headers.get('Content-Length') || 0));
       const blob = await r.blob();
+      onWire(f, blob.size, null);
       let bmp;
       try {
         bmp = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none', imageOrientation: 'none' });
@@ -203,20 +250,17 @@ async function create(canvas, options = {}) {
           bmp.close(); bmp = r2;
         }
       } catch (e) { throw fail(f + ': doku çözülemedi (' + e.message + ')'); }
-      tick(f);
+      files[f] = [performance.now() - T0, blob.size];
       return bmp;
-    })),
-    Promise.all(SHADER_FILES.map(async f => {
+    })())]));
+  Promise.all([...binP.values(), ...imgP.values()]).then(() => { mark.indir = performance.now() - T0; }, () => {});
+  const sources = await Promise.all(SHADER_FILES.map(async f => {
       const r = await fetch(new URL(f, SCRIPT_BASE)).catch(e => { throw fail(f + ': gölgelendirici okunamadı (' + e.message + ')'); });
       if (!r.ok) throw fail(f + ': gölgelendirici bulunamadı (HTTP ' + r.status + ')');
       const t = await r.text();
-      tick(f);
       return t;
-    })),
-  ]);
-  mark.indir = performance.now() - T0;
-  const bin = Object.fromEntries(binFiles.map((f, i) => [f, bins[i]]));
-  const img = Object.fromEntries(imageFiles.map((f, i) => [f, images[i]]));
+    }));
+  const bin = {};
   const src = Object.fromEntries(SHADER_FILES.map((f, i) => [f, sources[i]]));
 
   // ---------------------------------------------------------------- GPU resources
@@ -249,7 +293,8 @@ async function create(canvas, options = {}) {
   const maxLayers = gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS);
 
   // material texture arrays (2048^2 layers, mips, anisotropic 16x): albedo sRGB, normal and ARM as data
-  say(0.9, 'Dokular yükleniyor');
+  const images = await Promise.all(imageFiles.map(f => imgP.get(f)));
+  const img = Object.fromEntries(imageFiles.map((f, i) => [f, images[i]]));
   const nSets = Math.max(1, sets.length), MIPS = 12;
   const matTex = [];
   const fills = ['#ffffff', 'rgb(128,128,255)', 'rgb(255,178,0)'];
@@ -268,110 +313,9 @@ async function create(canvas, options = {}) {
   for (const b of images) b.close();
 
   mark.doku = performance.now() - T0;
-  // light map: layer = page * 3 + group. L0 as RGB9_E5 (4 bytes instead of RGBA16F's 8: a shared exponent keeps
-  // 9 bits of every channel relative to the brightest, ~0.2 %, far under one output level), its direction plane B
-  // RGBA8, and the openness (the same in every group) once per page as R8: 25 instead of 36 bytes a texel
-  const lmW = lmDef.genislik, lmH = lmDef.yukseklik, pages = lmDef.sayfa;
-  if (lmW > maxTex || lmH > maxTex || pages * 3 > maxLayers) throw fail('Işık haritası bu kartın doku sınırını aşıyor (' + lmW + ' × ' + lmH + ' × ' + pages * 3 + ')');
-  const lmA = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * 4 * pages * 3 });
-  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGB9_E5, lmW, lmH, pages * 3);
-  const lmB = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * 4 * pages * 3 });
-  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, lmW, lmH, pages * 3);
-  const lmO = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * pages });
-  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R8, lmW, lmH, pages);
-  const halfToFloat = (() => {               // every half float's value, once
-    const t = new Float32Array(65536);
-    for (let h = 0; h < 65536; h++) {
-      const e = (h >> 10) & 31, m = h & 1023, sg = h & 0x8000 ? -1 : 1;
-      t[h] = sg * (e === 0 ? m * Math.pow(2, -24) : e === 31 ? (m ? NaN : Infinity) : (1 + m / 1024) * Math.pow(2, e - 15));
-    }
-    return t;
-  })();
-  const rgb9e5 = new Uint32Array(lmW * lmH), openness = new Uint8Array(lmW * lmH);
-  const toRgb9e5 = (src, withOpen) => {   // src: RGBA half floats of one layer
-    for (let i = 0, q = 0; i < rgb9e5.length; i++, q += 4) {
-      let r = halfToFloat[src[q]], g = halfToFloat[src[q + 1]], b = halfToFloat[src[q + 2]];
-      if (withOpen) { const a = halfToFloat[src[q + 3]]; openness[i] = a > 0 ? (a >= 1 ? 255 : Math.round(a * 255)) : 0; }
-      r = r > 0 ? Math.min(r, 65408) : 0; g = g > 0 ? Math.min(g, 65408) : 0; b = b > 0 ? Math.min(b, 65408) : 0;
-      const mx = Math.max(r, g, b);
-      if (mx < 1.53e-10) { rgb9e5[i] = 0; continue; }
-      let e = Math.max(-16, Math.floor(Math.log2(mx))) + 1;                  // shared exponent, bias 15, 9-bit mantissa
-      let sc = Math.pow(2, e - 9);
-      if (Math.round(mx / sc) === 512) { e++; sc *= 2; }
-      const R = Math.round(r / sc), G = Math.round(g / sc), B = Math.round(b / sc);
-      rgb9e5[i] = (((e + 15) & 31) << 27 | (B & 511) << 18 | (G & 511) << 9 | (R & 511)) >>> 0;
-    }
-  };
-  // KML2 (sahne/araclar/paket_e5.py, at build time) holds what is uploaded; KML1 is converted here (~4.4 s for three
-  // pages on the main thread, the real window's black opening, 11-16)
-  for (let p = 0; p < pages; p++) {
-    const file = lmDef.dosya[p], buf = bin[file], dv = new DataView(buf), n = lmW * lmH * 4, nt = lmW * lmH;
-    const magic = buf.byteLength >= 16 ? dv.getUint32(0, true) : 0;
-    if (magic !== 0x314c4d4b && magic !== 0x324c4d4b) throw fail(file + ': KML1/KML2 başlığı yok');
-    const v2 = magic === 0x324c4d4b;
-    if (dv.getUint32(4, true) !== lmW || dv.getUint32(8, true) !== lmH || dv.getUint32(12, true) !== 3 ||
-        buf.byteLength !== (v2 ? 16 + nt * 8 * 3 + nt : 16 + n * 3 * 3))
-      throw fail(file + ': boyutu sahne.json ile uyuşmuyor');
-    let off = 16;
-    for (let g = 0; g < 3; g++) {
-      let e5;
-      if (v2) { e5 = new Uint32Array(buf, off, nt); off += nt * 4; } else { toRgb9e5(new Uint16Array(buf, off, n), g === 0); off += n * 2; e5 = rgb9e5; }
-      gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmA);
-      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGB, gl.UNSIGNED_INT_5_9_9_9_REV, e5);
-      if (g === 0 && !v2) {
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmO);
-        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p, lmW, lmH, 1, gl.RED, gl.UNSIGNED_BYTE, openness);
-      }
-      gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmB);
-      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(buf, off, n)); off += n;
-    }
-    if (v2) {
-      gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmO);
-      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p, lmW, lmH, 1, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(buf, off, nt));
-    }
-    delete bin[file];
-  }
 
-  mark.isikHaritasi = performance.now() - T0;
-  // volumes: one 3D texture each, M | F side by side along x, the groups stacked along z
-  const vols = volDefs.map(v => {
-    const buf = bin[v.dosya], dv = new DataView(buf);
-    if (buf.byteLength < 20 || dv.getUint32(0, true) !== 0x31564d4b) throw fail(v.dosya + ': KMV1 başlığı yok');
-    const [nx, ny, nz] = [dv.getUint32(4, true), dv.getUint32(8, true), dv.getUint32(12, true)];
-    if (nx !== v.boyut[0] || ny !== v.boyut[1] || nz !== v.boyut[2] || dv.getUint32(16, true) !== 3 || buf.byteLength !== 20 + nx * ny * nz * 8 * 2 * 3)
-      throw fail(v.dosya + ': boyutu sahne.json ile uyuşmuyor');
-    if (2 * nx > max3D || ny > max3D || 3 * nz > max3D) throw fail(v.dosya + ': hacim bu kartın 3B doku sınırını aşıyor');
-    const grid = nx * ny * nz * 4, row = nx * 4, out = new Uint16Array(grid * 2 * 3);
-    for (let g = 0; g < 3; g++) {
-      const M = new Uint16Array(buf, 20 + (g * 2) * grid * 2, grid), F = new Uint16Array(buf, 20 + (g * 2 + 1) * grid * 2, grid);
-      for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) {
-        const s = (z * ny + y) * row, d = ((g * nz + z) * ny + y) * row * 2;
-        out.set(M.subarray(s, s + row), d);
-        out.set(F.subarray(s, s + row), d + row);
-      }
-    }
-    const raw = tex(gl.TEXTURE_3D, { filter: gl.NEAREST, bytes: out.byteLength });
-    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA16F, 2 * nx, ny, 3 * nz, 0, gl.RGBA, gl.HALF_FLOAT, out);
-    if (4 * nx > max3D) throw fail(v.dosya + ': hacim bu kartın 3B doku sınırını aşıyor');
-    // the combined volume (common.glsl), one framebuffer per slice
-    const t = tex(gl.TEXTURE_3D, { bytes: 4 * nx * ny * nz * 8 });
-    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.RGBA16F, 4 * nx, ny, nz);
-    const slices = [];
-    for (let z = 0; z < nz; z++) {
-      const f = own('Framebuffer', gl.createFramebuffer());
-      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
-      gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, t, 0, z);
-      slices.push(f);
-    }
-    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw fail(v.dosya + ': hacim çizim hedefi kurulamadı');
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    delete bin[v.dosya];
-    return { ...v, n: [nx, ny, nz], raw, t, slices, hi: add(v.alt, scl([nx, ny, nz], v.hucre)) };
-  });
-  const NV = vols.length;
-  const volLo = new Float32Array(vols.flatMap(v => [...v.alt, v.hucre]));
-  const volN = new Float32Array(vols.flatMap(v => [...v.n, 0]));
-
+  bin[pack.geometri.dosya] = await binP.get(pack.geometri.dosya);
+  for (const d of dynDefs) bin[d.dosya] = await binP.get(d.dosya);
   // meshes: the 40-byte vertex of SALON.md; the CPU copy is kept only as long as the load needs it
   function mesh(file) {
     const buf = bin[file], dv = new DataView(buf);
@@ -446,6 +390,115 @@ async function create(canvas, options = {}) {
     return o;
   });
   delete bin[pack.geometri.dosya];
+  mark.nesne = performance.now() - T0;
+
+  for (const v of volDefs) bin[v.dosya] = await binP.get(v.dosya);
+  // volumes: one 3D texture each, M | F side by side along x, the groups stacked along z
+  const vols = volDefs.map(v => {
+    const buf = bin[v.dosya], dv = new DataView(buf);
+    if (buf.byteLength < 20 || dv.getUint32(0, true) !== 0x31564d4b) throw fail(v.dosya + ': KMV1 başlığı yok');
+    const [nx, ny, nz] = [dv.getUint32(4, true), dv.getUint32(8, true), dv.getUint32(12, true)];
+    if (nx !== v.boyut[0] || ny !== v.boyut[1] || nz !== v.boyut[2] || dv.getUint32(16, true) !== 3 || buf.byteLength !== 20 + nx * ny * nz * 8 * 2 * 3)
+      throw fail(v.dosya + ': boyutu sahne.json ile uyuşmuyor');
+    if (2 * nx > max3D || ny > max3D || 3 * nz > max3D) throw fail(v.dosya + ': hacim bu kartın 3B doku sınırını aşıyor');
+    const grid = nx * ny * nz * 4, row = nx * 4, pre = laidOut.has(v.dosya);
+    const out = pre ? new Uint16Array(buf, 20, grid * 2 * 3) : new Uint16Array(grid * 2 * 3);
+    for (let g = 0; g < 3 && !pre; g++) {
+      const M = new Uint16Array(buf, 20 + (g * 2) * grid * 2, grid), F = new Uint16Array(buf, 20 + (g * 2 + 1) * grid * 2, grid);
+      for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) {
+        const s = (z * ny + y) * row, d = ((g * nz + z) * ny + y) * row * 2;
+        out.set(M.subarray(s, s + row), d);
+        out.set(F.subarray(s, s + row), d + row);
+      }
+    }
+    const raw = tex(gl.TEXTURE_3D, { filter: gl.NEAREST, bytes: out.byteLength });
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA16F, 2 * nx, ny, 3 * nz, 0, gl.RGBA, gl.HALF_FLOAT, out);
+    if (4 * nx > max3D) throw fail(v.dosya + ': hacim bu kartın 3B doku sınırını aşıyor');
+    // the combined volume (common.glsl), one framebuffer per slice
+    const t = tex(gl.TEXTURE_3D, { bytes: 4 * nx * ny * nz * 8 });
+    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.RGBA16F, 4 * nx, ny, nz);
+    const slices = [];
+    for (let z = 0; z < nz; z++) {
+      const f = own('Framebuffer', gl.createFramebuffer());
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, t, 0, z);
+      slices.push(f);
+    }
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw fail(v.dosya + ': hacim çizim hedefi kurulamadı');
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    delete bin[v.dosya];
+    return { ...v, n: [nx, ny, nz], raw, t, slices, hi: add(v.alt, scl([nx, ny, nz], v.hucre)) };
+  });
+  const NV = vols.length;
+  const volLo = new Float32Array(vols.flatMap(v => [...v.alt, v.hucre]));
+  const volN = new Float32Array(vols.flatMap(v => [...v.n, 0]));
+  mark.hacim = performance.now() - T0;
+
+  // light map: layer = page * 3 + group. L0 as RGB9_E5 (4 bytes instead of RGBA16F's 8: a shared exponent keeps
+  // 9 bits of every channel relative to the brightest, ~0.2 %, far under one output level), its direction plane B
+  // RGBA8, and the openness (the same in every group) once per page as R8: 25 instead of 36 bytes a texel
+  const lmW = lmDef.genislik, lmH = lmDef.yukseklik, pages = lmDef.sayfa;
+  if (lmW > maxTex || lmH > maxTex || pages * 3 > maxLayers) throw fail('Işık haritası bu kartın doku sınırını aşıyor (' + lmW + ' × ' + lmH + ' × ' + pages * 3 + ')');
+  const lmA = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * 4 * pages * 3 });
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGB9_E5, lmW, lmH, pages * 3);
+  const lmB = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * 4 * pages * 3 });
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, lmW, lmH, pages * 3);
+  const lmO = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * pages });
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R8, lmW, lmH, pages);
+  const halfToFloat = (() => {               // every half float's value, once
+    const t = new Float32Array(65536);
+    for (let h = 0; h < 65536; h++) {
+      const e = (h >> 10) & 31, m = h & 1023, sg = h & 0x8000 ? -1 : 1;
+      t[h] = sg * (e === 0 ? m * Math.pow(2, -24) : e === 31 ? (m ? NaN : Infinity) : (1 + m / 1024) * Math.pow(2, e - 15));
+    }
+    return t;
+  })();
+  const rgb9e5 = new Uint32Array(lmW * lmH), openness = new Uint8Array(lmW * lmH);
+  const toRgb9e5 = (src, withOpen) => {   // src: RGBA half floats of one layer
+    for (let i = 0, q = 0; i < rgb9e5.length; i++, q += 4) {
+      let r = halfToFloat[src[q]], g = halfToFloat[src[q + 1]], b = halfToFloat[src[q + 2]];
+      if (withOpen) { const a = halfToFloat[src[q + 3]]; openness[i] = a > 0 ? (a >= 1 ? 255 : Math.round(a * 255)) : 0; }
+      r = r > 0 ? Math.min(r, 65408) : 0; g = g > 0 ? Math.min(g, 65408) : 0; b = b > 0 ? Math.min(b, 65408) : 0;
+      const mx = Math.max(r, g, b);
+      if (mx < 1.53e-10) { rgb9e5[i] = 0; continue; }
+      let e = Math.max(-16, Math.floor(Math.log2(mx))) + 1;                  // shared exponent, bias 15, 9-bit mantissa
+      let sc = Math.pow(2, e - 9);
+      if (Math.round(mx / sc) === 512) { e++; sc *= 2; }
+      const R = Math.round(r / sc), G = Math.round(g / sc), B = Math.round(b / sc);
+      rgb9e5[i] = (((e + 15) & 31) << 27 | (B & 511) << 18 | (G & 511) << 9 | (R & 511)) >>> 0;
+    }
+  };
+  // KML2 (sahne/araclar/paket_e5.py, at build time) holds what is uploaded; KML1 is converted here (~4.4 s for three
+  // pages on the main thread, the real window's black opening, 11-16)
+  for (let p = 0; p < pages; p++) {
+    const file = lmDef.dosya[p], buf = bin[file] = await binP.get(file), dv = new DataView(buf), n = lmW * lmH * 4, nt = lmW * lmH;
+    const magic = buf.byteLength >= 16 ? dv.getUint32(0, true) : 0;
+    if (magic !== 0x314c4d4b && magic !== 0x324c4d4b) throw fail(file + ': KML1/KML2 başlığı yok');
+    const v2 = magic === 0x324c4d4b;
+    if (dv.getUint32(4, true) !== lmW || dv.getUint32(8, true) !== lmH || dv.getUint32(12, true) !== 3 ||
+        buf.byteLength !== (v2 ? 16 + nt * 8 * 3 + nt : 16 + n * 3 * 3))
+      throw fail(file + ': boyutu sahne.json ile uyuşmuyor');
+    let off = 16;
+    for (let g = 0; g < 3; g++) {
+      let e5;
+      if (v2) { e5 = new Uint32Array(buf, off, nt); off += nt * 4; } else { toRgb9e5(new Uint16Array(buf, off, n), g === 0); off += n * 2; e5 = rgb9e5; }
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmA);
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGB, gl.UNSIGNED_INT_5_9_9_9_REV, e5);
+      if (g === 0 && !v2) {
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmO);
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p, lmW, lmH, 1, gl.RED, gl.UNSIGNED_BYTE, openness);
+      }
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmB);
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(buf, off, n)); off += n;
+    }
+    if (v2) {
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmO);
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p, lmW, lmH, 1, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(buf, off, nt));
+    }
+    delete bin[file];
+  }
+
+  mark.isikHaritasi = performance.now() - T0;
 
   // The rotor's polar table: the mesh projected along its axis into a 1024^2 grid (front-most face from +x), then read
   // in polar coordinates (NR radii x NT angles) as coverage and coverage-weighted normal in the blade's own polar frame
@@ -548,7 +601,7 @@ async function create(canvas, options = {}) {
     `kg = texture(uVol${i}, c + vec3(0.5, 0, 0)); kb = texture(uVol${i}, c + vec3(0.75, 0, 0)); }\n`;
   volCode += '    else { m = kr = kg = kb = vec4(0.0); }\n}\n';
   const common = src['common.glsl'].replace('// VOLUMES', volCode);
-  mark.hacim = performance.now() - T0;
+  mark.tablo = performance.now() - T0;           // materials, fixed tables
   const compileT0 = performance.now();
   const programs = {};
   function build(name, vsFile, fsFile, defines = '') {
@@ -1171,6 +1224,7 @@ async function create(canvas, options = {}) {
     if (timing.frame.length) timing.frames.push(timing.frame);
     timing.frame = null;
     frames++;
+    if (frames === 1) firstRenderMs = performance.now() - cpu0;
     cpuHist.push(performance.now() - cpu0);
     if (cpuHist.length > 30) cpuHist.shift();
     if (options.debug) { const e = gl.getError(); if (e) console.error('Salon: WebGL hatası 0x' + e.toString(16)); }
@@ -1234,7 +1288,7 @@ async function create(canvas, options = {}) {
     return { x: (dot(q, c.R) / (z * c.tx) * 0.5 + 0.5) * r.width, y: (0.5 - dot(q, c.U) / (z * c.ty) * 0.5) * r.height, z };
   }
 
-  let disposed = false, frames = 0;
+  let disposed = false, frames = 0, firstRenderMs = null;
   const cpuHist = [];
   function dispose() {
     if (disposed) return;
@@ -1254,6 +1308,8 @@ async function create(canvas, options = {}) {
     dyn: dynDefs,
     pack,
     quality: Q,
+    load: { t0: T0, mark, files, get firstMs() { return firstRenderMs; } },   // the load's phases and files (ms from T0, a performance.now()); the first render's script time
+    get frames() { return frames; },
     setCamera(e, t, deg) { eye = e.slice(); look = t.slice(); if (deg) fov = deg; },
     setGroup(i, c, k) { if (i >= 0 && i < 3) groups[i] = [Math.max(0, c[0]), Math.max(0, c[1]), Math.max(0, c[2]), Math.max(0, k)]; },
     setRotor(name, angle, omega) { const d = dyn.find(x => x.name === name); if (d) { d.angle = angle; d.omega = omega || 0; } },

@@ -95,11 +95,13 @@ decodes it: sRGB → linear, mean over the texture).
 
 ## The pack (baker → window)
 
-Folder `sahne/paket/` in development (git-ignored, large), installed next to the exe as `sahne\`. The window host serves
-it on the page's own origin under `/sahne/` (WebResourceRequested; a second virtual host would be cross-origin for
-fetch and WebGL textures). Files are little-endian. Every binary is written as a zlib stream (miniz, level 6) with
+Folder `sahne/paket/` in development (git-ignored, large), installed next to the exe as `sahne\`. The window host maps
+it to a virtual host of its own, `https://sahne.kontrol.app/` (SetVirtualHostNameToFolderMapping, cross-origin access
+allowed; Chromium reads the files itself; through the page origin's WebResourceRequested stream it was the opening's
+slowest part, 11-17), and gives the page its address and size in the URL (`#paket=...&bayt=...`; the mapped host sends
+no Content-Length). Files are little-endian. Every binary is written as a zlib stream (miniz, level 6) with
 the suffix `.z` (`geo.bin.z`, `lm_0.bin.z`, ...); the window reads it through `DecompressionStream('deflate')` (zlib
-format, not raw deflate, not gzip). `salon.exe ... --compress 0` writes them plain (`.bin`), for debugging; the names in
+format, not raw deflate, not gzip), the big files each in a worker of its own (`ui/salon/paket-isci.js`). `salon.exe ... --compress 0` writes them plain (`.bin`), for debugging; the names in
 `sahne.json` are always the files as written. The materials' textures are copied beside the pack under their
 `sahne/varlik` paths (the pack is all the window reads). `salon.exe geo` writes everything but the light files (no
 `lm_*`, the volumes' `dosya` null). The same inputs give the same bytes in every binary (`sahne.json` carries the time).
@@ -377,6 +379,18 @@ clamp of Ls becomes one clamp of the sum); the reflection is drawn at half the s
 the horizon, its haze through the outer volume at double steps; bloom starts from the scene composited at the haze's
 resolution; the light map's B-spline read is applied to plane A only (plane B, the direction, stays bilinear); the
 rotor is its crisp mesh when slow and the analytic disc when fast, crossfaded.
+
+The opening (11-17, Özcan: "açılışta uzun süre siyah ekran kalıyor [...] yükleme ekranı sahneye de uygun olmalı"):
+the window opens fullscreen on the monitor under the cursor and paints, from its first frame, a picture of the hall
+before its lights strike (`src/Pencere/Acilis.cs`: near-dark haze, the shaft's thin light through a hatch not yet open,
+its small pool where the scene's shaft falls). The page is transparent until it lays the same pixels over it
+(`/acilis.bmp`, `ui/acilis.js`), adds the stencilled line "SALON HAZIRLANIYOR" and a slit of light that opens with the
+load (only opacity and transform move: the compositor plays them through the load's long tasks). Meanwhile the pack's
+big files inflate in workers, each part is built as its files arrive, the page is already connected to the service
+and the levha worker draws the first set of signs. The first frame is drawn under the picture; then the beam swells
+(the hatch opens), the picture dissolves and the scene's own opening (the shaft's strike) runs. Stages are logged once
+per start (`pencere: açılış` in gunluk.txt); `araclar/acilis-olc.ps1` records and measures it in the real window.
+Measured 11-17 (2560 × 1440): first scene frame 3.5-3.9 s after the process starts (9.8 s before).
 
 Frame pacing: the existing pacer in `ui/uygulama.js` (measured refresh, frame k refreshes after the running one, the
 scene pass split into flushed bands). The cadence is capped at ~30 fps (Özcan, 11-16: "2K da 30 fps yeterli"; no free
