@@ -36,7 +36,8 @@ constexpr float kKuyuEmitL = kKuyuL * (kKuyuLobe + 1.0f) / 7.0f;
 // the diffuse sky through the same opening (lobe 2): twice the beam's flux, kKuyuL * 2 * (2 + 1) / 7
 constexpr float kKuyuSkyL = kKuyuL * 6.0f / 7.0f;
 constexpr float kKuyuTilt = 10.0f;   //   the beam's slant towards -z (degrees)
-constexpr float kKemerL = 2.0f;      // group 1: kemer_isik (unused since the plinth floodlights went, 11-16)
+constexpr float kKemerL = 2.0f;      // group 1: kemer_isik, the glass of the piers' wash slots
+constexpr float kPierWashL = 70.0f;  // group 1: each pier-wash slot's radiance (lobe 10, 0.9 x 0.36 m): a tenth of the old floods
 constexpr float kCekirdekL = 8.0f;   // group 1: the heat core's heart behind the gate (cekirdek_isik and its 20 RECT
                                      //   emitters: the column's four faces 4 x 18.4 m, the fins' sides): the monument's
                                      //   one light, ~580 m2 (was 188): its power comes from area, the radiance stays

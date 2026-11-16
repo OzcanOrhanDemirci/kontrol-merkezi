@@ -399,6 +399,27 @@ void console(Hall& h) {
     }
 }
 
+// a dim wash on the piers' faces (group 1, in the temperature colour), from slots sunk in the plinth 3 m out: without it
+// the piers vanished into the dark and the monument read as a lit doorway, smaller than it is. A tenth of the old
+// floods' radiance and a wider lobe, so the core under the gate stays the light and the piers only read as mass
+void pierWash(Hall& h) {
+    const float z = kPierZ + 3.0f, tilt = 16.0f * kPi / 180.0f;
+    for (float x : {-15.6f, -10.8f, 10.8f, 15.6f}) {
+        h.box(v3(x, kSill + 0.03f, z), v3(0.55f, 0.03f, 0.28f), 0.012f, M_KOYU, 0.5f);
+        h.at(axes(v3(x, kSill + 0.061f, z), X, v3(0, 0, -1), Y), M_KEMER_ISIK, 1.0f).quad(0.9f, 0.36f);
+        Emitter e;
+        e.type = Emitter::RECT;
+        e.group = GROUP_KEMER;
+        e.c = v3(x, kSill + 0.062f, z);
+        e.u = v3(0.45f, 0, 0);
+        e.v = v3(0, 0, 0.18f);
+        e.n = v3(0, std::cos(tilt), -std::sin(tilt));
+        e.L = kPierWashL;
+        e.lobe = 10.0f;
+        h.s.lights.push_back(e);
+    }
+}
+
 void doors(Hall& h) {
     // human-sized service doors at the piers' feet: a steel frame, a rusted leaf, a handle; the exit sign over the
     // right one, a lamp over the left one
@@ -531,6 +552,7 @@ void buildArch(Hall& h) {
     hoist(h);
     displayAndStops(h);
     console(h);
+    pierWash(h);
     doors(h);
     chamberInterior(h);
 }
