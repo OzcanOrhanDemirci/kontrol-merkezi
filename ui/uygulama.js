@@ -602,24 +602,60 @@ window.__km = {
   },
 };
 
+// the opening's stages, logged once as ms from the window process' start (t0 in the hash, epoch ms; without a host
+// from the navigation): where the time to the first frame goes
+const T_START = params.has('t0') ? +params.get('t0') : performance.timeOrigin;
+const sinceStart = t => Math.round(performance.timeOrigin + t - T_START);
+function reportOpening(marks) {
+  const L = S.load, at = v => sinceStart(L.t0 + v);
+  const big = Object.entries(L.files).sort((a, b) => b[1][1] - a[1][1]).slice(0, 8)
+    .map(([f, [t, n]]) => f.replace(/\.bin\.z$|_2k\.png$/, '') + '=' + at(t) + '/' + Math.round(n / 1048576) + 'MB');
+  const tex = Object.entries(L.files).filter(([f]) => /\.png$/.test(f)).map(([, [t]]) => t);
+  send('perf:acilis ' + Object.entries(marks).map(([k, v]) => k + '=' + sinceStart(v)).join(' ') +
+       ' | yukleme ' + Object.entries(L.mark).map(([k, v]) => k + '=' + at(v)).join(' ') +
+       ' | dosyalar ' + big.join(' ') + (tex.length ? ' son-doku=' + at(Math.max(...tex)) : '') +
+       (L.firstMs != null ? ' | ilk-cizim-betik=' + Math.round(L.firstMs) + 'ms' : '') +
+       ' uzun-gorev=' + PACE.lt.n + (PACE.lt.n ? '/' + PACE.lt.max.toFixed(0) + 'ms@' + sinceStart(bootT + PACE.lt.at * 1000) : ''));
+}
+
 (async () => {
-  const base = host ? '/sahne/' : (params.get('paket') || '../sahne/paket/');
+  const base = params.get('paket') || (host ? '/sahne/' : '../sahne/paket/');   // the window: its pack's own host
+  const marks = { betik: bootT };
   try {
     await document.fonts.ready;
     sound.init();
     if (window.KM_LEVHA) await KM_LEVHA.ready;
-    S = await window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2) });
+    marks.yazilar = performance.now();
+    const opening = window.KM_ACILIS;
+    S = await window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2), packBytes: +params.get('bayt') || 0,
+      onProgress: f => opening && opening.progress(f) });
     journey = buildJourney(S.views);
     S.ready = true;
+    marks.hazir = performance.now();
   } catch (err) {
     console.error(err);
     send('perf:sahne-yuklenemedi ' + (err && err.message));
     document.body.classList.add('nogl');
     const fb = document.getElementById('fallback');
     if (fb) fb.textContent = 'Sahne yüklenemedi: ' + (err && err.message);
+    if (window.KM_ACILIS) KM_ACILIS.skip();
   }
   if (host) send('ready'); else sim.connect();
   kick();
-  if (params.has('still') && S) window.__km.still(+(params.get('still') || 0));
+  if (params.has('still') && S) { if (window.KM_ACILIS) KM_ACILIS.skip(); window.__km.still(+(params.get('still') || 0)); }
+  else if (S) {
+    // the first frame drawn (this callback runs in the same refresh, right after the frame's), then the next
+    // refresh: it is on the screen
+    const next = () => new Promise(r => requestAnimationFrame(r));
+    marks.basla = performance.now();
+    while (!S.frames) marks.ilkTik = await next();
+    marks.ilkKare = performance.now();
+    await next();
+    marks.gorundu = performance.now();
+    // the loading screen opens onto the scene; the scene's own opening (the shaft's strike) starts with it
+    M.introT = 0;
+    if (window.KM_ACILIS) KM_ACILIS.end();
+    reportOpening(marks);
+  }
 })();
 })();
