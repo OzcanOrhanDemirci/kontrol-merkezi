@@ -836,7 +836,7 @@
     const metal = '#c3c6c4';
     c.drawImage(layer(w, h, p => {
       p.strokeStyle = metal; p.lineWidth = 8; p.strokeRect(92, 26, w - 184, h - 52);
-      put(p, up(d.ad || DEVICES[name]), 140, 186, 'KMKond', 128, metal, 'left', w - 280, 3);
+      put(p, DEVICES[name], 140, 186, 'KMKond', 128, metal, 'left', w - 280, 3);
       p.fillStyle = metal; p.fillRect(140, 236, w - 280, 5);
       put(p, 'DURUM', 140, state === 'kilitli' ? 342 : 380, 'KMMono', 64, metal, 'left', 300, 6);
       if (state === 'kilitli') put(p, 'BU DERLEMEDE KARTA YOL YOK', w / 2, 458, 'KMKond', 96, metal, 'center', w - 280, 2);
