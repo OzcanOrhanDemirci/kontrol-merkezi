@@ -150,7 +150,7 @@ function resize() {
 
 // ==================================================================== camera
 const CAMS = {
-  fan: { pos: [0, -74, 13.5], tgt: [0, 6, 15.2], fov: 30 },
+  fan: { pos: [0, -112, 16], tgt: [0, 8, 24.5], fov: 30 },
   rgb: { pos: [0, -66, 41], tgt: [0, 24, 35.5], fov: 31 },
 };
 function camState() {
@@ -192,7 +192,7 @@ function updateLights(dt) {
   const on = connected && D.durum && D.durum.rgb ? !!D.durum.rgb.acik : false;
   M.rgbOn = on ? 1 : approach(M.rgbOn, 0, dt, 0.22);
   const k = 1 - Math.exp(-dt / 0.045);
-  const HK = 4.2;                                   // LED radiance scale
+  const HK = 5.0;                                   // LED radiance scale
   const off = 1 - M.rgbOn;
   L.prevHalo.set(L.halo);
   // ignition: the chain lights from the top LED outward both ways (startup and RGB on)
@@ -218,7 +218,7 @@ function updateLights(dt) {
   }
   const cik = iz && iz.cikis ? linRgb(iz.cikis) : [0, 0, 0];
   L.hub = mix3(L.hub || [0, 0, 0], add(mul(cik, 3.0 * M.rgbOn), mul(NEUTRAL, 0.05 * off)), k);
-  L.tog = mix3(L.tog, add(mul(cik, 2.6 * M.rgbOn), mul(NEUTRAL, 0.03 * off)), k);
+  L.tog = mix3(L.tog, add(mul(cik, 7.0 * M.rgbOn), mul(NEUTRAL, 0.12 * off)), k);
   // the studio softbox: the neutral light the scene falls back to when RGB is off
   L.soft = mul(NEUTRAL, (0.042 + 0.06 * off) * (connected ? 1 : 0.7));
   // fan bore rings: state light
@@ -239,6 +239,8 @@ function updateLights(dt) {
   if (st) {
     L.stopsLin = st.map(s => linRgb(s.renk));
     L.stopsT = st.map(s => s.c);
+    const key = JSON.stringify(st.map(s => [s.c, s.renk]));
+    if (key !== L.lutKey) { L.lutKey = key; L.lut = null; }
     scaleMin = Math.floor((st[0].c - 6) / 2) * 2; scaleMax = Math.ceil((st[st.length - 1].c + 6) / 2) * 2;
   } else if (!L.stopsLin.length) {
     L.stopsLin = [[235, 242, 255], [150, 205, 255], [40, 80, 255], [255, 205, 40], [255, 115, 15], [255, 20, 8]].map(linRgb);
@@ -247,6 +249,14 @@ function updateLights(dt) {
   const tv = isi ? (isi.yumusak != null ? isi.yumusak : isi.ort) : null;
   if (tv != null) M.temp = tv;
   M.tempShown = approach(M.tempShown, M.temp, dt, 0.5);
+  if (!L.lut) {            // the gradient the case will actually show: the service's OKLCh palette
+    const s2 = st || [38, 46, 54, 64, 74, 84].map((c, i) => ({ c, renk: [[230, 240, 255], [110, 190, 255], [20, 50, 255], [255, 210, 0], [255, 110, 0], [255, 0, 0]][i] }));
+    L.lut = new Float32Array(64 * 3);
+    for (let i = 0; i < 64; i++) {
+      const c = window.KM_RENK.palet(s2, lerp(scaleMin, scaleMax, i / 63));
+      L.lut.set(c, i * 3);
+    }
+  }
   const pv = iz && iz.onizleme ? linRgb(iz.onizleme) : [1, 1, 1];
   L.mark = mix3(L.mark, mul(add(mul(pv, 0.75), [0.25, 0.25, 0.25]), 3.0), k);
 }
@@ -265,11 +275,11 @@ function rotorTargets() {
   if (fan && fan.kasa && fan.kasa.rpm && fan.kasa.rpm.length) {
     const cpu = fan.kasa.rpm.find(r => r.ad === 'CPU_FAN') || fan.kasa.rpm[0];
     const x = clamp((cpu.rpm - 817) / (2003 - 817), 0, 1.2);
-    wk = cpu.rpm > 50 ? lerp(2.1, 15, Math.pow(x, 1.1)) : 0;
+    wk = cpu.rpm > 50 ? lerp(0.55, 15, Math.pow(x, 1.6)) : 0;
   }
   if (fan && fan.gpu && fan.gpu.rpm && fan.gpu.rpm.length) {
     const r = fan.gpu.rpm.reduce((a, b) => a + b, 0) / fan.gpu.rpm.length;
-    wg = r > 50 ? lerp(1.6, 15, Math.pow(clamp(r / 3000, 0, 1.2), 1.15)) : 0;
+    wg = r > 50 ? lerp(0.55, 15, Math.pow(clamp(r / 3000, 0, 1.2), 1.6)) : 0;
   }
   if (D.link !== 'bagli') { wk = 0; wg = 0; }
   return [wk * 2 * Math.PI, wg * 2 * Math.PI];
@@ -358,7 +368,7 @@ function render(dt) {
     lum(L.ringL) * 13.7 * 1.5,
     lum(L.ringR) * 13.7 * 1.5,
     kbdPow / 10 * 15 * 0.8,
-    lum(L.tog) * 34 * 0.8,
+    lum(L.tog) * 34 * 0.19 * 0.8,
   ];
   const ptot = pw.reduce((a, b) => a + b, 0) + 1e-9;
   const pr = pw.map(x => (x > 1e-7 ? Math.max(x / ptot, 0.03) : 0));
@@ -370,8 +380,7 @@ function render(dt) {
   gl.uniform3fv(U(p, 'uSoftCol'), L.soft);
   gl.uniform3fv(U(p, 'uRingCol'), [...L.ringL, ...L.ringR]);
   gl.uniform3fv(U(p, 'uTogCol'), L.tog);
-  gl.uniform3fv(U(p, 'uStopCol'), L.stopsLin.flat());
-  gl.uniform1fv(U(p, 'uStopT'), L.stopsT);
+  gl.uniform3fv(U(p, 'uScaleLut'), L.lut);
   gl.uniform4f(U(p, 'uScale'), scaleMin, scaleMax, M.tempShown, 0.32 + 0.25 * M.rgbOn);
   gl.uniform3fv(U(p, 'uMarkCol'), L.mark);
   gl.uniform1f(U(p, 'uFill'), 0.9 + 1.4 * M.rgbOn);
@@ -409,7 +418,7 @@ function render(dt) {
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, R.fb.acc.b); gl.uniform1i(U(p, 'uB'), 1);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, B[0].t); gl.uniform1i(U(p, 'uBloom'), 2);
   gl.uniform2f(U(p, 'uRes'), w, h);
-  gl.uniform1f(U(p, 'uExposure'), 1.15 * M.light);
+  gl.uniform1f(U(p, 'uExposure'), 1.35 * M.light);
   gl.uniform1f(U(p, 'uBloomStr'), params.has('nobloom') ? 0 : 0.06);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   if (tq) { gl.endQuery(R.timer.TIME_ELAPSED_EXT); R.queries.push(tq); }
@@ -651,7 +660,12 @@ function updateOverlay(dt) {
   let b = '';
   if (D.link === 'yok') b = 'Servise ulaşılamıyor · düğmeler servis gelince çalışır';
   else if (D.link === 'baslatiliyor') b = 'Servis başlatılıyor…';
-  else if (D.durum && D.durum.servis && D.durum.servis.yonetici === false) b = 'Servis yönetici izni olmadan çalışıyor · fan düğmeleri kapalı';
+  else if (D.durum && D.durum.fan) {
+    const off = [];
+    if (D.durum.fan.kasa && D.durum.fan.kasa.kullanilabilir === false) off.push('kasa fanları');
+    if (D.durum.fan.gpu && D.durum.fan.gpu.kullanilabilir === false) off.push('ekran kartı fanları');
+    if (off.length && D.durum.servis && D.durum.servis.yonetici === false) b = 'Servis yönetici izni olmadan çalışıyor · ' + off.join(' ve ') + ' düğmesi kapalı';
+  }
   if (b !== state.banner) { state.banner = b; $('#bannerText').textContent = b; $('#banner').classList.toggle('show', !!b); }
   // ledger: what this much light costs, for three buttons
   if (M.t - (state.ledT || -9) > 0.5) {

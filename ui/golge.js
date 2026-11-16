@@ -41,8 +41,7 @@ uniform float uLightCdf[6];
 uniform vec3 uSoftCol;
 uniform vec3 uRingCol[2];
 uniform vec3 uTogCol;
-uniform vec3 uStopCol[6];
-uniform float uStopT[6];
+uniform vec3 uScaleLut[64];          // the service's palette across the scale (linear, full brightness)
 uniform vec4 uScale;                // tMin, tMax, marker temperature, inlay brightness
 uniform vec3 uMarkCol;
 uniform float uFill;                // filled gauge brightness
@@ -58,6 +57,8 @@ const vec3 HC = vec3(0.0, 24.0, 27.5);          // halo centre
 const float HR0 = 20.6, HR1 = 23.4, HD = 1.6;  // halo light guide
 const float BR0 = 24.1, BR1 = 25.7, BD = 0.9;  // titanium scale band
 const float TR0 = 3.3, TR1 = 4.3, TD = 1.1;    // toggle bezel
+const float TG0 = 0.80, TG1 = 0.90;            // toggle light-guide ring (fraction of TR0)
+const float WALLY = 72.0, CYR = 26.0;          // studio cyclorama: back wall and the cove into the floor
 const vec3 PC = vec3(0.0, 0.0, 1.6), PH = vec3(17.5, 6.5, 1.6);   // plinth
 const vec3 FCL0 = vec3(-7.6, 0.6, 9.25), FCR0 = vec3(7.6, 0.6, 9.25);
 vec3 FCL, FCR;
@@ -70,6 +71,7 @@ const vec3 SBU = vec3(1.0, 0.0, 0.0), SBV = vec3(0.0, 0.9247, 0.3807);
 const vec2 SBH = vec2(42.0, 16.0);
 const float KX = 15.2, KZ0 = 1.18, KZ1 = 1.42, KY = -6.5;
 
+const int M_CYC = 11;
 const int M_FLOOR = 1, M_PLINTH = 2, M_FRAME = 3, M_ROTOR = 4, M_TI = 5, M_GLASS = 6, M_HALO = 7, M_BAND = 8, M_TOG = 9, M_HUB = 10;
 
 uint gS;
@@ -187,7 +189,17 @@ void trace(vec3 ro, vec3 rd, float tmax) {
   hT = tmax; hM = 0; hF = 0; hN = vec3(0.0, 0.0, 1.0);
   vec3 inv = safeInv(rd);
   vec3 n;
-  if (rd.z < 0.0) take(-ro.z / rd.z, vec3(0.0, 0.0, 1.0), M_FLOOR, 0);
+  if (rd.z < 0.0) { float t = -ro.z / rd.z; if (ro.y + rd.y * t < WALLY - CYR) take(t, vec3(0.0, 0.0, 1.0), M_FLOOR, 0); }
+  if (rd.y > 0.0) { float t = (WALLY - ro.y) / rd.y; if (ro.z + rd.z * t > CYR) take(t, vec3(0.0, -1.0, 0.0), M_CYC, 0); }
+  {
+    vec2 o = vec2(ro.y - (WALLY - CYR), ro.z - CYR);
+    vec2 tc = cylT(o, rd.yz, CYR);
+    float t = tc.y;
+    if (t > EPS && t < 1e8) {
+      vec2 q = o + rd.yz * t;
+      if (q.x > 0.0 && q.y < 0.0) take(t, -vec3(0.0, q) / CYR, M_CYC, 1);
+    }
+  }
   // fan group bounding box
   vec3 bn;
   vec2 gb = boxT(ro, inv, vec3(0.0, 0.0, 7.7), vec3(17.6, 6.6, 7.8), bn);
@@ -221,19 +233,26 @@ float haloX(vec3 p) {        // continuous LED index 0..84, LED 0 at the top, cl
   float ph = atan(p.z - HC.z, p.x - HC.x);
   return fract(0.25 - ph / TAU) * 84.0;
 }
-vec3 haloLed(float x) {
+// each LED sits under the frosted guide: a soft hotspot at its position over a diffuse glow that
+// carries the neighbours' colours, brightest along the guide's centre line, falling off to the lips
+vec3 haloLed(float x, out float hot) {
   float y = x - 0.5;
   float k = floor(y), f = y - k;
   int i0 = int(mod(k, 84.0)), i1 = int(mod(k + 1.0, 84.0));
   vec3 c = mix(uHalo[i0], uHalo[i1], f * f * (3.0 - 2.0 * f));
-  return c * (0.86 + 0.14 * cos(TAU * f));
+  float fl = fract(x) - 0.5;
+  hot = exp(-fl * fl / 0.03);
+  int ik = int(mod(floor(x), 84.0));
+  return mix(c, uHalo[ik], 0.6 * hot);
 }
 vec3 haloEmit(vec3 p, vec3 n) {
-  vec3 c = haloLed(haloX(p));
+  float hot;
+  vec3 c = haloLed(haloX(p), hot);
   float r = length(p.xz - HC.xz);
   float m = (r - HR0) / (HR1 - HR0);
-  float prof = abs(n.y) > 0.5 ? 0.62 + 0.38 * (1.0 - pow(2.0 * m - 1.0, 2.0)) : 0.45;
-  return c * prof;
+  float core = exp(-pow((m - 0.5) / 0.2, 2.0));
+  if (abs(n.y) < 0.5) return c * (0.2 + 0.25 * hot);
+  return c * (0.3 + 0.5 * core + 0.55 * hot * core);
 }
 float scaleTemp(vec3 p) {   // temperature at a point on the band (arc over the top, cold on the left)
   float ph = atan(p.z - HC.z, p.x - HC.x);
@@ -241,12 +260,9 @@ float scaleTemp(vec3 p) {   // temperature at a point on the band (arc over the 
   return mix(uScale.x, uScale.y, 0.5 - 0.5 * a);
 }
 vec3 stopColor(float t) {
-  vec3 c = uStopCol[0];
-  for (int i = 1; i < 6; i++) {
-    float k = sat((t - uStopT[i - 1]) / max(0.01, uStopT[i] - uStopT[i - 1]));
-    c = mix(c, uStopCol[i], k * k * (3.0 - 2.0 * k));
-  }
-  return c;
+  float x = sat((t - uScale.x) / (uScale.y - uScale.x)) * 63.0;
+  int i = int(min(floor(x), 62.0));
+  return mix(uScaleLut[i], uScaleLut[i + 1], x - float(i));
 }
 // band: titanium with a lacquer-filled gradient inlay and engraved ticks; returns emission (inlay)
 vec3 bandEmit(vec3 p, vec3 n, out float tick) {
@@ -295,13 +311,12 @@ vec3 emission(int m, int f, vec3 p, vec3 n, out bool nee, out bool pure) {
   nee = false; pure = false;
   if (m == M_HALO) { pure = true; nee = abs(n.y) > 0.5; return haloEmit(p, n); }
   if (m == M_TOG) {
-    pure = true;
     if (n.y > -0.5) return vec3(0.0);
-    nee = true;
     vec2 q = (p.xz - HC.xz) / TR0;
-    float g = glyph(q);
     float rr = length(q);
-    return uTogCol * (0.55 + 0.45 * rr * rr) * (1.0 - 0.8 * g) + uTogCol * g * 0.0 + vec3(1.0, 0.97, 0.92) * g * (0.06 + 0.5 * lum(uTogCol));
+    if (rr > TG0 && rr < TG1) { pure = true; nee = true; float e = (rr - TG0) / (TG1 - TG0); return uTogCol * (0.7 + 0.6 * e * (1.0 - e) * 4.0 - 0.3 * e); }
+    if (glyph(q) > 0.5) { pure = true; return uTogCol * 0.22 + vec3(0.03); }
+    return vec3(0.0);
   }
   if (m == M_PLINTH && n.y < -0.5 && abs(p.x) < KX && p.z > KZ0 && p.z < KZ1) { pure = true; nee = true; return kbdEmit(p); }
   if (m == M_FRAME) {
@@ -354,12 +369,12 @@ vec3 sampleLight(vec3 p, out vec3 wi, out float dist, out float pdf) {
     q = vec3(-KX + 2.0 * KX * u1, KY, mix(KZ0, KZ1, u2));
     nl = vec3(0.0, -1.0, 0.0); Le = kbdEmit(q); pa = 1.0 / (2.0 * KX * (KZ1 - KZ0));
   } else {
-    float r = TR0 * sqrt(u1), th = TAU * u2;
+    float r = TR0 * sqrt(mix(TG0 * TG0, TG1 * TG1, u1)), th = TAU * u2;
     q = HC + vec3(r * cos(th), 0.25 - 0.35, r * sin(th));
     nl = vec3(0.0, -1.0, 0.0);
     bool a, b;
     Le = emission(M_TOG, 0, q, nl, a, b);
-    pa = 1.0 / (PI * TR0 * TR0);
+    pa = 1.0 / (PI * TR0 * TR0 * (TG1 * TG1 - TG0 * TG0));
   }
   vec3 d = q - p;
   float d2 = dot(d, d);
@@ -379,7 +394,7 @@ float lightPdf(int m, int f, vec3 p, vec3 n, vec3 x) {
   if (m == M_HALO) {
     int k = int(floor(haloX(p)));
     pa = groupP(0) * haloSegP(min(k, 83)) / ((TAU / 84.0) * 0.5 * (HR1 * HR1 - HR0 * HR0));
-  } else if (m == M_TOG) pa = groupP(5) / (PI * TR0 * TR0);
+  } else if (m == M_TOG) pa = groupP(5) / (PI * TR0 * TR0 * (TG1 * TG1 - TG0 * TG0));
   else if (m == M_PLINTH) pa = groupP(4) / (2.0 * KX * (KZ1 - KZ0));
   else if (m == M_FRAME) pa = groupP(2 + f) / (TAU * FBR * BANDLEN);
   return pa * d2 / cl;
@@ -389,10 +404,14 @@ float lightPdf(int m, int f, vec3 p, vec3 n, vec3 x) {
 float gTr;   // diffuse transmission weight of the current material (frosted blades)
 void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out float a) {
   alb = vec3(0.02); F0 = vec3(0.04); a = 0.3; gTr = 0.0;
-  if (m == M_FLOOR) {
+  if (m == M_CYC) {
+    alb = vec3(0.05, 0.05, 0.052); F0 = vec3(0.03); a = 0.85;      // charcoal studio velvet
+  } else if (m == M_FLOOR) {
     vec2 w = p.xy * 0.045;
     float sm = sin(w.x * 1.7 + sin(w.y * 1.3)) * sin(w.y * 1.9 + 0.7 * sin(w.x * 2.3));
     alb = vec3(0.006); F0 = vec3(0.045); a = 0.028 + 0.012 * sm;
+    float seam = smoothstep(WALLY - CYR - 40.0, WALLY - CYR, p.y);   // lacquer fades into the velvet cove
+    alb = mix(alb, vec3(0.05, 0.05, 0.052), seam); a = mix(a, 0.85, seam); F0 = mix(F0, vec3(0.03), seam);
   } else if (m == M_PLINTH || m == M_FRAME) {
     vec3 c = m == M_PLINTH ? PC : (f == 0 ? FCL : FCR);
     vec3 h = m == M_PLINTH ? PH : FH;
@@ -400,7 +419,7 @@ void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out
     // machined bevel: round the normal near box edges
     vec3 e = smoothstep(h - 0.14, h, abs(q)) * sign(q) * (1.0 - abs(n));
     if (dot(abs(n), vec3(1.0)) > 0.99 && abs(n.x) + abs(n.y) + abs(n.z) < 1.01) n = normalize(n + 1.4 * e);
-    alb = vec3(0.014, 0.0145, 0.016); F0 = vec3(0.05); a = m == M_PLINTH ? 0.16 : 0.12;
+    alb = vec3(0.03, 0.031, 0.034); F0 = vec3(0.05); a = m == M_PLINTH ? 0.2 : 0.17;
     if (m == M_FRAME && length(q.xz) < FBR + 0.02) { a = 0.32; alb = vec3(0.01); }
     if (m == M_FRAME && n.y < -0.5) {          // four titanium screws in the corners, hex recess
       vec2 sc = abs(q.xz) - vec2(5.05);
@@ -426,8 +445,13 @@ void material(int m, int f, vec3 p, inout vec3 n, out vec3 alb, out vec3 F0, out
     alb = vec3(0.0); F0 = vec3(0.5, 0.47, 0.43); a = 0.13;
     float tk; bandEmit(p, n, tk);
     if (tk > 0.5) { alb = vec3(0.55); F0 = vec3(0.04); a = 0.5; }
-  } else if (m == M_HALO || m == M_TOG) {
+  } else if (m == M_HALO) {
     alb = vec3(0.5); F0 = vec3(0.04); a = 0.6;
+  } else if (m == M_TOG) {                    // machined titanium cap, gently domed, turned finish
+    vec2 q = p.xz - HC.xz;
+    float r = length(q) / TR0;
+    n = normalize(n + vec3(q.x, 0.0, q.y) / TR0 * 0.45);
+    alb = vec3(0.0); F0 = vec3(0.56, 0.52, 0.47); a = 0.16 + 0.05 * sin(r * 140.0);
   }
 }
 
@@ -570,14 +594,14 @@ void main() {
       float w = depth == 0 ? lpdf * lpdf / (lpdf * lpdf + bp * bp) : 1.0;
       shC = thr * f * Le * (w / lpdf);
       float lc = lum(shC);
-      float cap = depth > 0 ? 6.0 : 30.0;
+      float cap = depth > 0 ? 6.0 : (hM == M_ROTOR ? 2.5 : 30.0);
       if (lc > cap) shC *= cap / lc;
     }
     // next bounce
     vec3 nd = sampleDir(n, v, a, ps);
     float bp;
     vec3 f = bsdf(n, v, nd, alb, F0, a, ps, bp);
-    bool cont = depth == 0 && bp > 1e-6 && max(f.x, max(f.y, f.z)) > 0.0;
+    bool cont = depth == 0 && hM != M_CYC && bp > 1e-6 && max(f.x, max(f.y, f.z)) > 0.0;
     if (cont) { thr *= f / bp; prevPdf = bp; prevP = p; }
     depth++;
     camRay = false;
@@ -641,10 +665,17 @@ out vec4 o;
 uniform sampler2D uA, uB, uBloom;
 uniform vec2 uRes;
 uniform float uExposure, uBloomStr;
-vec3 tonemap(vec3 x) {           // smooth filmic shoulder, keeps saturated LEDs from clipping to flat white
+vec3 tonemap(vec3 x) {
+  // Hue-preserving shoulder on the strongest channel (extended Reinhard, white point 10), so a saturated
+  // LED keeps its colour and its gradations instead of clipping to a flat plate; only the very brightest
+  // cores lean toward white, as a camera sensor would show them.
   x = max(x, 0.0);
-  vec3 a = x * (2.51 * x + 0.03), b = x * (2.43 * x + 0.59) + 0.14;
-  return clamp(a / b, 0.0, 1.0);
+  float m = max(max(x.r, x.g), x.b);
+  if (m < 1e-6) return vec3(0.0);
+  float mt = m * (1.0 + m / 100.0) / (1.0 + m);
+  vec3 c = x * (mt / m);
+  float w = smoothstep(1.6, 9.0, m) * 0.75;
+  return clamp(mix(c, vec3(mt), w), 0.0, 1.0);
 }
 float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
 void main() {

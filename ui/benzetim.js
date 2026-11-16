@@ -7,12 +7,12 @@ window.KM_BENZETIM = function (deliver) {
   const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
   const lerp = (a, b, t) => a + (b - a) * t;
   const DURAKLAR = [
-    { c: 38, renk: [235, 242, 255], ad: 'soğuk beyaz' },
-    { c: 46, renk: [150, 205, 255], ad: 'serin açık mavi' },
-    { c: 54, renk: [40, 80, 255], ad: 'ılık koyu mavi' },
-    { c: 64, renk: [255, 205, 40], ad: 'sıcak sarı' },
-    { c: 74, renk: [255, 115, 15], ad: 'çok sıcak turuncu' },
-    { c: 84, renk: [255, 20, 8], ad: 'en sıcak kırmızı' },
+    { c: 38, renk: [230, 240, 255], ad: 'soğuk beyaz' },        // the service's defaults (src/Isik/Ayarlar.cs)
+    { c: 46, renk: [110, 190, 255], ad: 'serin açık mavi' },
+    { c: 54, renk: [20, 50, 255], ad: 'ılık koyu mavi' },
+    { c: 64, renk: [255, 210, 0], ad: 'sıcak sarı' },
+    { c: 74, renk: [255, 110, 0], ad: 'çok sıcak turuncu' },
+    { c: 84, renk: [255, 0, 0], ad: 'en sıcak kırmızı' },
   ];
   const S = {
     yonetici: true,
@@ -29,21 +29,13 @@ window.KM_BENZETIM = function (deliver) {
   };
   const JARVIS = ['hazir', 'dusunuyor', 'bekliyor', 'kapali', 'yeniden', 'yok'];
 
-  function tempColor(t) {
-    const d = DURAKLAR;
-    if (t <= d[0].c) return d[0].renk.slice();
-    for (let i = 1; i < d.length; i++) {
-      if (t <= d[i].c) {
-        const k = (t - d[i - 1].c) / (d[i].c - d[i - 1].c), s = k * k * (3 - 2 * k);
-        return d[i].renk.map((v, j) => lerp(d[i - 1].renk[j], v, s));
-      }
-    }
-    return d[d.length - 1].renk.slice();
-  }
+  // same engine as the service: OKLCh palette at full brightness, overrides as their own colours, sent as sRGB
+  const K = window.KM_RENK;
   function baseColor() {
-    if (S.kip === 'yapayzeka') return [255, 70, 165];
-    if (S.kip === 'islemci') return [120, 255, 150];
-    return tempColor(S.yumusak);
+    let c = K.palet(DURAKLAR, S.yumusak);
+    if (S.kip === 'yapayzeka') c = K.full(K.fromSrgb([255, 36, 128]));
+    if (S.kip === 'islemci') c = K.full(K.fromSrgb([0, 235, 255]));
+    return K.toSrgb(c);
   }
 
   function durum() {
