@@ -60,6 +60,11 @@ Light is baked per group, in white. Live colour of group g is `C_g · k_g` (line
 | 1 | `kemer` | the arch: the light chamber behind its opening, emissive strips in the arch | the temperature colour when RGB is on (`isik.cikis`); when off, a faint ember of the temperature colour (the arch is the RGB) |
 | 2 | `lamba` | small fixed service lamps (caged wall lamps, the board lamps) | fixed warm white, constant |
 
+**RGB off** (Özcan, 11-16: "silüet karanlığı yani zifiri değil estetik karanlık [...] kapalı olmasının getirdiği bir
+tekinsizlik"): the whole hall sinks slowly into a darkness you can still see in: shaft and arch fall to a faint ember of
+the temperature colour, the service lamps (a little dimmer) keep columns, fans and arch readable as silhouettes, the
+exit signs and the switch's pilot lamp stay findable, the exposure half adapts.
+
 The temperature colour comes from the service's palette maths (`ui/renk.js`, which mirrors `src/Isik/Renk.cs`); the
 scene uses the linear values.
 
@@ -83,8 +88,9 @@ decodes it: sRGB → linear, mean over the texture).
 
 ## The pack (baker → window)
 
-Folder `sahne/paket/` in development (git-ignored, large), installed next to the exe as `sahne\`. The window maps it to
-`https://sahne.kontrol.app/`. Files are little-endian. Large binaries may be gzip-compressed (`.gz`); the window reads
+Folder `sahne/paket/` in development (git-ignored, large), installed next to the exe as `sahne\`. The window host serves
+it on the page's own origin under `/sahne/` (WebResourceRequested; a second virtual host would be cross-origin for
+fetch and WebGL textures). Files are little-endian. Large binaries may be gzip-compressed (`.gz`); the window reads
 them through `DecompressionStream('gzip')`.
 
 ### `sahne.json`

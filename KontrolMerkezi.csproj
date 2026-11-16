@@ -46,6 +46,16 @@
     <EmbeddedResource Include="ui\**\*.*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- The hall's data pack (docs/SALON.md), built by sahne\firin (salon.exe bake) into sahne\paket: copied next to the
+       exe as sahne\ so the installer carries it. Not embedded (hundreds of MB). -->
+  <ItemGroup>
+    <SahnePaketi Include="sahne\paket\**\*.*" />
+  </ItemGroup>
+  <Target Name="SahnePaketiniKopyala" AfterTargets="Build" Condition="Exists('sahne\paket\sahne.json')">
+    <RemoveDir Directories="$(OutDir)sahne" />
+    <Copy SourceFiles="@(SahnePaketi)" DestinationFiles="@(SahnePaketi->'$(OutDir)sahne\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="false" />
+  </Target>
+
   <ItemGroup>
     <None Include="lib\*.dll" Exclude="lib\LibreHardwareMonitorLib.dll;lib\HidSharp.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

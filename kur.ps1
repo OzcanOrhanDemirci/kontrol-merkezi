@@ -75,6 +75,9 @@ try {
 
     Servisi-Durdur
     New-Item -ItemType Directory -Force $hedef | Out-Null
+    # salonun veri paketi her derlemede baştan yazılır: eskisinden dosya kalmasın
+    $eskiPaket = Join-Path $hedef 'sahne'
+    if (Test-Path $eskiPaket) { Remove-Item $eskiPaket -Recurse -Force }
     Copy-Item (Join-Path $cikti '*') -Destination $hedef -Recurse -Force
     "Kopyalandı -> $hedef"
     Get-ChildItem $hedef -File | Select-Object Name, Length | Format-Table -AutoSize | Out-String

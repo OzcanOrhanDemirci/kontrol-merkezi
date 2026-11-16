@@ -1,4 +1,4 @@
-// The window: borderless WebView2 host for ui/index.html, unelevated, holds no hardware.
+﻿// The window: borderless WebView2 host for ui/index.html, unelevated, holds no hardware.
 // It connects to the service's pipe and forwards messages both ways; if the service is not running it asks the
 // scheduled task to start it (COM, no UAC prompt, the way Fan Anahtarı triggers its task).
 // Window chrome handling (frameless with snap and shadow, drag, resize edges) follows Fan Anahtarı's Ui.cs.
@@ -58,6 +58,7 @@ static class PencereUygulamasi
     sealed class PencereForm : Form
     {
         const string HostName = "kontrol.app";
+        const string PackHost = "sahne.kontrol.app";
         const int WM_NCCALCSIZE = 0x83, WM_NCHITTEST = 0x84;
         const uint WM_NCLBUTTONDOWN = 0xA1;
         const int HTCLIENT = 1, HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14, HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
@@ -170,6 +171,16 @@ static class PencereUygulamasi
                 s.IsSwipeNavigationEnabled = false;
                 s.IsGeneralAutofillEnabled = false;
                 core.SetVirtualHostNameToFolderMapping(HostName, uiDir, CoreWebView2HostResourceAccessKind.Allow);
+                // the hall's data pack (light maps, volumes, geometry; docs/SALON.md), served on the page's own origin
+                // under /sahne/ (a second virtual host would be cross-origin for fetch and WebGL): next to the exe when
+                // installed, the repository's sahne/paket in development
+                _pack = FindPack();
+                if (_pack != null)
+                {
+                    core.AddWebResourceRequestedFilter("https://" + HostName + "/sahne/*", CoreWebView2WebResourceContext.All);
+                    core.WebResourceRequested += OnPackRequest;
+                }
+                else Program.Log("pencere: sahne paketi bulunamadı (sahne/sahne.json)");
                 core.WebMessageReceived += OnWebMessage;
                 core.ProcessFailed += (_, ev) =>
                 {
@@ -187,6 +198,41 @@ static class PencereUygulamasi
                     Title, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Close();
             }
+        }
+
+        string _pack;
+
+        void OnPackRequest(object sender, CoreWebView2WebResourceRequestedEventArgs e)
+        {
+            try
+            {
+                var uri = new Uri(e.Request.Uri);
+                var rel = Uri.UnescapeDataString(uri.AbsolutePath).Substring("/sahne/".Length).Replace('/', Path.DirectorySeparatorChar);
+                var full = Path.GetFullPath(Path.Combine(_pack, rel));
+                var env = _wv.CoreWebView2.Environment;
+                if (!full.StartsWith(Path.GetFullPath(_pack) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
+                {
+                    e.Response = env.CreateWebResourceResponse(null, 404, "Not Found", "");
+                    return;
+                }
+                var ext = Path.GetExtension(full).ToLowerInvariant();
+                var type = ext == ".json" ? "application/json" : ext == ".jpg" ? "image/jpeg" : ext == ".png" ? "image/png" : "application/octet-stream";
+                var fs = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);
+                e.Response = env.CreateWebResourceResponse(fs, 200, "OK", "Content-Type: " + type + "\r\nContent-Length: " + fs.Length);
+            }
+            catch (Exception ex) { Program.Log("pencere: sahne dosyası okunamadı: " + ex.Message); }
+        }
+
+        static string FindPack()
+        {
+            var installed = Path.Combine(Program.AppDir, "sahne");
+            if (File.Exists(Path.Combine(installed, "sahne.json"))) return installed;
+            for (var d = new DirectoryInfo(Program.AppDir); d != null; d = d.Parent)
+            {
+                var dev = Path.Combine(d.FullName, "sahne", "paket");
+                if (File.Exists(Path.Combine(dev, "sahne.json"))) return dev;
+            }
+            return null;
         }
 
         /// <summary>ui\ next to the exe in development; otherwise the embedded copy extracted to the data folder.</summary>
