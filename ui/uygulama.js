@@ -55,7 +55,7 @@ const M = {
 };
 // smoothed emission (linear), so 30 Hz service updates become continuous light
 const L = {
-  halo: new Float32Array(84 * 3), kbd: new Float32Array(30), prevHalo: new Float32Array(84 * 3),
+  halo: new Float32Array(84 * 3), kbd: new Float32Array(30), prevHalo: new Float32Array(84 * 3), refHalo: new Float32Array(84 * 3),
   tog: [0, 0, 0], ringL: [0, 0, 0], ringR: [0, 0, 0], soft: [0, 0, 0], mark: [1, 1, 1],
   stopsLin: [], stopsT: [38, 46, 54, 64, 74, 84],
 };
@@ -95,7 +95,7 @@ function makeTarget(w, h, fmt = gl.RGBA16F, filter = gl.LINEAR) {
 function freeTarget(x) { if (x) { gl.deleteTexture(x.t); gl.deleteFramebuffer(x.f); } }
 
 async function initGL() {
-  gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance', desynchronized: false });
+  gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance', desynchronized: false, preserveDrawingBuffer: !params.has('koru0') });
   if (!gl) throw new Error('WebGL2 yok');
   if (!gl.getExtension('EXT_color_buffer_float')) throw new Error('EXT_color_buffer_float yok');
   gl.getExtension('EXT_float_blend');
@@ -120,7 +120,10 @@ async function initGL() {
   }
   R.compileMs = performance.now() - bootT;
   R.vao = gl.createVertexArray();
+  // GPU timer: every frame in headless measurement, every 15th frame in the window (enough for pacing),
+  // with the query objects reused rather than created and deleted per frame
   R.timer = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  R.qFree = [];
   R.ok = true;
   resize();
 }
@@ -263,9 +266,19 @@ function updateLights(dt) {
 
 // how much the light changed this frame (relative), to steer the accumulation
 function lightChange() {
-  let d = 0, s = 1e-3;
-  for (let i = 0; i < 84 * 3; i++) { d += Math.abs(L.halo[i] - L.prevHalo[i]); s += L.halo[i]; }
-  return d / s;
+  let d = 0, s = 1e-3, dr = 0;
+  for (let i = 0; i < 84 * 3; i++) { d += Math.abs(L.halo[i] - L.prevHalo[i]); dr += Math.abs(L.halo[i] - L.refHalo[i]); s += L.halo[i]; }
+  // the scale marker is a small emitter that moves: its travel counts too, or it would leave a trail
+  const dm = Math.abs(M.tempShown - (L.prevTemp == null ? M.tempShown : L.prevTemp));
+  L.prevTemp = M.tempShown;
+  const mk = dm > 0.004 ? dm * 0.4 : 0;   // sensor drift of a few thousandths of a degree does not count
+  // Deadband: the service's LED values jitter by a step on every message; changes under 2% against the
+  // colours the image was built with are invisible and let the scene rest (otherwise it never would).
+  // A larger drift or any real effect wakes the trace, which then catches up within a second or two.
+  const rel = d / s, relRef = dr / s;
+  if (relRef < 0.02 && rel < 0.004) return mk;
+  L.refHalo.set(L.halo);
+  return Math.max(rel, relRef * 0.25) + mk;
 }
 
 // ==================================================================== rotors
@@ -308,9 +321,10 @@ function render(dt) {
 
   // resting: converged and the light steady -> only the moving rotors keep tracing
   R.idle = !mov && R.n >= 300 && dl < 3e-4 && !params.has('noidle');
-  let traceOn = true;
+  let traceOn = true, clip = [0, 0, w, h];
   gl.bindVertexArray(R.vao);
-  const tq = R.timer && R.queries.length < 6 ? gl.createQuery() : null;
+  const sampleGpu = host ? (R.frame % 15 === 0 && R.queries.length === 0) : R.queries.length < 6;
+  const tq = R.timer && sampleGpu ? ((!params.has('yenisorgu') && R.qFree.pop()) || gl.createQuery()) : null;
   if (tq) gl.beginQuery(R.timer.TIME_ELAPSED_EXT, tq);
 
   if (R.idle) {             // both views show the rotors: keep tracing their faces only
@@ -319,8 +333,7 @@ function render(dt) {
       const sx = w / window.innerWidth, sy = h / window.innerHeight;
       const x0 = Math.floor(Math.min(rs[0].left, rs[1].left) * sx) - 2, x1 = Math.ceil(Math.max(rs[0].right, rs[1].right) * sx) + 2;
       const y0 = Math.floor(Math.min(rs[0].top, rs[1].top) * sy) - 2, y1 = Math.ceil(Math.max(rs[0].bottom, rs[1].bottom) * sy) + 2;
-      gl.enable(gl.SCISSOR_TEST);
-      gl.scissor(x0, h - y1, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+      clip = [x0, h - y1, x1, h - y0];
     }
   }
   // 1) path trace, blended into the accumulation buffers
@@ -333,7 +346,11 @@ function render(dt) {
   gl.uniform3fv(U(p, 'uCamPos'), cam.pos); gl.uniform3fv(U(p, 'uCamR'), cam.R);
   gl.uniform3fv(U(p, 'uCamU'), cam.U); gl.uniform3fv(U(p, 'uCamF'), cam.F);
   gl.uniform1f(U(p, 'uFocal'), cam.focal);
-  const spp = R.focusLow ? 6 : R.spp, sppDyn = R.focusLow ? 10 : R.sppDyn;
+  // constant work per frame, focused or not: a focus change must not move the pacing (rest mode keeps an idle window cheap)
+  // samples per pixel scale with the window so every size costs about the same per frame (~10 ms at the
+  // normal 1770x1103 window with 10); the moving rotor faces keep their count, fewer shows as grain there
+  const spp = params.has('spp') ? R.spp : clamp(Math.round(R.spp * 1.95e6 / (w * h)), 6, R.spp), sppDyn = R.sppDyn;
+  R.sppNow = spp;
   gl.uniform1i(U(p, 'uSpp'), spp); gl.uniform1i(U(p, 'uSppDyn'), sppDyn);
   gl.uniform1i(U(p, 'uIter'), Math.max(spp, sppDyn) * 8);
   gl.uniform1ui(U(p, 'uSeed'), R.seed);
@@ -381,12 +398,32 @@ function render(dt) {
   gl.uniform4f(U(p, 'uScale'), scaleMin, scaleMax, M.tempShown, 0.32 + 0.25 * M.rgbOn);
   gl.uniform3fv(U(p, 'uMarkCol'), L.mark);
   gl.uniform1f(U(p, 'uFill'), 0.9 + 1.4 * M.rgbOn);
-  if (traceOn) gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (traceOn) {
+    // The trace is drawn in horizontal bands, each flushed on its own: one 14 ms draw cannot be
+    // interrupted, and the desktop compositor, which needs the GPU every refresh, would miss its slot.
+    const bands = R.idle ? 1 : (params.has('bant') ? +params.get('bant') : 6);
+    gl.enable(gl.SCISSOR_TEST);
+    for (let i = 0; i < bands; i++) {
+      const y0 = Math.max(clip[1], Math.floor(h * i / bands)), y1 = Math.min(clip[3], Math.floor(h * (i + 1) / bands));
+      if (y1 <= y0) continue;
+      gl.scissor(clip[0], y0, Math.max(1, clip[2] - clip[0]), y1 - y0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (bands > 1) gl.flush();
+    }
+  }
   gl.disable(gl.BLEND);
   gl.disable(gl.SCISSOR_TEST);
 
+  // Light rest: once resting, only the fan faces change. The canvas keeps its image (preserveDrawingBuffer),
+  // so only those rectangles are re-composited and the full-screen glare is refreshed every 48th frame.
+  // A steady ~30% load made the GPU cycle between power states every few seconds, and some of those
+  // memory-clock switches stalled presentation for 0.3-0.7 s; this load lets it settle.
+  R.idleRun = R.idle ? (R.idleRun || 0) + 1 : 0;
+  const lite = !params.has('koru0') && R.idleRun > 3 && (R.idleRun % 48) !== 0;
+
   // 2) glare chain
   const B = R.fb.bloom;
+  if (!lite) {
   p = P.down; gl.useProgram(p.p);
   let srcT = R.fb.acc.a, sw = w, sh = h;
   for (let i = 0; i < B.length; i++) {
@@ -407,6 +444,7 @@ function render(dt) {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   gl.disable(gl.BLEND);
+  }
 
   // 3) final
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h);
@@ -417,8 +455,10 @@ function render(dt) {
   gl.uniform2f(U(p, 'uRes'), w, h);
   gl.uniform1f(U(p, 'uExposure'), 1.35 * M.light);
   gl.uniform1f(U(p, 'uBloomStr'), params.has('nobloom') ? 0 : 0.06);
+  if (lite) { gl.enable(gl.SCISSOR_TEST); gl.scissor(clip[0], clip[1], Math.max(1, clip[2] - clip[0]), Math.max(1, clip[3] - clip[1])); }
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  if (tq) { gl.endQuery(R.timer.TIME_ELAPSED_EXT); R.queries.push(tq); }
+  gl.disable(gl.SCISSOR_TEST);
+  if (tq) { gl.endQuery(R.timer.TIME_ELAPSED_EXT); tq._idle = R.idle; R.queries.push(tq); }
 
   if (R.timer && R.queries.length) {
     const q = R.queries[0];
@@ -428,8 +468,9 @@ function render(dt) {
         const ms = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
         R.gpuMs = R.gpuMs ? R.gpuMs * 0.9 + ms * 0.1 : ms;
         if (R.gpu.length < 20000) R.gpu.push(ms);
+        if (!q._idle && R.frame > 60) { PACE.full.push(ms); if (PACE.full.length > 240) PACE.full.shift(); }   // past warm-up
       }
-      gl.deleteQuery(q);
+      R.qFree.push(q);
     }
   }
   R.frame++;
@@ -668,7 +709,7 @@ function updateOverlay(dt) {
   if (M.t - (state.ledT || -9) > 0.5) {
     state.ledT = M.t;
     const rps = R.raysPerSec || 0;
-    const html = `<span>İŞLEV<b>3 DÜĞME</b></span><span>SANİYEDE IŞIN<b>${rps > 0 ? fmtN(rps / 1e6) + ' MİLYON' : '—'}</b></span><span>PİKSEL BAŞINA ÖRNEK<b>${fmtN(Math.min(R.spp * R.n, 99999))}</b></span>`;
+    const html = `<span>İŞLEV<b>3 DÜĞME</b></span><span>SANİYEDE IŞIN<b>${rps > 0 ? fmtN(rps / 1e6) + ' MİLYON' : '—'}</b></span><span>PİKSEL BAŞINA ÖRNEK<b>${fmtN(Math.min((R.sppNow || R.spp) * R.n, 99999))}</b></span>`;
     if (html !== state.ledger) { state.ledger = html; $('#ledger').innerHTML = html; }
   }
 }
@@ -698,7 +739,6 @@ function onMessage(m) {
     case 'baglanti': D.link = m.durum; break;
     case 'gorunur':
       M.visible = m.visible !== false; M.focused = m.focused !== false;
-      R.focusLow = !M.focused;
       if (M.visible) kick();
       break;
   }
@@ -792,8 +832,8 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => {
   if ((e.key === ' ' || e.key === 'Enter') && keyDown >= 0) { e.preventDefault(); const i = keyDown; keyDown = -1; pressUp(i, true); }
 });
-window.addEventListener('blur', () => { if (!host) { M.focused = false; R.focusLow = false; } });
-window.addEventListener('focus', () => { M.focused = true; R.focusLow = false; kick(); });
+window.addEventListener('blur', () => { if (!host) { M.focused = false; } });
+window.addEventListener('focus', () => { M.focused = true; kick(); });
 document.addEventListener('visibilitychange', () => { if (!host) { M.visible = !document.hidden; if (M.visible) kick(); } });
 window.addEventListener('resize', () => { layoutDirty = true; if (R.ok) { resize(); kick(); } });
 
@@ -837,37 +877,74 @@ function reportPerf() {
   const g = R.gpu.slice(perfGpu0); perfGpu0 = R.gpu.length;
   const gm = g.length ? g.slice().sort((x, y) => x - y)[g.length >> 1] : null;
   send(`perf:kare p50=${med.toFixed(1)} p95=${q(0.95).toFixed(1)} p99=${q(0.99).toFixed(1)} max=${a[a.length - 1].toFixed(1)} uzun=${long}` +
-       (gm != null ? ` gpu=${gm.toFixed(1)}ms` : '') + ` n=${a.length} spp=${R.focusLow ? 6 : R.spp}`);
+       (gm != null ? ` gpu=${gm.toFixed(1)}ms` : '') + ` n=${a.length} spp=${R.sppNow}/${R.sppDyn}` +
+       ` k=${PACE.k} yenileme=${PACE.refresh.toFixed(2)} odak=${M.focused ? 1 : 0} ${R.w}x${R.h}` +
+       (R.slow ? ` js-en-yavas=${R.slow.total.toFixed(0)}(adim ${R.slow.step.toFixed(0)}, cizim ${R.slow.render.toFixed(0)}, yazi ${R.slow.overlay.toFixed(0)})` : '') +
+       (PACE.worst ? ` en-uzun-aralik@${PACE.worst.t.toFixed(1)}s:${PACE.worst.what}` : '') +
+       ` uzun-gorev=${PACE.lt.n}${PACE.lt.n ? '/' + PACE.lt.max.toFixed(0) + 'ms@' + PACE.lt.at.toFixed(2) + 's' : ''}`);
+  R.slow = null; PACE.worst = null; PACE.lt = { n: 0, max: 0 };
 }
 R.rays = 0;
-// Pacing: the display's refresh is measured while the shaders compile (nothing else runs then);
-// the scene renders on every k-th vsync, k chosen so the GPU time fits with margin and the cadence
-// never exceeds ~60 fps. A steady 55 fps on the 165 Hz panel beats a 61/82 fps alternation.
-const PACE = { iv: [], last: 0, refresh: 1000 / 60, k: 1, tick: 0, n: 0 };
-function measureRefresh(now) {
-  if (R.ok) return;
-  if (PACE.last) PACE.iv.push(now - PACE.last);
-  PACE.last = now;
-  if (PACE.iv.length >= 8) {
-    const a = PACE.iv.slice(-40).sort((x, y) => x - y);
-    PACE.refresh = clamp(a[a.length >> 1], 1000 / 360, 1000 / 24);
+// Pacing. The scene renders at an even cadence of k display refreshes, scheduled against absolute time
+// targets (counting rAF ticks drifts: Chromium drops ticks while the GPU is busy). The refresh period is
+// measured all the time from the shortest rAF intervals; k comes from the median GPU time of full frames
+// (resting frames, which only trace the rotors, do not count), with hysteresis, so it does not change
+// while nothing changes in the scene. Cadence never exceeds ~64 fps.
+const PACE = { ticks: [], tc: 0, lastTick: 0, refresh: 1000 / 60, k: 3, last: 0, up: 0, n: 0, full: [], recent: [], down: 0 };
+function tickRefresh(now) {
+  if (PACE.lastTick) {
+    const d = now - PACE.lastTick;
+    if (d > 2 && d < 60) { PACE.ticks.push(d); if (PACE.ticks.length > 240) PACE.ticks.shift(); }
   }
+  PACE.lastTick = now;
+  if (PACE.ticks.length >= 12 && (++PACE.tc % 12) === 0) {
+    const a = PACE.ticks.slice().sort((x, y) => x - y);
+    // intervals are whole multiples of the refresh, with jitter: average the cluster of single refreshes
+    const r0 = a[Math.floor(a.length * 0.1)];
+    const one = a.filter(x => x > r0 * 0.75 && x < r0 * 1.3);
+    const est = clamp(one.reduce((x, y) => x + y, 0) / one.length, 1000 / 360, 1000 / 24);
+    if (Math.abs(est - PACE.refresh) / PACE.refresh > 0.01) PACE.refresh = est;
+  }
+}
+function measureRefresh(now) {                  // during startup, before frames are drawn
+  if (R.ok) return;
+  tickRefresh(now);
   requestAnimationFrame(measureRefresh);
 }
 requestAnimationFrame(measureRefresh);
+PACE.lt = { n: 0, max: 0 };   // main-thread long tasks since the last perf line (tells a page stall from a GPU/compositor one)
+try { new PerformanceObserver(l => l.getEntries().forEach(e => { PACE.lt.n++; if (e.duration > PACE.lt.max) { PACE.lt.max = e.duration; PACE.lt.at = (e.startTime - bootT) / 1000; } })).observe({ type: 'longtask' }); } catch (e) { /* not supported */ }
 function choosePace() {
-  const g = R.gpu.slice(-90);
-  if (g.length < 30) return;
-  const s = g.slice().sort((x, y) => x - y), p90 = s[Math.floor(s.length * 0.9)];
-  const need = Math.max(15.6, p90 * 1.2 + 1.0);
-  let k = clamp(Math.ceil(need / PACE.refresh - 0.03), 1, 6);
-  if (k < PACE.k && need > (PACE.k - 1) * PACE.refresh * 0.85) k = PACE.k;   // hysteresis
-  PACE.k = k;
+  const cap = Math.max(1, Math.ceil(15.6 / PACE.refresh - 0.02));            // never faster than ~64 fps
+  if (R.timer) {
+    // from the median GPU time of full frames (resting frames do not count), with hysteresis
+    const g = PACE.full.slice(-60);
+    if (g.length < 12) return;
+    const s2 = g.slice().sort((x, y) => x - y), med = s2[s2.length >> 1];
+    const k = Math.max(cap, clamp(Math.ceil((med * 1.3 + 2.0) / PACE.refresh - 0.02), 1, 8));
+    if (!PACE.decided) { PACE.decided = true; PACE.k = k; return; }
+    if (k > PACE.k) { PACE.down = 0; if (++PACE.up >= 2) { PACE.k = k; PACE.up = 0; } }
+    else if (k < PACE.k && (med * 1.3 + 2.0) < (PACE.k - 1) * PACE.refresh * 0.85) { PACE.up = 0; if (++PACE.down >= 3) { PACE.k = k; PACE.down = 0; } }
+    else { PACE.up = 0; PACE.down = 0; }
+    return;
+  }
+  // no timer: from what the display shows; raise k after two windows where >4% of frames came a refresh late
+  if (!PACE.decided) { PACE.decided = true; PACE.k = cap; PACE.recent.length = 0; return; }
+  const iv = PACE.recent.splice(0);
+  if (iv.length < 20) return;
+  const miss = iv.filter(x => x > (PACE.k + 0.5) * PACE.refresh).length / iv.length;
+  if (miss > 0.04) { if (++PACE.up >= 2) { PACE.k = Math.min(cap + 3, PACE.k + 1); PACE.up = 0; } } else PACE.up = 0;
 }
 function frame(now) {
   raf = 0;
   if (!M.visible) { lastFrameNow = 0; return; }
-  if (params.has('nopace') ? false : (++PACE.tick % PACE.k) !== 0) { raf = requestAnimationFrame(frame); return; }
+  tickRefresh(now);
+  if (!params.has('nopace')) {
+    // due k refreshes after the frame that actually ran: half a refresh of tolerance absorbs rAF jitter,
+    // and an error in the refresh estimate cannot accumulate into a slipped vsync
+    if (PACE.last && now - PACE.last < (PACE.k - 0.5) * PACE.refresh) { raf = requestAnimationFrame(frame); return; }
+    PACE.last = now;
+  }
   if (++PACE.n % 60 === 0) choosePace();
   const dt = lastT ? Math.min(0.1, (now - lastT) / 1000) : 1 / 60;
   lastT = now;
@@ -879,7 +956,12 @@ function frame(now) {
   updateOverlay(dt);
   const p3 = performance.now();
   if (p3 - p0 > (R.slow ? R.slow.total : 8)) R.slow = { total: p3 - p0, step: p1 - p0, render: p2 - p1, overlay: p3 - p2, t: M.t, tab: M.tab, camT: M.camT };
-  if (R.frame > 1 && lastFrameNow) perfWin.push(now - lastFrameNow);
+  if (R.frame > 1 && lastFrameNow) {
+    const iv = now - lastFrameNow;
+    perfWin.push(iv);
+    if (!R.timer) PACE.recent.push(iv);
+    if (!PACE.worst || iv > PACE.worst.iv) PACE.worst = { iv, t: M.t, what: [M.tab, M.camT < 1 ? 'kamera' : '', R.idle ? 'dinlenme' : 'tam', 'n' + Math.round(R.n), 'js' + (p3 - p0).toFixed(0)].filter(Boolean).join('/') };
+  }
   lastFrameNow = now;
   if (host && now - perfAt > 10000) { perfAt = now; reportPerf(); }
   if (now - rayWin.t > 1000) { R.raysPerSec = (R.rays - rayWin.rays) / ((now - rayWin.t) / 1000); rayWin = { t: now, rays: R.rays }; }
