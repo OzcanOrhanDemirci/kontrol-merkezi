@@ -8,7 +8,7 @@ and its equations. If code and this file disagree, fix one of them in the same c
 
 The window is one diegetic 3D scene: a colossal underground hall in the manner of Tokyo's flood-discharge "underground
 cathedral" (G-Cans): massive concrete columns in rows receding into haze, a very high ceiling, dark. There is no UI
-layer: every control and every text is an object in the world (stencilled plates, hanging steel signs, boards, a
+layer: every control and every text is an object in the world (stencilled plates, hanging steel signs, desk panels, a
 digital display in the arch). Two places, the camera travels between them:
 
 - **Fanlar** (start): we stand on a steel landing at the back of the entrance gallery. Giant industrial fans are built
@@ -39,7 +39,7 @@ Layout (first version; the builder owns the exact numbers and writes them into t
 | Entrance gallery | x ∈ [-12, 12], y ∈ [0, 20], z ∈ [-44, 0]. Back wall z = 0 with the tunnel mouth we came out of (5.2 × 4.4 m from the deck, 5 m deep, closed by a bulkhead with a door). |
 | Landing | steel platform, deck at y = 3.0, z ∈ [-6, 0], x ∈ [-5, 5], railing, stair (16 risers of 187.5 mm, 270 mm goings, 2.4 m wide) down towards -z to z = -10.3. |
 | Fans | one per side wall, axis along ±x, centre (±12, 8.5, -24), Ø 10 m, in a square recess (14.4 m, on the formwork grid) 2.5 m deep, the barrel continuing 2 m into the duct. Left = CPU + case, right = GPU. |
-| Fan boards | beside each fan on the portal side (the wall between the landing and the fans is outside the fanlar frame): a 5.7 × 3.5 m cabinet (face 5.4 × 3.2 m) on brackets, its wall end at z = -32.8, turned 35° towards the landing; the warning plate under it, the lever box on the wall below its wall end, the stencilled identity on the wall above it. |
+| Fan desks | one per fan on the landing by its front rail, in the fan's paint: base (±2.35, 3.0, -5.45), turned to the fanlar eye; a body 0.98 m wide, a head whose face slopes 60° from level (top edge 1.33 m above the deck) carrying the panel (`masa_ekran_*`, 0.86 × 0.6 m, satin black, self-lit live), the knife switch's great lever (`kol_*`) on a post at the desk's inner end, a hooded lamp behind the post aimed down at the lever. The desks are the fans' only control and display (the wall boards were removed: at 33 m they could not be read and repeated the desks). On the side wall towards the portal: the stencilled identity (`boya_*`, y 7.9, z -35.2) and a caged lamp. |
 | Ceiling shaft | opening in the gallery ceiling, x ∈ [-5, 5], z ∈ [-36, -26], a concrete well up to y = 33.5 above it, a steel grate in the opening (resting at y = 20.3). Light enters at the well's top, falls slanted 10° towards -z. |
 | Gallery portal | the gallery's far end z = -44 opens into the hall through a portal 24 m wide, 20 m tall with a two-step frame standing out of the hall's front wall (the gallery is a frame within the frame). |
 | Hall | x ∈ [-30, 30], y ∈ [0, 26], z ∈ [-275, -44]. Drainage channels along both walls (\|x\| 27.6..28.2), pilasters (1.6 × 1 m) at the column lines carrying the beams, a catwalk on the left wall at y = 12 with a caged ladder at its start, a door with a lit frame off the catwalk at z = -150, pipe runs. |
@@ -60,7 +60,7 @@ Light is baked per group, in white. Live colour of group g is `C_g · k_g` (line
 |---|---|---|---|
 | 0 | `kuyu` | the ceiling shaft's emitter (a horizontal rectangle at the well's top whose normal slants 10° towards -z, lobe 6) | the temperature colour (`isik.onizleme`, the colour the case shows or would show), always; intensity animates in the opening |
 | 1 | `kemer` | the arch: the heat core's heart behind the gate (`cekirdek_isik`, four RECT emitters on its faces), the one light of the place; four dim floodlights in the plinth fill the piers' faces | the temperature colour when RGB is on (`isik.cikis`); when off, a faint ember of the temperature colour (the arch is the RGB) |
-| 2 | `lamba` | small fixed service lamps (caged wall lamps, the board lamps) | fixed warm white, constant |
+| 2 | `lamba` | small fixed service lamps (caged wall lamps, the desks' lamps) | fixed warm white, constant |
 
 **RGB off** (Özcan, 11-16: "silüet karanlığı yani zifiri değil estetik karanlık [...] kapalı olmasının getirdiği bir
 tekinsizlik"): the whole hall sinks slowly into a darkness you can still see in: shaft and arch fall to a faint ember of
@@ -82,7 +82,7 @@ uv), and flags:
   texels baked at its position.
 - `dynamic`: not in the static mesh (rotors); lit from the volumes.
 - `wet`: the floor; reflections from the planar reflection pass, wetness mask from the texture and a puddle mask.
-- `levha`: a face that carries a live-drawn texture (signs, boards, displays): its uv0 runs 0..1 over the face (u from
+- `levha`: a face that carries a live-drawn texture (signs, panels, displays): its uv0 runs 0..1 over the face (u from
   the face's left to its right, v from its top to its bottom, as a canvas is drawn, seen from the side its normal
   faces), its uv2 is in metres like every chart's, and the anchor names the atlas rect. Round lenses (`mercek`) map
   their square.
@@ -264,8 +264,8 @@ panel) are geometry too; everywhere else they are the textures' matter (small re
 
 What is built: 2.46 M static triangles in 5.5 k light map charts. The gallery 0.13 M, the fans 0.38 M (bell-mouths,
 grilles, motors), the hall 1.56 M (the six tie-hole faces 0.8 M of it), the arch 0.53 M (the chamber and core 0.19 M of it), the hanging signs 0.17 M (their
-chains); the rotors 37 k and 43 k triangles, the levers 3 k each. Anchors (42): `fan_kasa`, `fan_gpu`, `git_rgb`,
-`git_fanlar`, `cikis_1`, `cikis_2_tik`, `anahtar_rgb` (tik); `boya_*`, `pano_*`, `uyari_*`, `tabela_rgb`, `tabela_fanlar`,
+chains); the rotors 37 k and 43 k triangles, the levers 3 k each. Anchors (42): `fan_kasa`, `fan_gpu`, `masa_kasa`, `masa_gpu`, `git_rgb`,
+`git_fanlar`, `cikis_1`, `cikis_2_tik`, `anahtar_rgb` (tik); `boya_*`, `masa_ekran_*`, `tabela_rgb`, `tabela_fanlar`,
 `cikis_1`, `cikis_2`, `kilit_tasi_ekran`, `durak_plaka_0..5`, `plaka_rgb`, `cihaz_aio|klavye|gpu` (levha); `kol_kasa`,
 `kol_gpu`, `kol_rgb`, `durak_0..5` (cold to hot from left to right), `cekirdek` (the heart), `kemer_agiz` (the opening's air), `lamba_aio|klavye|gpu` (nokta).
 Volumes: `salon` 0.5 m (122 × 69 × 563 cells), `kuyu` 0.15 m (70 × 224 × 117; 0.1 m was 6.1 M cells, ~290 MB), `fan_kasa`, `fan_gpu` 0.2 m
@@ -281,7 +281,7 @@ and checks the journey's clearance. It is the builder's check, not the product.
   runs 0..1 in canvas order: u to the right as seen from the front, v = 0 at its top edge (the builder's convention,
   `hall_kit.h`; the live canvas is uploaded unflipped).
 - A levha-flagged material may be shared by many faces: the renderer gives each triangle to the smallest `levha` or
-  `nokta` anchor box holding its centre. So every sign, board, display and lamp lens needs an anchor box around its
+  `nokta` anchor box holding its centre. So every sign, panel, display and lamp lens needs an anchor box around its
   face (lamp lenses: a `nokta` anchor named as `setLamp` will call it), and boxes of different faces must not overlap.
 - Hover: a `tik` box lifts the levha/nokta anchors whose centres it contains (and the one of its own name).
 - A rotor's blur disc uses its main material as constants (`ortalamaAlbedo` x `renk`, `puruz`, `metal`).
@@ -331,11 +331,15 @@ object's own lamp or paint catch the light (a small emissive or albedo lift), th
 send the same commands as today (`fan-kasa`, `fan-gpu`, `rgb`), and the journey runs between the two views.
 
 The texts the app shows today all exist in the world:
-- each fan: its board on the wall beside it (state: EN YÜKSEK / BIOS / KART OTOMATİĞİ / GEÇİYOR / BAŞKA PROGRAMDA;
-  rpm of each real fan, the CPU or GPU temperature, the press hint), a stencilled identity on the fan's housing
-  (İŞLEMCİ · KASA, EKRAN KARTI);
-- the warnings: no admin (a plate with an amber lamp by the boards), Afterburner's fan control (a plate on the GPU board);
-  service not connected (the boards' lamps out, a plate "SERVİSE BAĞLI DEĞİL");
+- each fan: the panel of its desk on the landing, in three ranks: the state first, a window lit in its colour
+  (EN YÜKSEK HIZDA / BIOS DENETİMİNDE / KARTIN DENETİMİNDE / GEÇİYOR / BAŞKA PROGRAMDA / BİLGİ YOK); the CPU or GPU
+  temperature and each real fan's rpm second (amber figures by engraved names; the GPU's fan power too); one line third:
+  a warning if there is one, else why the lever cannot act, else the press hint (KOLU ÇEK · …, lit on hover); a
+  stencilled identity on the wall beside the fan (İŞLEMCİ · KASA, EKRAN KARTI);
+- the warnings, on the desk panel's third line as an amber window with a warning triangle: no admin ("SERVİS YÖNETİCİ
+  İZNİ OLMADAN ÇALIŞIYOR"), Afterburner's fan control (GPU desk, "AFTERBURNER'IN FAN KONTROLÜ AÇIK / BU KOLLA
+  ÇAKIŞIR"), another program (GPU desk, "FANLARI BAŞKA BİR PROGRAM YÖNETİYOR"), service not connected ("SERVİSE BAĞLI
+  DEĞİL", the state window dark);
 - RGB at the arch: the lintel's display (average temperature), the stops of the colour scale as a row of lamps across the piers
   with their degrees, the on/off control (a great lever on the console before the arch, with its plate), the three devices'
   indicator lamps with their names;
@@ -349,7 +353,7 @@ The texts the app shows today all exist in the world:
 | Baker and scene builder (C++/CUDA/OptiX) | `sahne/firin/` (builds `salon.exe`, needs `C:/dev/pc_graphics/third_party`) | split: core baker; scene geometry |
 | Asset fetch (Poly Haven 2K textures and models) | `sahne/varlik.py` → `sahne/varlik/` (git-ignored) | assets |
 | Live renderer | `ui/salon/*.js` | renderer |
-| Sign, board and display textures (Canvas2D) | `ui/salon/levha.js` | signs |
+| Sign, panel and display textures (Canvas2D) | `ui/salon/levha.js` | signs |
 | App logic (state, protocol, camera, picking) | `ui/uygulama.js` | lead |
 
 The pack is not committed (size); it is rebuilt with `sahne/firin/build.bat` + `salon.exe bake`, and a copy of each

@@ -37,15 +37,15 @@
 <script src="levha.js"></script>
 <script>
 'use strict';
-// Distances (m) each texture is seen from, for the "Sahnedeki boyut" view: boards and their plates from the
+// Distances (m) each texture is seen from, for the "Sahnedeki boyut" view: the desks' panels from the
 // landing, signs at the portal, the arch's parts from the RGB view.
-const UZAKLIK = { boya: 16, pano: 22, uyari: 22, tabela: 40, cikis: 14, kilit: 0, durak: 24, plaka: 20, cihaz: 20 };
+const UZAKLIK = { boya: 16, masa: 4.5, tabela: 40, cikis: 14, kilit: 0, durak: 24, plaka: 20, cihaz: 20 };
 const DUR = [['SOĞUK BEYAZ', 38, [.75, .8, 1]], ['SERİN AÇIK MAVİ', 46, [.2, .5, 1]], ['ILIK KOYU MAVİ', 54, [.03, .1, .8]],
   ['SICAK SARI', 64, [1, .7, .03]], ['ÇOK SICAK TURUNCU', 74, [1, .25, .01]], ['EN YÜKSEK KIRMIZI', 84, [1, .01, .005]]];
 // Sample data for each texture (fixtures for the preview only, not service defaults).
 window.ORNEKLER = function (name) {
-  if (name.startsWith('pano_')) {
-    const gpu = name === 'pano_gpu';
+  if (name.startsWith('masa_ekran_')) {
+    const gpu = name === 'masa_ekran_gpu';
     const fanlar = gpu ? [{ ad: 'Fan 1', rpm: 0 }, { ad: 'Fan 2', rpm: 1420 }]
       : [{ ad: 'İşlemci', rpm: 1270 }, { ad: 'Pompa', rpm: 2340 }, { ad: 'Kasa 1', rpm: 960 }, { ad: 'Kasa 3', rpm: 1040 }];
     const base = { sicaklik: gpu ? 43.4 : 51.2, yuzde: 67, fanlar };
@@ -55,9 +55,14 @@ window.ORNEKLER = function (name) {
     list.push({ ad: 'bilgi_yok · başlatılıyor', veri: { durum: 'bilgi_yok', neden: 'Servis başlatılıyor…' } });
     list.push({ ad: 'kol çalışamıyor', veri: { ...base, durum: gpu ? 'kart' : 'bios', kullanilabilir: false, neden: 'Bu kol şu an çalışamıyor' } });
     list.push({ ad: 'ölçüm yok', veri: { durum: gpu ? 'kart' : 'bios', fanlar: [], sicaklik: null, yuzde: null } });
+    list.push({ ad: 'uyarı · servise bağlı değil', veri: { durum: 'bilgi_yok', uyari: 'baglanti' } });
+    list.push({ ad: 'uyarı · yönetici izni yok', veri: { ...base, durum: gpu ? 'kart' : 'bios', kullanilabilir: false, neden: 'Yönetici izni gerekli', uyari: 'yetki' } });
+    if (gpu) {
+      list.push({ ad: 'uyarı · Afterburner', veri: { ...base, durum: 'kart', uyari: 'afterburner' } });
+      list.push({ ad: 'uyarı · başka program', veri: { ...base, durum: 'baska', uyari: 'baska' } });
+    }
     return list;
   }
-  if (name.startsWith('uyari_')) return ['', 'yetki', 'afterburner', 'baska', 'baglanti'].map(uyari => ({ ad: uyari || 'uyarı yok', veri: { uyari } }));
   if (name === 'kilit_tasi_ekran') return [
     { ad: 'açık · soğuk beyaz', veri: { ortalama: 47.3, cpu: 51.2, gpu: 43.4, renk: [.75, .8, 1] } },
     { ad: 'kapalı', veri: { ortalama: 47.3, cpu: 51.2, gpu: 43.4, renk: [.75, .8, 1], kapali: true } },

@@ -77,7 +77,7 @@ struct Box {
 
 // something the window has to find (docs/SALON.md, "Interaction")
 struct Anchor {
-    std::string name;          // "fan_kasa", "pano_gpu", "tabela_rgb", "kilit_tasi_ekran", "anahtar_rgb", ...
+    std::string name;          // "fan_kasa", "masa_ekran_gpu", "tabela_rgb", "kilit_tasi_ekran", "anahtar_rgb", ...
     std::string type;          // "tik" (clickable), "levha" (a face with a live texture), "nokta" (a point)
     Box box;
     std::string atlas;         // levha: which drawn texture goes on it

@@ -15,16 +15,16 @@
  *
  * Data (every field optional; missing telemetry shows as dashes, never as an invented value):
  *   boya_kasa, boya_gpu, tabela_rgb, tabela_fanlar, cikis_1, cikis_2: {}  (fixed identity / navigation)
- *   pano_kasa, pano_gpu: {
+ *   masa_ekran_kasa, masa_ekran_gpu (the fan desks' panels): {
  *     durum: 'en_yuksek' | 'bios' | 'kart' | 'geciyor' | 'baska' | 'bilgi_yok'   (default 'bilgi_yok')
- *     sicaklik: number|null      CPU (pano_kasa) or GPU (pano_gpu) temperature, °C
- *     fanlar: [{ ad: string, rpm: number|null }]   real fans in order; pano_kasa up to 4, pano_gpu up to 2;
- *                                                   on pano_gpu rpm 0 reads DURUYOR
- *     yuzde: number|null         pano_gpu: the card's fan power, %
+ *     sicaklik: number|null      CPU (_kasa) or GPU (_gpu) temperature, °C
+ *     fanlar: [{ ad: string, rpm: number|null }]   real fans in order; _kasa up to 4, _gpu up to 2;
+ *                                                   on _gpu rpm 0 reads DURUYOR
+ *     yuzde: number|null         _gpu: the card's fan power, %
  *     kullanilabilir: boolean    false: the lever cannot act now; `neden` replaces the hint (default true)
  *     neden: string              why there is no lever / no information (default 'SERVİSE BAĞLI DEĞİL')
- *     hover: boolean             the pointer is on the lever: the hint lights up }
- *   uyari_kasa, uyari_gpu: { uyari: '' | 'yetki' | 'afterburner' | 'baska' | 'baglanti' }   ('' = plain plate)
+ *     uyari: '' | 'yetki' | 'afterburner' | 'baska' | 'baglanti'   a warning: it takes the hint's line (default '')
+ *     hover: boolean             the pointer is on the desk: the hint lights up }
  *   kilit_tasi_ekran: { ortalama, cpu, gpu: number|null (°C), renk: [r,g,b] LINEAR 0..1 (the temperature
  *     colour; its hue is shown at full brightness), kapali: boolean (RGB off: dimmed, still legible) }
  *   durak_plaka_0..5: { derece: number|null, ad: string, renk: [r,g,b] LINEAR, secili: boolean }
@@ -59,8 +59,7 @@
   const sizes = {};
   const size = (names, w, h, pxPerM, kind) => names.forEach(n => { sizes[n] = Object.freeze({ w, h, pxPerM, kind }); });
   size(['boya_kasa', 'boya_gpu'], 2048, 512, 512, 'boya');            // 4 × 1 m on the fan's shroud
-  size(['pano_kasa', 'pano_gpu'], 2048, 2048, 512, 'pano');           // 4 × 4 m board, read from ~20 m
-  size(['uyari_kasa', 'uyari_gpu'], 2048, 512, 512, 'levha');         // 4 × 1 m enamel plate by the boards
+  size(['masa_ekran_kasa', 'masa_ekran_gpu'], 2150, 1500, 2500, 'pano');  // 0.86 × 0.6 m desk panel, read from ~4.5 m
   size(['tabela_rgb', 'tabela_fanlar'], 2048, 512, 512, 'levha');     // 4 × 1 m hanging sign, read from ~40 m
   size(['cikis_1', 'cikis_2'], 1024, 512, 1024, 'ekran');             // 1 × 0.5 m lit exit sign
   size(['kilit_tasi_ekran'], 4096, 1024, 512, 'ekran');               // 8 × 2 m display in the keystone
@@ -484,140 +483,113 @@
     });
   }
 
-  // ---- pano_*: the fan boards: self-lit annunciator, dot-matrix readings, pilot lamps
+  // ---- masa_ekran_*: the fan desks' panels: engraved black steel, the light only where it says something. The state's
+  // window first (lit in the state's colour), the temperature and each real fan's speed second (amber figures by
+  // engraved legends), one line third: a warning (an amber window), else why the lever cannot act, else the hint.
   const STATES = {
-    en_yuksek: { lines: ['EN YÜKSEK', 'HIZDA'], tile: '#ffa05a', ink: '#2b1305' },
-    bios: { lines: ['BIOS', 'DENETİMİNDE'], tile: '#aacdff', ink: '#0b1424' },
-    kart: { lines: ['KARTIN', 'DENETİMİNDE'], tile: '#aacdff', ink: '#0b1424' },
-    geciyor: { lines: ['GEÇİYOR'], tile: '#ffe2c4', ink: '#2b1d10' },
-    baska: { lines: ['BAŞKA', 'PROGRAMDA'], tile: '#ffbe78', ink: '#2b1606' },
-    bilgi_yok: { lines: ['BİLGİ YOK'], tile: null, ink: null },
+    en_yuksek: { text: 'EN YÜKSEK HIZDA', tile: '#ffa05a', ink: '#2b1305' },
+    bios: { text: 'BIOS DENETİMİNDE', tile: '#aacdff', ink: '#0b1424' },
+    kart: { text: 'KARTIN DENETİMİNDE', tile: '#aacdff', ink: '#0b1424' },
+    geciyor: { text: 'GEÇİYOR', tile: '#ffe2c4', ink: '#2b1d10' },
+    baska: { text: 'BAŞKA PROGRAMDA', tile: '#ffbe78', ink: '#2b1606' },
+    bilgi_yok: { text: 'BİLGİ YOK', tile: null, ink: null },
   };
-  const AMBER = 'rgb(255,164,72)', AMBER_GHOST = 'rgb(20,11,5)';
-  const PANO = { m: 96, title: 196, tileY: 262, tileH: 430, mx: 112, my: 770, p: 12, lines: 5, hintY: 1700, lampY: 1838 };
-  const LAMPS = [['OTOMATİK', 'rgb(190,212,255)'], ['EN YÜKSEK', 'rgb(255,160,90)'], ['BAŞKA PROGRAM', 'rgb(255,92,60)'], ['SERVİS', 'rgb(120,255,150)']];
-  function panoStatic(name) {
-    return once('pano|' + name, () => {
-      const { w, h } = sizes[name], gpu = name === 'pano_gpu', P = PANO, cv = mk(w, h), c = ctxOf(cv);
+  const WARN = {
+    yetki: 'SERVİS YÖNETİCİ İZNİ OLMADAN ÇALIŞIYOR',
+    afterburner: ["AFTERBURNER'IN FAN KONTROLÜ AÇIK", 'BU KOLLA ÇAKIŞIR'],   // a list: these lines as given
+    baska: 'FANLARI BAŞKA BİR PROGRAM YÖNETİYOR',
+    baglanti: 'SERVİSE BAĞLI DEĞİL',
+  };
+  const AMBER = 'rgb(255,170,80)', LEGEND = 'rgb(150,146,134)', LEGEND_DIM = 'rgb(96,93,85)', RULE = 'rgb(34,33,30)';
+  const MASA = { m: 80, title: 116, tileY: 158, tileH: 330, readY: 524, colX: 900, tempY: 905, rowY: 718, rowH: 120,
+    rule: 1112, band: 1144, bandH: 290 };
+  function masaStatic(name) {
+    return once('masa|' + name, () => {
+      const { w, h } = sizes[name], gpu = name === 'masa_ekran_gpu', P = MASA, cv = mk(w, h), c = ctxOf(cv);
       c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
-      // backlit engraved title and the panel's section rules
-      put(c, gpu ? 'EKRAN KARTI FANLARI' : 'İŞLEMCİ VE KASA FANLARI', P.m, P.title, 'KMKond', 132, 'rgb(150,146,134)', 'left', w - 2 * P.m, 3);
-      c.fillStyle = 'rgb(30,29,26)';
-      c.fillRect(P.m, P.tileY - 30, w - 2 * P.m, 3); c.fillRect(P.m, P.my - 34, w - 2 * P.m, 3);
-      c.fillRect(P.m, P.hintY - 120, w - 2 * P.m, 3); c.fillRect(P.m, P.lampY - 92, w - 2 * P.m, 3);
-      // the annunciator tile's frame (its milky face is drawn per state)
-      c.strokeStyle = 'rgb(26,25,23)'; c.lineWidth = 6; c.strokeRect(P.m - 6, P.tileY - 6, w - 2 * P.m + 12, P.tileH + 12);
-      // dark LEDs of the reading window
-      const cols = Math.floor((w - 2 * P.mx) / P.p);
-      dmGhost(c, P.mx, P.my, cols, P.lines * (DM_ROWS + 2) - 2, P.p, dotSprite(P.p, AMBER_GHOST, false));
-      // pilot lamps: dark lenses and their engraved, faintly backlit legends
-      LAMPS.forEach(([label], i) => {
-        const x = lampX(w, i);
-        const g = c.createRadialGradient(x - 10, P.lampY - 12, 4, x, P.lampY, 48);
-        g.addColorStop(0, 'rgb(26,26,26)'); g.addColorStop(1, 'rgb(8,8,8)');
-        c.fillStyle = 'rgb(18,18,17)'; c.beginPath(); c.arc(x, P.lampY, 58, 0, 7); c.fill();
-        c.fillStyle = g; c.beginPath(); c.arc(x, P.lampY, 46, 0, 7); c.fill();
-        put(c, label, x, P.lampY + 126, 'KMKond', 58, 'rgb(92,90,82)', 'center', 420, 2);
-      });
+      // engraved, faintly backlit legends and the panel's rules
+      put(c, gpu ? 'EKRAN KARTI FANLARI' : 'İŞLEMCİ VE KASA FANLARI', P.m, P.title, 'KMKond', 100, LEGEND_DIM, 'left', w - 2 * P.m, 3);
+      c.fillStyle = RULE;
+      c.fillRect(P.m, P.readY, w - 2 * P.m, 4); c.fillRect(P.m, P.rule, w - 2 * P.m, 4);
+      c.fillRect(P.colX - 50, P.readY + 36, 4, P.rule - P.readY - 72);
+      put(c, gpu ? 'KART ISISI' : 'İŞLEMCİ ISISI', P.m, P.readY + 86, 'KMKond', 80, LEGEND, 'left', P.colX - P.m - 90, 2);
+      put(c, 'FANLAR · DEVİR / DAKİKA', P.colX, P.readY + 86, 'KMKond', 80, LEGEND, 'left', w - P.colX - P.m, 2);
+      // the state window's frame (its milky face is drawn per state)
+      c.strokeStyle = 'rgb(26,25,23)'; c.lineWidth = 8; c.strokeRect(P.m - 8, P.tileY - 8, w - 2 * P.m + 16, P.tileH + 16);
       return cv;
     });
   }
-  const lampX = (w, i) => PANO.m + 232 + i * ((w - 2 * PANO.m - 464) / 3);
-  function pano(c, d, name) {
-    const { w, h } = sizes[name], gpu = name === 'pano_gpu', P = PANO;
+  function masa(c, d, name) {
+    const { w } = sizes[name], gpu = name === 'masa_ekran_gpu', P = MASA;
     const state = d.durum ?? 'bilgi_yok';
     if (!Object.hasOwn(STATES, state)) throw new Error('Unknown fan state: ' + state);
+    const key = d.uyari || '';
+    if (key && !Object.hasOwn(WARN, key)) throw new Error('Unknown warning: ' + key);
     const S = STATES[state], live = state !== 'bilgi_yok';
-    c.drawImage(panoStatic(name), 0, 0);
-    // annunciator tile: milky glass lit from behind (brighter in the middle), engraved legend in dark ink
+    c.drawImage(masaStatic(name), 0, 0);
+    // 1. the state: milky glass lit from behind (brighter in the middle), the legend in dark ink
     const tx = P.m, ty = P.tileY, tw = w - 2 * P.m, th = P.tileH;
     if (S.tile) {
       c.fillStyle = S.tile; c.fillRect(tx, ty, tw, th);
       const g = c.createRadialGradient(w / 2, ty + th / 2, th * .2, w / 2, ty + th / 2, tw * .62);
-      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.30)');
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.28)');
       c.fillStyle = g; c.fillRect(tx, ty, tw, th);
     } else { c.fillStyle = 'rgb(9,9,9)'; c.fillRect(tx, ty, tw, th); }
-    const ink = S.ink || 'rgb(34,34,32)';
-    const two = S.lines.length === 2, px = two ? 196 : 230;
-    S.lines.forEach((s, i) => put(c, s, w / 2, ty + (two ? (i ? 382 : 186) : 296), 'KMKond', px, ink, 'center', tw - 120, 4));
-    // readings on the dot-matrix window
-    const lit = dotSprite(P.p, AMBER, true), cols = Math.floor((w - 2 * P.mx) / P.p);
-    const rows = [];
-    const dash = '---';
-    rows.push([gpu ? 'KART ISISI' : 'İŞLEMCİ ISISI', live && fmt1(d.sicaklik) ? fmt1(d.sicaklik) + '°' : dash]);
+    put(c, S.text, w / 2, ty + th / 2 + 92, 'KMKond', 262, S.ink || 'rgb(58,57,53)', 'center', tw - 120, 4);
+    // 2. the readings: the temperature large on the left, each real fan's speed on the right
+    const dash = '—';
+    const temp = live && fmt1(d.sicaklik) ? fmt1(d.sicaklik) + '°' : dash;
+    put(c, temp, P.m, P.tempY, 'KMKond', 300, live && fmt1(d.sicaklik) ? AMBER : LEGEND_DIM, 'left', P.colX - P.m - 110, 2);
     const fans = Array.isArray(d.fanlar) ? d.fanlar.slice(0, gpu ? 2 : 4) : [];
     const names = gpu ? ['FAN 1', 'FAN 2'] : ['İŞLEMCİ', 'POMPA', 'KASA 1', 'KASA 3'];
-    (fans.length ? fans : names.map(ad => ({ ad, rpm: null }))).forEach((f, i) => {
+    const rows = (fans.length ? fans : names.map(ad => ({ ad, rpm: null }))).map((f, i) => {
       const rpm = live ? f?.rpm : null;
-      const v = gpu && rpm === 0 ? 'DURUYOR' : fmtInt(rpm) ? fmtInt(rpm) + ' DEV/DK' : dash;
-      rows.push([f?.ad || names[i] || 'FAN ' + (i + 1), v]);
+      return [up(f?.ad || names[i] || 'FAN ' + (i + 1)), gpu && rpm === 0 ? 'DURUYOR' : fmtInt(rpm) || dash, fmtInt(rpm) != null || (gpu && rpm === 0)];
     });
-    if (gpu) rows.push(['FAN GÜCÜ', live && fmtInt(d.yuzde) ? '%' + fmtInt(d.yuzde) : dash]);
-    rows.slice(0, P.lines).forEach(([label, value], i) => {
-      const y = P.my + i * (DM_ROWS + 2) * P.p;
-      const maxL = Math.floor((cols + 1) / DM_ADV) - [...dmText(value)].length - 1;
-      dmDraw(c, [...dmText(label)].slice(0, maxL).join(''), P.mx, y, P.p, lit);
-      const vcol = Math.floor((cols + 1) / DM_ADV) - [...dmText(value)].length;
-      dmDraw(c, value, P.mx + vcol * DM_ADV * P.p, y, P.p, lit);
+    if (gpu) rows.push(['FAN GÜCÜ', live && fmtInt(d.yuzde) ? '%' + fmtInt(d.yuzde) : dash, !!(live && fmtInt(d.yuzde))]);
+    rows.slice(0, 4).forEach(([label, value, on], i) => {
+      const y = P.rowY + i * P.rowH;
+      put(c, value, w - P.m, y, 'KMKond', 118, on ? AMBER : LEGEND_DIM, 'right', 520, 2);
+      const vx = w - P.m - c.measureText(value).width;
+      put(c, label, P.colX, y, 'KMKond', 108, LEGEND, 'left', w - P.m - P.colX - 560, 2);
+      // an engraved leader from the name to its figure (the panel is seen at a slant: it keeps a row together)
+      c.fillStyle = 'rgb(62,60,54)';
+      for (let x = P.colX + c.measureText(label).width + 40; x < vx - 30; x += 30) { c.beginPath(); c.arc(x, y - 30, 5, 0, 7); c.fill(); }
     });
-    // the hint by the lever (or why there is none)
-    let hint = '', hintCss = 'rgb(70,68,62)';
-    if (!live || d.kullanilabilir === false) { hint = up(d.neden || 'SERVİSE BAĞLI DEĞİL'); hintCss = 'rgb(150,104,52)'; }
-    else if (state === 'en_yuksek') hint = gpu ? 'KOLU ÇEK · KARTA BIRAK' : "KOLU ÇEK · BIOS'A BIRAK";
-    else if (state !== 'geciyor') hint = 'KOLU ÇEK · EN YÜKSEK HIZA AL';
-    if (hint) {
+    // 3. one line: a warning, else why the lever cannot act, else the hint by the lever
+    const by = P.band, bh = P.bandH, bx = P.m, bw = w - 2 * P.m;
+    if (key) {
+      // an amber window with the warning triangle, the words in dark ink
+      c.fillStyle = '#e0a321'; c.fillRect(bx, by, bw, bh);
+      const g = c.createRadialGradient(w / 2, by + bh / 2, bh * .2, w / 2, by + bh / 2, bw * .62);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.25)');
+      c.fillStyle = g; c.fillRect(bx, by, bw, bh);
+      const cx = bx + 150, cy = by + bh / 2 + 8, R = 96;
+      c.beginPath(); c.moveTo(cx, cy - R); c.lineTo(cx + R * 1.1, cy + R * .78); c.lineTo(cx - R * 1.1, cy + R * .78); c.closePath();
+      c.fillStyle = '#161512'; c.fill();
+      c.beginPath(); c.moveTo(cx, cy - R + 26); c.lineTo(cx + R * 1.1 - 30, cy + R * .78 - 13); c.lineTo(cx - R * 1.1 + 30, cy + R * .78 - 13); c.closePath();
+      c.fillStyle = '#e0a321'; c.fill();
+      c.fillStyle = '#161512'; c.beginPath(); c.moveTo(cx - 10, cy - 42); c.lineTo(cx + 10, cy - 42); c.lineTo(cx + 6, cy + 28); c.lineTo(cx - 6, cy + 28); c.closePath(); c.fill();
+      c.beginPath(); c.arc(cx, cy + 52, 11, 0, 7); c.fill();
+      const tx0 = bx + 300, mw = bx + bw - 40 - tx0, given = [].concat(WARN[key]);
+      const L = given.length > 1 ? { px: Math.min(...given.map(l => fit(c, l, 'KMKond', 124, mw, 1))), lines: given } : wrap(c, given[0], 'KMKond', 124, mw, 2);
+      const lh = L.px * 1.04, y0 = by + bh / 2 - (L.lines.length - 1) * lh / 2 + L.px * .35;
+      L.lines.forEach((s, i) => put(c, s, tx0, y0 + i * lh, 'KMKond', L.px, '#161512', 'left', bx + bw - 40 - tx0, 1));
+    } else {
+      let hint = '', css = 'rgb(178,170,150)';
+      if (!live || d.kullanilabilir === false) { hint = up(d.neden || 'SERVİSE BAĞLI DEĞİL'); css = 'rgb(200,140,70)'; }
+      else if (state === 'en_yuksek') hint = gpu ? 'KOLU ÇEK · KARTA BIRAK' : "KOLU ÇEK · BIOS'A BIRAK";
+      else if (state !== 'geciyor') hint = 'KOLU ÇEK · EN YÜKSEK HIZA AL';
       const on = live && d.kullanilabilir !== false;
-      if (on) hintCss = d.hover ? 'rgb(255,236,200)' : 'rgb(178,170,150)';
-      put(c, hint, w / 2, P.hintY, 'KMKond', 112, hintCss, 'center', w - 2 * P.m - 40, 3);
-      if (on && d.hover) { c.fillStyle = 'rgb(140,120,90)'; c.fillRect(w / 2 - 220, P.hintY + 30, 440, 6); }
+      if (hint) {
+        if (on && d.hover) css = 'rgb(255,236,200)';
+        put(c, hint, w / 2, by + bh / 2 + 44, 'KMKond', 132, css, 'center', bw - 40, 3);
+        if (on && d.hover) { c.fillStyle = 'rgb(160,138,104)'; c.fillRect(w / 2 - 300, by + bh / 2 + 80, 600, 8); }
+      }
     }
-    // lit pilot lamps
-    const lampOn = [live && (state === 'bios' || state === 'kart'), state === 'en_yuksek', state === 'baska', live];
-    LAMPS.forEach(([, css], i) => {
-      if (!lampOn[i]) return;
-      const x = lampX(w, i), y = P.lampY;
-      c.save(); c.globalCompositeOperation = 'lighter';
-      const g = c.createRadialGradient(x, y, 0, x, y, 120);
-      g.addColorStop(0, css); g.addColorStop(.36, css); g.addColorStop(.40, css.replace('rgb(', 'rgba(').replace(')', ',.30)'));
-      g.addColorStop(.62, css.replace('rgb(', 'rgba(').replace(')', ',.07)')); g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = g; c.fillRect(x - 120, y - 120, 240, 240);
-      c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.ellipse(x - 14, y - 16, 15, 10, -.6, 0, 7); c.fill();
-      c.restore();
-    });
   }
 
-  // ---- uyari_*: enamel warning plates
-  const WARN = {
-    yetki: 'SERVİS YÖNETİCİ İZNİ OLMADAN ÇALIŞIYOR',
-    afterburner: "AFTERBURNER'IN FAN KONTROLÜ AÇIK · BU KOLLA ÇAKIŞIR",
-    baska: 'FANLARI BAŞKA BİR PROGRAM YÖNETİYOR',
-    baglanti: 'SERVİSE BAĞLI DEĞİL',
-  };
   function holes4(w, h, inset, r) { return [[inset, inset, r], [w - inset, inset, r], [inset, h - inset, r], [w - inset, h - inset, r]]; }
-  function uyari(c, d, name) {
-    const { w, h } = sizes[name], seed = seedOf(name), key = d.uyari || '';
-    if (key && !Object.hasOwn(WARN, key)) throw new Error('Unknown warning: ' + key);
-    const holes = holes4(w, h, 42, 13);
-    c.drawImage(once('uyari|' + name, () => surface(w, h, { paint: '#e7e0c9', under: 'iron', grime: .32, chip: .5, edge: 26, holes, streaks: true, seed })), 0, 0);
-    if (key) {
-      const wear = once('uyari-f|' + name, () => flakes(w, h, seed, .8));
-      c.drawImage(layer(w, h, p => {
-        p.strokeStyle = '#161512'; p.lineWidth = 12; p.strokeRect(76, 76, w - 152, h - 152);
-        // the amber triangle with its black rim and exclamation mark
-        const cx = 290, cy = 268, R = 168;
-        p.beginPath(); p.moveTo(cx, cy - R); p.lineTo(cx + R * 1.1, cy + R * .78); p.lineTo(cx - R * 1.1, cy + R * .78); p.closePath();
-        p.fillStyle = '#161512'; p.fill();
-        p.beginPath(); p.moveTo(cx, cy - R + 34); p.lineTo(cx + R * 1.1 - 40, cy + R * .78 - 18); p.lineTo(cx - R * 1.1 + 40, cy + R * .78 - 18); p.closePath();
-        p.fillStyle = '#e0a321'; p.fill();
-        p.fillStyle = '#161512'; p.beginPath(); p.moveTo(cx - 17, cy - 78); p.lineTo(cx + 17, cy - 78); p.lineTo(cx + 10, cy + 52); p.lineTo(cx - 10, cy + 52); p.closePath(); p.fill();
-        p.beginPath(); p.arc(cx, cy + 96, 19, 0, 7); p.fill();
-        const L = wrap(p, WARN[key], 'KMKond', 150, w - 560 - 110, 2);
-        const lh = L.px * 1.06, y0 = h / 2 - (L.lines.length - 1) * lh / 2 + L.px * .35;
-        L.lines.forEach((s, i) => put(p, s, 560, y0 + i * lh, 'KMKond', L.px, '#161512', 'left', w - 670, 1));
-      }, wear), 0, 0);
-    }
-    holes.forEach(([x, y], i) => screw(c, x, y, 13, h32(i, 9, seed) * 3));
-  }
 
   // ---- tabela_*: hanging steel signs, painted on a dark plate
   function arrowUp(p, x, y, s) {
@@ -856,8 +828,7 @@
     out.width = s.w; out.height = s.h;            // resets the whole context state: same data, same bytes
     const c = out.getContext('2d', { ...CTX, alpha: s.kind === 'boya' });
     if (name.startsWith('boya_')) c.drawImage(stencilPaint(name), 0, 0);
-    else if (name.startsWith('pano_')) pano(c, d, name);
-    else if (name.startsWith('uyari_')) uyari(c, d, name);
+    else if (name.startsWith('masa_ekran_')) masa(c, d, name);
     else if (name.startsWith('tabela_')) tabela(c, d, name);
     else if (name.startsWith('cikis_')) cikis(c, d, name);
     else if (name === 'kilit_tasi_ekran') keystone(c, d, name);

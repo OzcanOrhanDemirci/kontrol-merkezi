@@ -44,9 +44,9 @@ constexpr float kKemerFloodL = 700.0f;  // group 1: each plinth floodlight's rad
 constexpr float kFanFloodL = 300.0f;  // group 2: each fan floodlight (a 0.5 x 0.36 m glass, lobe 10)
 constexpr float kColUpL = 330.0f;    // group 2: each column uplight (a 0.5 x 0.3 m glass, lobe 14), dimmer than the fans'
 constexpr float kSignLampL = 60.0f;  // group 2: a hanging sign's light strip (0.05 x 4 m, lobe 4) onto its face
-constexpr float kDeskLampL = 25.0f;  // group 2: the fan desks' small hooded lamps (a 5.5 cm disc, lobe 3)
+constexpr float kDeskLampL = 25.0f;  // group 2: the fan desks' small hooded lamps over the levers (a 5.5 cm disc, lobe 6)
 constexpr float kLambaL = 8.0f;      // group 2: the caged service lamps' bulbs and the lit door frame
-constexpr float kBulbBoard = 0.085f; //   bulb radius by the boards, the console, the doors (m)
+constexpr float kBulbBoard = 0.085f; //   bulb radius by the fans' stencils, the console, the doors (m)
 constexpr float kBulbHall = 0.055f;  //   bulb radius of the sparse row along the hall's walls: dimmer by the area
 
 // ---- materials: the fixed names, in id order (Vtx.mat indexes Scene::mats)
@@ -67,7 +67,7 @@ enum MatId : int {
     M_KEMER_ISIK,    // kemer_isik: the arch's light (emissive, group 1)
     M_KUYU_ISIK,     // kuyu_isik: the shaft's light (emissive, group 0)
     M_BOYA,          // boya: stencil paint (levha, no occlusion)
-    M_PANO,          // pano_yuz: the fan boards' faces (levha)
+    M_PANO,          // pano_yuz: the fan desks' panels (levha)
     M_EKRAN,         // ekran_yuz: displays, exit signs (levha)
     M_TABELA,        // tabela_yuz: hanging signs, plates (levha)
     M_MERCEK,        // mercek: lamp lenses (levha)

@@ -477,7 +477,7 @@ def main():
              kutu=box([0, 13.05, -42.89], [1.6, 0, 0], [0, 0.55, 0], [0, 0, 0.025])),
         dict(ad='git_rgb', tur='tik', atlas='', boyut=[0, 0], malzeme=-1,
              kutu=box([0, 13.05, -42.95], [1.8, 0, 0], [0, 0.7, 0], [0, 0, 0.2])),
-        dict(ad='pano_kasa', tur='levha', atlas='pano_kasa', boyut=[4.0, 2.4], malzeme=M_EKRAN,
+        dict(ad='masa_ekran_kasa', tur='levha', atlas='masa_ekran_kasa', boyut=[4.0, 2.4], malzeme=M_EKRAN,
              kutu=box([-11.89, 5.7, -33.0], [0, 0, -2.0], [0, 1.2, 0], [0.025, 0, 0])),
         dict(ad='durak_0', tur='nokta', atlas='', boyut=[0, 0], malzeme=-1,
              kutu=box([-11.84, 2.4, -33.1], [0.05, 0, 0], [0, 0.2, 0], [0, 0, 0.2])),
