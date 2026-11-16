@@ -20,12 +20,14 @@ enum MatFlag : uint32_t {
     MF_WET = 1u << 2,         // the floor: planar reflection, puddles
     MF_LEVHA = 1u << 3,       // carries a live-drawn texture (signs, boards, displays); uv0 runs 0..1 over the face
     MF_METAL = 1u << 4,       // metallic (specular tinted, no diffuse)
+    MF_TWO_SIDED = 1u << 5,   // drawn from both sides (glTF doubleSided): no culling. The oven: a back face is inside a part
 };
 
 struct Material {
     std::string name;          // e.g. "beton_kolon"
     // Poly Haven texture files relative to sahne/varlik/ (empty: constant from tint/rough/metal)
     std::string albedo, normal, arm;
+    std::string emission;      // models: the glTF emissive texture (sRGB), drawn × emitScale × the group's colour
     float uvScale = 1.0f;      // metres per texture repeat (procedural geometry stores uv0 in metres); models: 1
     float3 tint{1, 1, 1};      // multiplies the albedo (linear)
     float rough = -1.0f;       // -1: from the ARM texture
@@ -44,8 +46,10 @@ struct Emitter {
     float3 u{1, 0, 0}, v{0, 0, 1};   // RECT: half axes; DISC: u = radius vector, v unused
     float3 n{0, -1, 0};        // RECT, DISC: the emitting side's normal
     float r = 0.0f;            // SPHERE radius
-    float L = 1.0f;            // radiance
-    float lobe = 1.0f;         // RECT, DISC: radiance ~ cos^lobe about n (1: Lambertian; higher: a more collimated shaft)
+    float L = 1.0f;            // radiance (RECT, DISC: along n)
+    // RECT, DISC: the intensity falls as cos^lobe about n, i.e. radiance L·cos^(lobe-1) (1: Lambertian, constant
+    // radiance; higher: a more collimated shaft; values below 1 are taken as 1)
+    float lobe = 1.0f;
 };
 
 // a moving part (a fan's rotor): its mesh in its own frame (axis +x, centred), placed live
