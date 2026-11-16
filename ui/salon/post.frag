@@ -135,7 +135,6 @@ uniform sampler2D uBloom;
 uniform float uBloomMix;
 uniform float uBloomLevels;
 uniform float uExposure;       // multiplier
-uniform sampler2D uGlow;       // the void's lamps
 vec3 agxContrast(vec3 x) {
     vec3 x2 = x * x, x4 = x2 * x2;
     return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
@@ -188,7 +187,6 @@ void main() {
     vec4 h = hazeAt(vUv, z);
     vec3 rd = viewRay(vUv);
     vec3 c = voidComposite(s, h, rd, voidDist(texelFetch(uDepth, px, 0).r, z, rd));
-    if (uVoidOn > 0.5) c += texture(uGlow, vUv).rgb;   // the void's lamps (fener.vert), after their fog
     vec3 b = texture(uBloom, vUv).rgb / uBloomLevels;
     c = mix(c, b, uBloomMix) * uExposure;
     outColor = vec4(agxEncoded(safe3(c)), 1.0);
@@ -210,6 +208,9 @@ float lanczos2(float x) {
 }
 #ifdef PASS_RESOLVEV
 uniform sampler2D uDither;
+// ---- the void: the lamps' light (fener.vert), already in display light at the canvas' resolution, added here
+uniform sampler2D uGlow;
+uniform float uGlowOn;
 #endif
 void main() {
     ivec2 o = ivec2(gl_FragCoord.xy);
@@ -238,6 +239,7 @@ void main() {
 #ifdef PASS_RESOLVEH
     outColor = vec4(r, 1.0);
 #else
+    if (uGlowOn > 0.5) r += texelFetch(uGlow, o, 0).rgb;   // the void's lamps (display light; see fener.vert)
     r = clamp(r, 0.0, 1.0);
     r = mix(12.92 * r, 1.055 * pow(r, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), r));
     r += (texelFetch(uDither, o & 63, 0).r - 0.5) / 255.0;

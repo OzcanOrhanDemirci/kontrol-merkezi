@@ -1160,6 +1160,8 @@ async function create(canvas, options = {}) {
     kOthers: 30,                                // the other facilities' group-0 intensity (their lamps are steady)
     fog: { sigma: 0.0028, up: [0.070, 0.087, 0.092], down: [0.004, 0.005, 0.0056], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
     force: null,                                // tests: true / false overrides the automatic switch
+    lampsOff: false,                            // tests: the frame without the lamps' sprites (their own light alone)
+    lampsBare: false,                           // tests: the lamps unhidden by the scene (their full light)
     on: false, inBlock: true, homeHaze: 1, n: 0, lamps: 0, drawn: [0, 0, 0], noInterior: false,
   };
   const voidOn = () => VOID.on;
@@ -1351,7 +1353,7 @@ async function create(canvas, options = {}) {
     gl.viewport(0, 0, T.glow.w, T.glow.h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (!VOID.lamps) return;
+    if (!VOID.lamps || VOID.lampsOff) return;
     const pr = programs.fener, u = pr.u;
     gl.useProgram(pr.p);
     camUniforms(pr, c);
@@ -1362,7 +1364,10 @@ async function create(canvas, options = {}) {
     gl.uniform1f(u.uPierce, VOID.fog.pierce);
     gl.uniform1f(u.uHaloR, VOID.fog.haloR);
     if (u.uHaloK) gl.uniform1f(u.uHaloK, VOID.fog.haloK);
+    gl.uniform1f(u.uExposure, exposure * (1 - 0.04));   // tonemapped here (fener.vert); 0.04: the composite's bloom mix
+    gl.uniform3fv(u.uFogUp, VOID.fog.up); gl.uniform3fv(u.uFogDown, VOID.fog.down);
     gl.uniform1f(u.uMaxPx, 420);
+    gl.uniform1f(u.uOcc, VOID.lampsBare ? 0 : 1);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
     gl.bindVertexArray(lampVao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, VOID.lamps);
@@ -1475,7 +1480,6 @@ async function create(canvas, options = {}) {
       bindTex(UNIT.uDepth, gl.TEXTURE_2D, T.scene.depth);
       bindTex(UNIT.uHaze, gl.TEXTURE_2D, T.haze.t);
       bindTex(UNIT.uBloom, gl.TEXTURE_2D, T.bloom.t);
-      bindTex(UNIT.uGlow, gl.TEXTURE_2D, T.glow.t);
       fogUniforms(programs.compose, cam);
       gl.uniform2f(u.uHazeRatio, T.scene.w / T.haze.w, T.scene.h / T.haze.h);
       gl.uniform1f(u.uBloomMix, 0.04);
@@ -1499,6 +1503,8 @@ async function create(canvas, options = {}) {
       fullscreen(programs.resolvev, null, 0, u => {
         bindTex(UNIT.uSrc, gl.TEXTURE_2D, T.half.t);
         bindTex(UNIT.uDither, gl.TEXTURE_2D, dither);
+        bindTex(UNIT.uGlow, gl.TEXTURE_2D, T.glow.t);
+        gl.uniform1f(u.uGlowOn, VOID.on ? 1 : 0);             // the void's lamps, in display light (fener.vert)
         gl.uniform1f(u.uScale, T.half.h / H);
         gl.uniform1i(u.uTaps, taps(T.half.h / H));
       });
@@ -1636,6 +1642,22 @@ async function create(canvas, options = {}) {
       if (o.kOthers != null) VOID.kOthers = o.kOthers;
       if (o.fog) Object.assign(VOID.fog, o.fog);
       if ('force' in o) VOID.force = o.force;
+      if ('lampsOff' in o) VOID.lampsOff = !!o.lampsOff;
+      if ('lampsBare' in o) VOID.lampsBare = !!o.lampsBare;
+    },
+    // tests: the lamps' display light (fener.vert, the glow target) summed over a square round canvas pixel (x, y), from
+    // the top left as S.project gives it; exact float, before the 8-bit canvas
+    voidGlow(x, y, r) {
+      if (!T) return 0;
+      const n = 2 * r + 1, x0 = Math.round(x) - r, y0 = T.glow.h - 1 - Math.round(y) - r;
+      if (x0 < 0 || y0 < 0 || x0 + n > T.glow.w || y0 + n > T.glow.h) return null;
+      const px = new Float32Array(n * n * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.glow.fb);
+      gl.readPixels(x0, y0, n, n, gl.RGBA, gl.FLOAT, px);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      let sum = 0;
+      for (let i = 0; i < n * n; i++) sum += 0.2126 * px[4 * i] + 0.7152 * px[4 * i + 1] + 0.0722 * px[4 * i + 2];
+      return sum;
     },
     voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog } }),
     setHeat(h) { heat = Math.min(1, Math.max(0, h || 0)); },   // the arch opening's shimmer (0..1, from the temperature)

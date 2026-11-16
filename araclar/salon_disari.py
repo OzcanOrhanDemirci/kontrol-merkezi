@@ -195,6 +195,8 @@ def main():
             wait_lock()
             pg.evaluate(JS_PUT, [44.0, 35.0, -170.0, 60, 1, 5])
             frames = []
+            pd = out / 'pan'
+            pd.mkdir(exist_ok=True)
             for i in range(48):
                 yaw = 60 + i * 0.05
                 r = pg.evaluate("""(async ([yaw]) => { const km = window.__km, S = km.S, W = km.W; W.debug.look(yaw * Math.PI / 180, 1 * Math.PI / 180);
@@ -204,28 +206,78 @@ def main():
                       const rx = (v) => [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]];
                       const rq = rx(q), rp = rx(p); const off = [f.o[0] + q[0] - rq[0], f.o[1], f.o[2] + q[2] - rq[2]];
                       const w = [rp[0] + off[0], rp[1] + off[1], rp[2] + off[2]]; return [w, S.project(w)]; });
-                    return lamps.filter(l => l[1].z > 0).map(l => [l[1].x, l[1].y, l[1].z]); })""", [yaw])
-                pth = out / 'pan.png'
+                    return lamps.filter(l => l[1].z > 0).map(l => [l[0][0], l[0][1], l[0][2], l[1].x, l[1].y, l[1].z, S.voidGlow(l[1].x, l[1].y, 8)]); })""", [yaw])
+                pth = pd / f'pan_{i:02d}.png'
                 pg.screenshot(path=str(pth))
                 im = np.asarray(Image.open(pth).convert('L')).astype(np.float32)
-                peaks = []
-                for (x, y, z) in r:
+                # the same frame without the sprites: the difference is the lamps' own light (nothing of the background)
+                pg.evaluate("""(async () => { const km = window.__km, S = km.S; S.setVoid({ lampsOff: true }); S.render(0, 0);
+                    await new Promise(r => requestAnimationFrame(r)); })()""")
+                pg.screenshot(path=str(pd / 'pan_bos.png'))
+                pg.evaluate("window.__km.S.setVoid({ lampsOff: false })")
+                bare = pg.evaluate("""(async (pts) => { const km = window.__km, S = km.S; S.setVoid({ lampsBare: true }); S.render(0, 0);
+                    await new Promise(r => requestAnimationFrame(r)); const g = pts.map(p => S.voidGlow(p[0], p[1], 8)); S.setVoid({ lampsBare: false }); return g; })""", [[l[3], l[4]] for l in r])
+                # in the display's linear light (sRGB decoded, x255): a dot below the eye's acuity is seen by the light
+                # it sends, and an sRGB sum would favour a dot spread over two pixels over the same light in one
+                def lin(a):
+                    a = a / 255.0
+                    return 255.0 * np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+                lit = lin(im) - lin(np.asarray(Image.open(pd / 'pan_bos.png').convert('L')).astype(np.float32))
+                peaks = {}
+                for (wx, wy, wz, x, y, z, g), gb in zip(r, bare):
                     xi, yi = int(round(x)), int(round(y))
-                    if 6 <= xi < a.w - 6 and 6 <= yi < a.h - 6:
-                        win = im[yi - 4:yi + 5, xi - 4:xi + 5]
-                        peaks.append([round(z), float(win.max()), float(win.sum())])
+                    if 12 <= xi < a.w - 12 and 12 <= yi < a.h - 12:
+                        win = lit[yi - 6:yi + 7, xi - 6:xi + 7]
+                        peaks[(round(wx), round(wy), round(wz))] = [round(z), float(im[yi - 4:yi + 5, xi - 4:xi + 5].max()), float(win.sum()), xi, yi, round(x, 2), round(y, 2), g, gb]
                 frames.append(peaks)
-            # per lamp (by distance, the list order is stable): frame-to-frame relative change of the windowed sum
-            res['pan'] = frames
-            n = min(len(f) for f in frames) if frames else 0
+            # per lamp (keyed by its world position, present in every frame): frame-to-frame relative change of the
+            # sum of the lamp's own light (the frame minus the same frame without sprites) over 13x13 px
+            keys = set(frames[0])
+            for f in frames[1:]:
+                keys &= set(f)
             worst = []
-            for k in range(n):
+            for k in keys:
                 sums = np.array([f[k][2] for f in frames]); pk = np.array([f[k][1] for f in frames])
-                if sums.mean() < 1:
+                if sums.mean() < 20:
                     continue
-                worst.append((frames[0][k][0], round(float(np.abs(np.diff(sums)).max() / max(1.0, sums.mean())), 4), round(float(pk.max() - pk.min()), 1)))
+                worst.append((frames[0][k][0], round(float(np.abs(np.diff(sums)).max() / sums.mean()), 4), round(float(pk.max() - pk.min()), 1), round(float(sums.mean()))))
             worst.sort(key=lambda t: -t[1])
-            print('pan: lamba (uzaklik m, toplamin kareden kareye en buyuk bagil degisimi, tepe araligi /255)', worst[:12], flush=True)
+            # the same from the lamps' own float light (the glow target, before the canvas' 8 bits): exact. The change
+            # is measured against the lamp's full light (unhidden, lampsBare): a lamp nine tenths behind a column is
+            # judged by what a step of its visible tenth is worth beside its whole light
+            gw = []
+            for k in keys:
+                g = np.array([f[k][7] or 0.0 for f in frames]); gb = np.array([f[k][8] or 0.0 for f in frames])
+                if gb.mean() > 1e-3 and g.mean() > 1e-4:
+                    gw.append((frames[0][k][0], round(float(np.abs(np.diff(g)).max() / gb.mean()), 4), round(float(np.abs(np.diff(g)).max() / g.mean()), 4),
+                               round(float(g.mean() / gb.mean()), 2), round(float(gb.mean()), 4), round(float(np.abs(np.diff(gb)).max() / gb.mean()), 4)))
+            gw.sort(key=lambda t: -t[1])
+            res['pan_float'] = gw
+            print('pan float: (uzaklik m, degisim / tam isik, degisim / gorunen, gorunen pay, tam isik, ortulmeden degisim) lamba', len(gw), gw[:14], flush=True)
+            for k in sorted(keys, key=lambda k: -np.std([f[k][7] or 0 for f in frames]))[:4]:
+                print('pan float dizi', frames[0][k][0], [(round(f[k][7] or 0, 3), f[k][5]) for f in frames[:12]], flush=True)
+            kw = {}
+            for k in keys:
+                kw[k] = next((t for t in worst if t[0] == frames[0][k][0] and abs(t[3] - round(float(np.mean([f[k][2] for f in frames])))) < 1), None)
+            res['pan'] = {'lamps': len(keys), 'measured': len(worst), 'worst': worst}
+            print('pan: lamba sayisi', len(keys), 'olculen', len(worst), flush=True)
+            print('pan: (uzaklik m, toplamin kareden kareye en buyuk bagil degisimi, tepe araligi /255, ortalama isik)', worst[:15], flush=True)
+            # frame-by-frame scan: a strip of 21x21 crops per lamp (rows: lamps; columns: frames), x2
+            # the strip: the 16 worst measured lamps (rows, worst first), then the 8 brightest
+            meas = [k for k in keys if kw[k]]
+            sel = sorted(meas, key=lambda k: -kw[k][1])[:16] + sorted(meas, key=lambda k: -kw[k][3])[:8]
+            for k in sel[:3]:
+                print('pan dizi', frames[0][k][0], [(round(f[k][2]), f[k][5], f[k][6]) for f in frames[:9]], flush=True)
+            print('pan seridi satirlari', [kw[k] + tuple(frames[0][k][3:5]) for k in sel], flush=True)
+            if sel:
+                cs = 21
+                strip = np.zeros((len(sel) * cs, len(frames) * cs), np.float32)
+                for ci, f in enumerate(frames):
+                    im = np.asarray(Image.open(pd / f'pan_{ci:02d}.png').convert('L')).astype(np.float32)
+                    for ri, k in enumerate(sel):
+                        _, _, _, xi, yi = f[k][:5]
+                        strip[ri * cs:(ri + 1) * cs, ci * cs:(ci + 1) * cs] = im[yi - 10:yi + 11, xi - 10:xi + 11]
+                Image.fromarray(np.clip(strip, 0, 255).astype(np.uint8)).resize((len(frames) * cs * 2, len(sel) * cs * 2), Image.NEAREST).save(out / 'pan_tarama.png')
         (out / 'sonuc.json').write_text(json.dumps(res))
         b.close()
     httpd.shutdown()
