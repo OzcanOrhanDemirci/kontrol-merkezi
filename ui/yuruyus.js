@@ -172,7 +172,15 @@ function create(o) {
     const accept = r => {
       if (r.error) throw new Error(r.error);
       P = r.P; I = r.I; CS = r.start; CL = r.list; G = r.grid;
-      stamp = new Uint32Array(r.nt);
+      // room for the moving solids (setSolid: the hatch's lid) after the static triangles: their own vertices,
+      // tested apart from the grid
+      solidT0 = r.nt; solidV0 = P.length / 3;
+      const P2 = new Float32Array(P.length + SOLID_MAX * 9), I2 = new Uint32Array(I.length + SOLID_MAX * 3);
+      P2.set(P); I2.set(I);
+      for (let k = 0; k < SOLID_MAX * 3; k++) I2[I.length + k] = solidV0 + k;
+      P = P2; I = I2;
+      stamp = new Uint32Array(r.nt + SOLID_MAX);
+      writeSolids();
       floorY = G.bottom - 40;
       loadInfo = { ...r.ms, totalMs: Math.round(performance.now() - T0), triangles: r.nt, refs: CL.length,
                    cells: [G.nx, G.ny, G.nz], cell: +G.cs.toFixed(3),
@@ -188,6 +196,19 @@ function create(o) {
       w.postMessage(msg);
     }).catch(err => { console.error('Yürüyüş: çarpışma yüklenemedi: ' + (err && err.message)); loadInfo = { error: String(err && err.message) }; });
     return loading;
+  }
+  // moving solids (the void's hatch lid): named triangle lists (9 floats each), world space, replaced whenever they move
+  const SOLID_MAX = 64;
+  const solids = new Map();
+  let solidT0 = 0, solidV0 = 0, solidN = 0;
+  function writeSolids() {
+    solidN = 0;
+    if (!G) return;
+    for (const tris of solids.values()) {
+      const n = Math.min(tris.length / 9, SOLID_MAX - solidN);
+      P.set(tris.subarray(0, n * 9), (solidV0 + solidN * 3) * 3);
+      solidN += n;
+    }
   }
   // the triangles whose boxes overlap the query box (no duplicates)
   function gather(x0, y0, z0, x1, y1, z1) {
@@ -218,6 +239,13 @@ function create(o) {
           CAND[candN++] = t;
         }
       }
+    }
+    for (let t = solidT0; t < solidT0 + solidN; t++) {        // the moving solids
+      const a = I[t * 3] * 3, b = I[t * 3 + 1] * 3, d = I[t * 3 + 2] * 3;
+      if (Math.max(P[a], P[b], P[d]) < x0 || Math.min(P[a], P[b], P[d]) > x1) continue;
+      if (Math.max(P[a + 1], P[b + 1], P[d + 1]) < y0 || Math.min(P[a + 1], P[b + 1], P[d + 1]) > y1) continue;
+      if (Math.max(P[a + 2], P[b + 2], P[d + 2]) < z0 || Math.min(P[a + 2], P[b + 2], P[d + 2]) > z1) continue;
+      if (candN < CAP) CAND[candN++] = t;
     }
     return candN;
   }
@@ -558,7 +586,7 @@ function create(o) {
   }
 
   // ---------------------------------------------------------------- the journey's nearest point
-  let jS = null, jStep = 1;
+  let jS = null, jStep = 1, pinnedS = null;   // pinnedS: the void holds the eye's journey reference while outside
   function nearestS(x, y, z) {
     const J = o.journey();
     if (!jS) {
@@ -566,6 +594,7 @@ function create(o) {
       jS = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) { const p = J.at(Math.min(J.total, i * jStep)); jS[i * 3] = p[0]; jS[i * 3 + 1] = p[1]; jS[i * 3 + 2] = p[2]; }
     }
+    if (pinnedS != null) return pinnedS;
     let bi = 0, bd = Infinity;
     for (let i = 0; i < jS.length / 3; i++) {
       const dx = jS[i * 3] - x, dy = jS[i * 3 + 1] - y, dz = jS[i * 3 + 2] - z, d = dx * dx + dy * dy + dz * dz;
@@ -769,6 +798,12 @@ function create(o) {
       B.x += dx; B.foot += dy; B.z += dz; B.safeX += dx; B.safeF += dy; B.safeZ += dz;
       camEye[0] += dx; camEye[1] += dy; camEye[2] += dz;
     },
+    // a moving solid in the collision (the hatch's lid): Float32Array of triangles (9 floats each), or null to remove
+    setSolid(name, tris) { if (tris) solids.set(name, tris instanceof Float32Array ? tris : new Float32Array(tris)); else solids.delete(name); writeSolids(); },
+    // the walker's velocity (the void's fall: its guidance and its brake)
+    setVelocity(vx, vy, vz) { if (vx != null) B.vx = vx; if (vy != null) B.vy = vy; if (vz != null) B.vz = vz; },
+    // hold the journey point the eye's exposure refers to (s in metres, null: the nearest point again)
+    pinS(sv) { pinnedS = sv == null ? null : sv; },
     setFloor(y) { if (y == null) floorSet = null; else { floorSet = true; floorY = y; } },
     onFall(fn) { fallFn = fn || null; },
     onStep(fn) { stepFn = fn || null; },
