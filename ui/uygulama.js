@@ -601,7 +601,7 @@ function choosePace() {
     else { PACE.up = 0; PACE.down = 0; }
     return;
   }
-  if (!PACE.decided) { PACE.decided = true; PACE.k = Math.max(kmin, 3); PACE.recent.length = 0; return; }
+  if (!PACE.decided) { PACE.decided = true; PACE.k = kmin; PACE.recent.length = 0; return; }
   const iv = PACE.recent.splice(0);
   if (iv.length < 20) return;
   const miss = iv.filter(x => x > (PACE.k + 0.5) * PACE.refresh).length / iv.length;
