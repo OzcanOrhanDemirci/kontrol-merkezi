@@ -43,9 +43,10 @@ sealed class Servis : IDisposable
     sealed class Zorla
     {
         public double? C;
-        public bool? YapayZeka;
+        public bool? YapayZeka, Islemci;
+        public int? YzEfekt, IslemciEfekt;
         public JarvisDurum? Jarvis;
-        public bool Bos => C == null && YapayZeka == null && Jarvis == null;
+        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null && YzEfekt == null && IslemciEfekt == null;
     }
     readonly YerelModel _model = new();
     readonly Afterburner _ab = new();
@@ -63,6 +64,9 @@ sealed class Servis : IDisposable
     readonly List<CihazYazici> _yazicilar;
 
     volatile Girdi _girdi = new();
+    double _cpuEma;
+    DateTime _islemciSince = DateTime.MinValue, _islemciOffSince = DateTime.MinValue;
+    bool _islemci, _beklemede;
 
     // fan state (guarded by _lock)
     readonly object _lock = new();
@@ -210,16 +214,17 @@ sealed class Servis : IDisposable
                 break;
             case "onizle":
             {
-                // {"komut":"onizle","c":64,"kip":"yapayzeka"|"sicaklik"|null,"jarvis":"dusunuyor"|...} ; {"komut":"onizle"} clears
+                // {"komut":"onizle","c":64,"yapayzeka":true,"yzEfekt":2,"islemci":true,"islemciEfekt":1,"jarvis":"dusunuyor"} ; {"komut":"onizle"} clears
                 var z = new Zorla();
                 if (d.TryGetValue("c", out var c) && c != null) z.C = Convert.ToDouble(c, Inv);
-                var kip = Json.S(d, "kip");
-                if (kip == "yapayzeka") z.YapayZeka = true;
-                if (kip == "sicaklik") z.YapayZeka = false;
+                z.YapayZeka = Json.B(d, "yapayzeka");
+                z.Islemci = Json.B(d, "islemci");
+                if (d.TryGetValue("yzEfekt", out var ye) && ye != null) z.YzEfekt = Convert.ToInt32(ye);
+                if (d.TryGetValue("islemciEfekt", out var ie) && ie != null) z.IslemciEfekt = Convert.ToInt32(ie);
                 var jv = Json.S(d, "jarvis");
                 if (jv != null && Enum.TryParse<JarvisDurum>(jv, true, out var jd)) z.Jarvis = jd;
                 _zorla = z;
-                Program.Log("önizleme: " + (z.Bos ? "kapalı" : "c=" + z.C + " kip=" + kip + " jarvis=" + z.Jarvis));
+                Program.Log("önizleme: " + (z.Bos ? "kapalı" : "c=" + z.C + " yz=" + z.YapayZeka + "/" + z.YzEfekt + " işlemci=" + z.Islemci + "/" + z.IslemciEfekt + " jarvis=" + z.Jarvis));
                 break;
             }
             case "ayar-yukle":
@@ -227,7 +232,7 @@ sealed class Servis : IDisposable
                 var a = Ayarlar.Yukle();
                 bool acik;
                 lock (_lock) acik = _rgbAcik;
-                var m = new RenkMotoru(a) { Acik = acik };
+                var m = new RenkMotoru(a) { Acik = acik, Beklemede = _beklemede };
                 m.DevamEt(_motor);
                 _ayar = a;
                 _motor = m;
@@ -401,7 +406,7 @@ sealed class Servis : IDisposable
 
     static Girdi With(Girdi g, JarvisDurum? j = null) => new()
     {
-        CpuC = g.CpuC, GpuC = g.GpuC, CpuYuk = g.CpuYuk, GpuYuk = g.GpuYuk, YapayZeka = g.YapayZeka,
+        CpuC = g.CpuC, GpuC = g.GpuC, CpuYuk = g.CpuYuk, GpuYuk = g.GpuYuk, YapayZeka = g.YapayZeka, Islemci = g.Islemci,
         Jarvis = j ?? g.Jarvis,
     };
 
@@ -432,6 +437,24 @@ sealed class Servis : IDisposable
             _model.Besle(_nvml.SurecKullanimi());
         }
         g.YapayZeka = _model.Uretiyor;
+
+        // CPU under sustained heavy load: on after 30 s above 80 %, off after 10 s below 60 %, so a compile spike or a
+        // short burst never starts it (the earlier 3 s rule flickered 9 times in 30 minutes on 11-16).
+        _cpuEma += (g.CpuYuk - _cpuEma) * (1 - Math.Exp(-0.5 / 3.0));
+        var now = DateTime.UtcNow;
+        if (_cpuEma >= 80) { _islemciOffSince = DateTime.MinValue; if (_islemciSince == DateTime.MinValue) _islemciSince = now; }
+        else _islemciSince = DateTime.MinValue;
+        if (_cpuEma < 60) { if (_islemciOffSince == DateTime.MinValue) _islemciOffSince = now; }
+        else _islemciOffSince = DateTime.MinValue;
+        if (!_islemci && _islemciSince != DateTime.MinValue && now - _islemciSince > TimeSpan.FromSeconds(30)) { _islemci = true; Program.Log("ışık: işlemci yoğun yükte (30 sn)"); }
+        if (_islemci && _islemciOffSince != DateTime.MinValue && now - _islemciOffSince > TimeSpan.FromSeconds(10)) { _islemci = false; Program.Log("ışık: işlemci yükü bitti"); }
+        g.Islemci = _islemci;
+
+        // idle: no real (not injected) mouse/keyboard input for the configured minutes
+        int dk = _ayar.BeklemeDakika;
+        bool idle = dk > 0 && KullaniciGirdisi.Bosta > TimeSpan.FromMinutes(dk);
+        if (idle != _beklemede) { _beklemede = idle; Program.Log(idle ? "ışık: " + dk + " dk girdi yok, beklemede (söner)" : "ışık: girdi geldi, beklemeden çıktı"); }
+        _motor.Beklemede = idle;
 
         _girdi = g;
 
@@ -504,7 +527,8 @@ sealed class Servis : IDisposable
                     gi = new Girdi
                     {
                         CpuC = z.C ?? gi.CpuC, GpuC = z.C ?? gi.GpuC, CpuYuk = gi.CpuYuk, GpuYuk = gi.GpuYuk,
-                        YapayZeka = z.YapayZeka ?? gi.YapayZeka, Jarvis = z.Jarvis ?? gi.Jarvis,
+                        YapayZeka = z.YapayZeka ?? gi.YapayZeka, Islemci = z.Islemci ?? gi.Islemci, Jarvis = z.Jarvis ?? gi.Jarvis,
+                        YzEfekt = z.YzEfekt, IslemciEfekt = z.IslemciEfekt,
                     };
                 _motor.Hesapla(gi, t, dt);
                 if (!_uyku) WriteDevices();
@@ -596,7 +620,8 @@ sealed class Servis : IDisposable
         }
 
         j.Obj("rgb").Bool("acik", _motor.Acik)
-         .Str("kip", _motor.Kip switch { IsikKipi.YapayZeka => "yapayzeka", _ => "sicaklik" })
+         .Bool("beklemede", _motor.Acik && _beklemede).Int("beklemeDakika", _ayar.BeklemeDakika)
+         .Obj("efektler").Bool("yapayzeka", _motor.YapayZekaEfekti).Bool("islemci", _motor.IslemciEfekti).End()
          .Str("jarvis", (_jarvis?.Durum ?? JarvisDurum.Yok) switch
          {
              JarvisDurum.Dusunuyor => "dusunuyor", JarvisDurum.Bekliyor => "bekliyor", JarvisDurum.Hazir => "hazir",
@@ -752,6 +777,12 @@ static class ServisUygulamasi
         const int PBT_APMSUSPEND = 0x4, PBT_APMRESUMESUSPEND = 0x7, PBT_APMRESUMEAUTOMATIC = 0x12;
         readonly Servis _s;
         bool _suspended;
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            KullaniciGirdisi.Kur();   // low-level hooks need this thread's message loop
+        }
 
         public GizliPencere(Servis s)
         {

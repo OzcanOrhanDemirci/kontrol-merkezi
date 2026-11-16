@@ -7,15 +7,18 @@ Bu bilgisayarın fanlarını ve RGB ışıklarını tek pencereden yöneten masa
   Anahtarı'nın çip kodu aynen). İkinci düğme ekran kartı fanlarını en yükseğe alır, tekrar basınca kartın kendi
   otomatiğine döndürür. Afterburner'ın fan denetimi açıksa küçük bir uyarı çıkar, çünkü düğmeyle çakışır.
 - **RGB:** bütün ışıklar birlikte açılır ya da kapanır. Açıkken renk bilgisayarın sıcaklığını izler (işlemci ve
-  ekran kartı sıcaklığının düz ortalaması, birkaç saniyeye yayılmış): soğuk beyaz, serin açık mavi, ılık koyu mavi,
+  ekran kartı sıcaklığının düz ortalaması, yaklaşık 30 saniyeye yayılmış, ani dalgalanmaları izlemez): soğuk beyaz, serin açık mavi, ılık koyu mavi,
   sıcak sarı, çok sıcak turuncu, en sıcakta kırmızı; geçişler yumuşak. Işık her zaman tam parlaklıkta.
-  - Yerel yapay zekâ modeli yanıt yazarken ışık **pembeye** döner ve halkalarda akar.
+  - Renk yalnız sıcaklıktan gelir. Yerel yapay zekâ modeli yanıt yazarken ve işlemci uzun süre (30 sn) yoğun
+    yükteyken renk değişmez; ışığın üstünde sakin birer efekt oynar (parlaklık ve hareket). Hangi efektin
+    oynayacağı `ayarlar.json`'da `efektler` altında seçilir (iki aday var).
   - Jarvis düşünürken her halkada yumuşak bir parıltı döner; senden yanıt beklerken bütün ışıklar yavaşça nefes
     alır; kapalıyken pompa halkası sönük bir kor gibi durur; yeniden açılırken pompa halkasında beyaz bir nokta döner;
     geri gelince bir kez parlar.
 - Pencerenin ışığı kasanın ışığıdır: ekrandaki sahne o an kasanın gösterdiği renkle aydınlanır.
 
-Bilgisayar her açıldığında ışıklar kapalı başlar. Pencere kapalıyken ekran kartına hiç iş yüklemez.
+Klavye ve fare 15 dakika kullanılmazsa ışıklar yumuşakça söner (arkada çalışan işler sayılmaz); ilk dokunuşta geri
+yanar. Bilgisayar her açıldığında ışıklar kapalı başlar. Pencere kapalıyken ekran kartına hiç iş yüklemez.
 
 ## Kurulum (bir kez)
 

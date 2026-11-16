@@ -19,7 +19,7 @@ window.KM_BENZETIM = function (deliver) {
     bagli: 'bagli',
     cpu: 47.5, gpu: 36.0, yumusak: 41.8,
     sweep: false, sweepT: 0, hold: null,
-    kip: 'sicaklik', jarvis: 'hazir',
+    yz: false, cpu: false, jarvis: 'hazir',
     rgb: true,
     kasa: { hedef: 'bios', durum: 'bios', t: 0, n: 0 },
     gpuF: { hedef: 'oto', durum: 'oto', t: 0, n: 0, baska: false },
@@ -33,7 +33,6 @@ window.KM_BENZETIM = function (deliver) {
   const K = window.KM_RENK;
   function baseColor() {
     let c = K.palet(DURAKLAR, S.yumusak);
-    if (S.kip === 'yapayzeka') c = K.full(K.fromSrgb([255, 36, 128]));
     return K.toSrgb(c);
   }
 
@@ -47,7 +46,7 @@ window.KM_BENZETIM = function (deliver) {
       isi: {
         cpu: S.yonetici ? +S.cpu.toFixed(1) : null, gpu: +S.gpu.toFixed(1),
         ort: S.yonetici ? +((S.cpu + S.gpu) / 2).toFixed(1) : +S.gpu.toFixed(1),
-        yumusak: +S.yumusak.toFixed(1), cpuYuk: 6, gpuYuk: S.kip === 'yapayzeka' ? 96 : 2,
+        yumusak: +S.yumusak.toFixed(1), cpuYuk: S.cpu ? 100 : 6, gpuYuk: S.yz ? 96 : 2,
       },
       fan: {
         kasa: {
@@ -67,7 +66,7 @@ window.KM_BENZETIM = function (deliver) {
         },
       },
       rgb: {
-        acik: S.rgb, kip: S.kip, jarvis: S.jarvis,
+        acik: S.rgb, efektler: { yapayzeka: S.yz, islemci: S.cpu }, jarvis: S.jarvis,
         cihazlar: [
           { kimlik: 'aio', ad: 'Cooler Master Halo 360', bagli: true, hata: null },
           { kimlik: 'klavye', ad: 'SteelSeries Apex 3', bagli: true, hata: null },
@@ -184,7 +183,7 @@ window.KM_BENZETIM = function (deliver) {
     temp(c) { S.hold = c; S.sweep = false; S.yumusak = c; pushDurum(true); },
     release() { S.hold = null; },
     jarvis(j) { S.jarvis = j; pushDurum(true); },
-    kip(k) { S.kip = k; pushDurum(true); },
+    efekt(k) { S[k] = !S[k]; pushDurum(true); },
     link(d) { S.bagli = d; send({ tip: 'baglanti', durum: d }); if (d === 'bagli') pushDurum(true); },
     vis(v, f = true) { send({ tip: 'gorunur', visible: v, focused: f }); },
     key(e) {
@@ -192,7 +191,8 @@ window.KM_BENZETIM = function (deliver) {
       const map = {
         r: () => command({ komut: 'rgb', acik: !S.rgb }),
         t: () => { S.sweep = !S.sweep; S.hold = null; },
-        y: () => sim.kip(S.kip === 'yapayzeka' ? 'sicaklik' : 'yapayzeka'),
+        y: () => sim.efekt('yz'),
+        i: () => sim.efekt('cpu'),
         j: () => sim.jarvis(JARVIS[(JARVIS.indexOf(S.jarvis) + 1) % JARVIS.length]),
         k: () => command({ komut: 'fan-kasa' }),
         g: () => command({ komut: 'fan-gpu' }),
@@ -208,7 +208,7 @@ window.KM_BENZETIM = function (deliver) {
     },
     help: [
       ['R', 'ışıklar aç / kapat'], ['T', 'sıcaklık taraması'], ['1–6', 'durak sıcaklığına sabitle'], ['0', 'sabitlemeyi bırak'],
-      ['Y', 'yerel model yazıyor'], ['J', 'Jarvis durumu'],
+      ['Y', 'yerel model yazıyor'], ['I', 'işlemci yoğun yükte'], ['J', 'Jarvis durumu'],
       ['K', 'kasa fanları'], ['G', 'ekran kartı fanları'], ['B', 'GPU fanları başka programda'], ['A', 'Afterburner fan kontrolü'],
       ['E', 'yönetici izni'], ['D', 'servis bağlantısı'], ['F1', 'bu liste'],
     ],

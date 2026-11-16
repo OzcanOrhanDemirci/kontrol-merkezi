@@ -39,7 +39,7 @@ Name `\\.\pipe\KontrolMerkezi` (created by the service, DACL: current user + SYS
   },
   "rgb": {
     "acik": false,
-    "kip": "sicaklik",
+    "efektler": { "yapayzeka": false, "islemci": false },
     "jarvis": "bekliyor",
     "cihazlar": [
       { "kimlik": "aio", "ad": "Cooler Master Halo 360", "bagli": true, "hata": null },
@@ -55,7 +55,8 @@ Values:
 - `isi.*` may be `null` when a sensor is unavailable (CPU temperature needs the elevated service).
 - `fan.kasa.durum`: `max` | `bios` | `geciyor` (switching) | `bilinmiyor`. `fan.gpu.durum`: `max` | `oto` | `geciyor` | `baska` (someone else, e.g. Afterburner, holds manual control) | `bilinmiyor`.
 - `kullanilabilir: false` with a Turkish `neden` (reason) when the button cannot work (no admin, no driver).
-- `rgb.kip`: `sicaklik` (temperature colour) | `yapayzeka` (local model generating).
+- `rgb.beklemede`: the switch is on but the lights faded out because there was no real mouse/keyboard input for `rgb.beklemeDakika` minutes (injected input does not count); the first input brings them back.
+- `rgb.efektler`: which load effects are playing on the lights: `yapayzeka` (local model generating), `islemci` (CPU under sustained heavy load: 30 s above 80 %). The hue is always the temperature's; these are brightness/motion only.
 - `rgb.jarvis`: `yok` (no info) | `dusunuyor` (thinking) | `bekliyor` (waiting for Özcan's answer) | `hazir` (idle, nothing asked) | `kapali` (closed) | `yeniden` (restarting).
 - `duraklar`: the six temperature colour stops, cold to hot, `c` in °C of the averaged temperature.
 
@@ -90,7 +91,7 @@ Values:
 { "komut": "rgb", "acik": true }      // all RGB on (temperature colour) / off
 ```
 
-Development only (never sent by the window): `{"komut":"onizle","c":64,"kip":"yapayzeka"|"sicaklik","jarvis":"dusunuyor"}` forces values for a preview of the real lights (`{"komut":"onizle"}` clears), `{"komut":"ayar-yukle"}` reloads `ayarlar.json`, `{"komut":"kapat"}` stops the service cleanly (used by the installer).
+Development only (never sent by the window): `{"komut":"onizle","c":64,"yapayzeka":true,"yzEfekt":1|2,"islemci":true,"islemciEfekt":1|2,"jarvis":"dusunuyor"}` forces values for a preview of the real lights (`{"komut":"onizle"}` clears), `{"komut":"ayar-yukle"}` reloads `ayarlar.json`, `{"komut":"kapat"}` stops the service cleanly (used by the installer).
 
 ## Window host <-> page (WebView2, not the service)
 

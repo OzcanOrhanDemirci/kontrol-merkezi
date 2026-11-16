@@ -58,8 +58,11 @@ def main():
         time.sleep(4)
         for label, extra, secs in [
             ("ılık (50 °C)", {"c": 50}, 6),
-            ("yerel model yanıt yazıyor", {"c": 50, "kip": "yapayzeka"}, 10),
-            ("geri: sıcaklık", {"c": 50, "kip": "sicaklik"}, 5),
+            ("yerel model yanıt yazıyor, aday 1 (akış)", {"c": 50, "yapayzeka": True, "yzEfekt": 1}, 10),
+            ("yerel model yanıt yazıyor, aday 2 (kıpırtı)", {"c": 50, "yapayzeka": True, "yzEfekt": 2}, 10),
+            ("işlemci yoğun yükte, aday 1 (kalp)", {"c": 50, "islemci": True, "islemciEfekt": 1}, 10),
+            ("işlemci yoğun yükte, aday 2 (yük dalgası)", {"c": 50, "islemci": True, "islemciEfekt": 2}, 10),
+            ("geri: yalnız sıcaklık", {"c": 50}, 5),
             ("Jarvis düşünüyor", {"c": 50, "jarvis": "dusunuyor"}, 10),
             ("Jarvis hazır (bir kez parlar)", {"c": 50, "jarvis": "hazir"}, 5),
             ("Jarvis yanıtını bekliyor", {"c": 50, "jarvis": "bekliyor"}, 12),

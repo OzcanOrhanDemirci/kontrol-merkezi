@@ -19,12 +19,11 @@ public sealed class Durak
     public string Ad;
 }
 
-/// <summary>A device's own colours: what to send it so it shows what the reference device (keyboard) shows.
+/// <summary>A device's own stop colours: what to send it so it shows what the reference device (keyboard) shows.
 /// Null entries fall back to the shared colour.</summary>
 public sealed class CihazRenk
 {
     public int[][] Duraklar;   // one per stop, same order as Ayarlar.Duraklar
-    public int[] YapayZeka;
 }
 
 public sealed class Ayarlar
@@ -47,7 +46,13 @@ public sealed class Ayarlar
     };
 
     /// <summary>Local model generating an answer: rose pink, the one hue family the temperature palette never visits.</summary>
-    public int[] YapayZekaRengi = { 255, 36, 128 };
+    /// <summary>Which candidate pattern plays for the two load effects (1 or 2; RenkMotoru.YzFactor/CpuFactor).
+    /// Hue never changes for them: "rengi sadece sıcaklığa bağlayalım" (Özcan 11-16).</summary>
+    public int YapayZekaEfekti = 1, IslemciEfekti = 1;
+
+    /// <summary>Lights fade out after this many minutes without real mouse/keyboard input (0 = never). Özcan 11-16:
+    /// "15 dakika işlem yoksa, ama mouse klavye hareketi olarak [...] RGB'ler yumuşak şekilde kapanır".</summary>
+    public int BeklemeDakika = 15;
 
     /// <summary>Per-device channel gains (R, G, B) for matching the three devices' whites; 1 = untouched.</summary>
     public Dictionary<string, double[]> Kazanc = new()
@@ -81,7 +86,12 @@ public sealed class Ayarlar
                 if (list.Count >= 2 && list.Zip(list.Skip(1), (p, q) => q.C > p.C).All(v => v)) a.Duraklar = list;
                 else Program.Log("ayarlar: duraklar geçersiz (en az 2, artan sıcaklık), varsayılan kullanılıyor");
             }
-            if (d.TryGetValue("yapayZekaRengi", out var yz)) a.YapayZekaRengi = Ints(yz, 3);
+            if (d.TryGetValue("beklemeDakika", out var bd)) a.BeklemeDakika = Math.Max(0, Convert.ToInt32(bd));
+            if (d.TryGetValue("efektler", out var ef) && ef is Dictionary<string, object> efd)
+            {
+                if (efd.TryGetValue("yapayzeka", out var e1)) a.YapayZekaEfekti = Convert.ToInt32(e1) == 2 ? 2 : 1;
+                if (efd.TryGetValue("islemci", out var e2)) a.IslemciEfekti = Convert.ToInt32(e2) == 2 ? 2 : 1;
+            }
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
                 foreach (var kv in kd) a.Kazanc[kv.Key] = Doubles(kv.Value, 3);
             if (d.TryGetValue("cihazRenkleri", out var crs) && crs is Dictionary<string, object> crd)
@@ -91,7 +101,6 @@ public sealed class Ayarlar
                     var cr = new CihazRenk();
                     if (x.TryGetValue("duraklar", out var dd) && dd is IEnumerable dl2)
                         cr.Duraklar = dl2.Cast<object>().Select(o => o == null ? null : Ints(o, 3)).ToArray();
-                    if (x.TryGetValue("yapayZeka", out var yz2) && yz2 != null) cr.YapayZeka = Ints(yz2, 3);
                     a.CihazRenkleri[kv.Key] = cr;
                 }
             if (d.TryGetValue("aioHalkalari", out var ah))
@@ -101,8 +110,8 @@ public sealed class Ayarlar
                 else Program.Log("ayarlar: aioHalkalari geçersiz, varsayılan kullanılıyor");
             }
             if (d.TryGetValue("pompaHalkasi", out var ph)) a.PompaHalkasi = Convert.ToInt32(ph);
-            var all = new[] { a.YapayZekaRengi }.Concat(a.Duraklar.Select(x => x.Renk))
-                .Concat(a.CihazRenkleri.Values.SelectMany(c => (c.Duraklar ?? new int[0][]).Concat(new[] { c.YapayZeka })))
+            var all = a.Duraklar.Select(x => x.Renk)
+                .Concat(a.CihazRenkleri.Values.SelectMany(c => c.Duraklar ?? new int[0][]))
                 .Where(x => x != null);
             foreach (var arr in all)
                 for (int i = 0; i < arr.Length; i++) arr[i] = Math.Max(0, Math.Min(255, arr[i]));
@@ -120,13 +129,14 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın ve yerel model renginin karşılığı (null = ortak renk); klavye referanstır. Canlı uygulamak: python araclar/onizle.py yukle.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: yerel model ve işlemci yükü efektinin adayı (1 ya da 2). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }).ToList(),
-                ["yapayZekaRengi"] = YapayZekaRengi,
+                ["beklemeDakika"] = BeklemeDakika,
+                ["efektler"] = new Dictionary<string, object> { ["yapayzeka"] = YapayZekaEfekti, ["islemci"] = IslemciEfekti },
                 ["kazanc"] = Kazanc,
                 ["cihazRenkleri"] = CihazRenkleri.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
                 {
-                    ["duraklar"] = kv.Value.Duraklar, ["yapayZeka"] = kv.Value.YapayZeka,
+                    ["duraklar"] = kv.Value.Duraklar,
                 }),
                 ["aioHalkalari"] = AioHalkalari,
                 ["pompaHalkasi"] = PompaHalkasi,

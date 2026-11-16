@@ -567,18 +567,21 @@ function renderRgb() {
   const key = JSON.stringify([linked, rgb, isi.cpu, isi.gpu, Math.round(M.temp * 10), M.focus === 2, D.link]);
   if (state.rgb === key) return;
   state.rgb = key;
-  $('#togSt').textContent = !linked ? 'Bilgi yok' : on ? 'Işıklar açık' : 'Işıklar kapalı';
-  $('#togHint').innerHTML = linked ? (on ? 'Bas · <b>hepsini kapat</b>' : 'Bas · <b>hepsini aç</b>') : '';
+  const idle = !!(rgb && rgb.beklemede && on);
+  $('#togSt').textContent = !linked ? 'Bilgi yok' : idle ? 'Işıklar beklemede' : on ? 'Işıklar açık' : 'Işıklar kapalı';
+  $('#togHint').innerHTML = linked ? (idle ? 'klavyeye ya da fareye dokununca yanar' : on ? 'Bas · <b>hepsini kapat</b>' : 'Bas · <b>hepsini aç</b>') : '';
   $('#togWhy').textContent = linked ? '' : (D.link === 'baslatiliyor' ? 'Servis başlatılıyor…' : 'Servise bağlı değil');
   $('#tog').classList.toggle('focus', M.focus === 2);
   let mode = '—', modeSub = '';
   if (rgb) {
-    if (rgb.kip === 'yapayzeka') { mode = 'Yerel model yanıt yazıyor'; modeSub = 'bitince sıcaklık rengine döner'; }
-    else {
-      mode = 'Bilgisayarın <i>sıcaklığı</i>';
-      modeSub = `işlemci <b>${isi.cpu != null ? fmt1(isi.cpu) + '°' : '—'}</b> · ekran kartı <b>${isi.gpu != null ? fmt1(isi.gpu) + '°' : '—'}</b><br>ortalaması yumuşatılarak renge döner`;
-    }
+    mode = 'Bilgisayarın <i>sıcaklığı</i>';
+    modeSub = `işlemci <b>${isi.cpu != null ? fmt1(isi.cpu) + '°' : '—'}</b> · ekran kartı <b>${isi.gpu != null ? fmt1(isi.gpu) + '°' : '—'}</b><br>ortalaması yumuşatılarak renge döner`;
     if (!on) modeSub = 'ışıklar kapalıyken de hesaplanıyor';
+    else if (rgb.beklemede) modeSub = `${rgb.beklemeDakika || 15} dakikadır klavye ve fare kullanılmadı;<br>ışıklar yumuşakça söndü`;
+    // the two load effects ride on the temperature colour; the window names them, the colour stays the temperature's
+    const ef = rgb.efektler || {};
+    const efl = [ef.yapayzeka && 'yerel model yanıt yazıyor', ef.islemci && 'işlemci yoğun yükte'].filter(Boolean);
+    if (efl.length && on && !rgb.beklemede) modeSub += '<br>ışıkta efekt: <b>' + efl.join('</b> · <b>') + '</b>';
   }
   $('#mode').innerHTML = mode;
   $('#modeSub').innerHTML = modeSub;
