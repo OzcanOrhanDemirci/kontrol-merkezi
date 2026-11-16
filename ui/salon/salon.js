@@ -6,7 +6,7 @@
 (() => {
 const SCRIPT_BASE = new URL('.', document.currentScript ? document.currentScript.src : location.href);
 const SHADER_FILES = ['common.glsl', 'scene.vert', 'scene.frag', 'depth.frag', 'rotor.vert', 'rotor.frag', 'quad.vert',
-  'haze.frag', 'post.frag', 'combine.frag'];
+  'haze.frag', 'post.frag', 'combine.frag', 'emit.vert', 'emit.frag'];
 
 // ==================================================================== small maths (column-major 4x4)
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -432,6 +432,140 @@ async function create(canvas, options = {}) {
   geo.upload();
   let triangles = geo.ni / 3;
 
+  // the small emitters (lamp lenses). A lens a few pixels across is hit or missed by each sample and blinks as the
+  // camera moves (11-17, Özcan: "zemindeki küçük lambalar yanıp sönüyor"). Each is also drawn as its projected outline
+  // (an equal-area, equal-spread rectangle) convolved with a Gaussian of at least EMIT_SIGMA canvas px (emit.vert/.frag):
+  // the same energy at every sub-pixel phase; its own geometry's emission fades out (scene.frag, by the emitter's id per
+  // vertex) as the footprint takes over and comes back once the lens spans a few pixels. Emitters: the connected pieces
+  // of the group-emissive materials thin in at least two directions (the arch's light strips are 13 m long and 3 cm
+  // thick), and the faces of every nokta anchor (setLamp's lenses).
+  const EMIT_MAX_M = [1, 30];                    // the box's middle and longest extent (m)
+  const emitters = [], emitOf = new Uint8Array(geo.nv);
+  {
+    const uniquePts = vids => {                  // the distinct positions (faces split by normals share them)
+      const seen = new Set(), pts = [];
+      for (const v of vids) {
+        const p = vtx(geo, v), k = p.map(x => Math.round(x * 1000)).join(',');
+        if (!seen.has(k)) { seen.add(k); pts.push(...p); }
+      }
+      return new Float32Array(pts);
+    };
+    // the principal axes of a point set (Jacobi on the covariance) and the box they span
+    const pcaBox = pts => {
+      const n = pts.length / 3;
+      let c = [0, 0, 0];
+      for (let i = 0; i < pts.length; i += 3) c = add(c, [pts[i], pts[i + 1], pts[i + 2]]);
+      c = scl(c, 1 / n);
+      const A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+      for (let i = 0; i < pts.length; i += 3) {
+        const d = [pts[i] - c[0], pts[i + 1] - c[1], pts[i + 2] - c[2]];
+        for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) A[r][q] += d[r] * d[q];
+      }
+      const Vm = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+      for (let sweep = 0; sweep < 12; sweep++) for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) {
+        if (Math.abs(A[p][q]) < 1e-12) continue;
+        const th = 0.5 * Math.atan2(2 * A[p][q], A[q][q] - A[p][p]), cs = Math.cos(th), sn = Math.sin(th);
+        for (let k = 0; k < 3; k++) { const a = A[k][p], b = A[k][q]; A[k][p] = cs * a - sn * b; A[k][q] = sn * a + cs * b; }
+        for (let k = 0; k < 3; k++) { const a = A[p][k], b = A[q][k]; A[p][k] = cs * a - sn * b; A[q][k] = sn * a + cs * b; }
+        for (let k = 0; k < 3; k++) { const a = Vm[k][p], b = Vm[k][q]; Vm[k][p] = cs * a - sn * b; Vm[k][q] = sn * a + cs * b; }
+      }
+      const axes = [0, 1, 2].map(k => norm([Vm[0][k], Vm[1][k], Vm[2][k]]));
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < pts.length; i += 3) for (let k = 0; k < 3; k++) {
+        const t = (pts[i] - c[0]) * axes[k][0] + (pts[i + 1] - c[1]) * axes[k][1] + (pts[i + 2] - c[2]) * axes[k][2];
+        lo[k] = Math.min(lo[k], t); hi[k] = Math.max(hi[k], t);
+      }
+      const centre = [0, 1, 2].reduce((m, k) => add(m, scl(axes[k], 0.5 * (lo[k] + hi[k]))), c);
+      return { centre, axes, half: [0, 1, 2].map(k => 0.5 * (hi[k] - lo[k])) };
+    };
+    // the points that can be on the outline: the extremes along 48 fixed directions (a convex lens' outline is the
+    // hull of these; a few hundred vertices per lens would cost the main thread every frame)
+    const DIRS = Array.from({ length: 24 }, (_, i) => {
+      const z = 1 - (i + 0.5) / 24, r = Math.sqrt(1 - z * z), a = i * 2.39996323;
+      return [r * Math.cos(a), r * Math.sin(a), z];
+    });
+    const extremePts = pts => {
+      if (pts.length / 3 <= 48) return pts;
+      const keep = new Set();
+      for (const d of DIRS) {
+        let lo = 0, hi = 0, vlo = Infinity, vhi = -Infinity;
+        for (let i = 0; i < pts.length; i += 3) {
+          const t = pts[i] * d[0] + pts[i + 1] * d[1] + pts[i + 2] * d[2];
+          if (t < vlo) { vlo = t; lo = i; }
+          if (t > vhi) { vhi = t; hi = i; }
+        }
+        keep.add(lo); keep.add(hi);
+      }
+      return new Float32Array([...keep].flatMap(i => [pts[i], pts[i + 1], pts[i + 2]]));
+    };
+    const add1 = (vids, e) => {
+      if (emitters.length >= 255) return true;
+      const pts = uniquePts(vids);
+      let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < pts.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], pts[i + k]); hi[k] = Math.max(hi[k], pts[i + k]); }
+      const ext = sub(hi, lo).sort((x, y) => x - y);
+      if (ext[1] > EMIT_MAX_M[0] || ext[2] > EMIT_MAX_M[1]) return false;
+      // its oriented box (principal axes) for the footprint's occlusion test; flat (a lens plate): its emitting side
+      const box = pcaBox(pts);
+      let flat = null;
+      if (Math.min(...box.half) < 0.01) {
+        const dv = new DataView(geo.pos.buffer, geo.pos.byteOffset);
+        let nsum = [0, 0, 0];
+        for (const v of vids) nsum = add(nsum, [dv.getInt16(v * 40 + 12, true), dv.getInt16(v * 40 + 14, true), dv.getInt16(v * 40 + 16, true)]);
+        const k = box.half.indexOf(Math.min(...box.half)), nk = box.axes[k], sgn = dot(nsum, nk);
+        if (Math.abs(sgn) > 0.5 * len(nsum) && len(nsum) > 0) flat = sgn > 0 ? nk : scl(nk, -1);
+      }
+      emitters.push({ ...e, pts: extremePts(pts), box, flat });
+      for (const v of vids) emitOf[v] = emitters.length;
+      return true;
+    };
+    for (const it of staticItems) {
+      const m = mats[it.malzeme], idx = geo.idx.subarray(it.ilk, it.ilk + it.sayi);
+      if (it.anchor && it.anchor.tur === 'nokta') { add1(idx, { lamp: it.anchor.ad }); continue; }
+      if (!(flagOf(m, 'emissive') && m.grup != null) || it.anchor) continue;
+      // connected pieces: union-find over the vertices, vertices at one position joined
+      const local = new Map(), parent = [];
+      const id = v => { let i = local.get(v); if (i == null) { i = parent.length; local.set(v, i); parent.push(i); } return i; };
+      const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+      const join = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a] = b; };
+      const at = new Map();
+      for (let t = 0; t < idx.length; t += 3) {
+        const ids = [id(idx[t]), id(idx[t + 1]), id(idx[t + 2])];
+        join(ids[0], ids[1]); join(ids[1], ids[2]);
+        for (let k = 0; k < 3; k++) {
+          const key = vtx(geo, idx[t + k]).map(x => Math.round(x * 1000)).join(',');
+          if (at.has(key)) join(ids[k], at.get(key)); else at.set(key, ids[k]);
+        }
+      }
+      const parts = new Map();                  // root -> the piece's triangles (index offsets)
+      for (let t = 0; t < idx.length; t += 3) { const r = find(local.get(idx[t])); if (!parts.has(r)) parts.set(r, []); parts.get(r).push(t); }
+      const tint = m.renk || [1, 1, 1], k = m.isima != null ? m.isima : (m.emitScale || 0), e = { group: m.grup, rgb: scl(tint, k) };
+      const vidsOf = tris => tris.flatMap(t => [idx[t], idx[t + 1], idx[t + 2]]);
+      for (const tris of parts.values()) {
+        if (add1(vidsOf(tris), e)) continue;
+        // a piece too big in two directions (a curved strip): its triangles in chunks of about a metre, each a
+        // straight piece of its own (the pieces abut, their footprints add up)
+        const chunks = [];
+        for (const t of tris) {
+          const c = scl(add(add(vtx(geo, idx[t]), vtx(geo, idx[t + 1])), vtx(geo, idx[t + 2])), 1 / 3);
+          let ch = chunks.find(q => len(sub(q.c, c)) < 0.9);
+          if (!ch) chunks.push(ch = { c, tris: [] });
+          ch.tris.push(t);
+        }
+        if (chunks.length <= 64) for (const ch of chunks) add1(vidsOf(ch.tris), e);
+      }
+    }
+  }
+  if (emitters.length) {                         // the id per vertex, as attribute 5 of the hall's mesh
+    gl.bindVertexArray(geo.vao);
+    const eb = own('Buffer', gl.createBuffer(), geo.nv * 4);   // as floats: a byte attribute is converted by ANGLE
+    gl.bindBuffer(gl.ARRAY_BUFFER, eb);
+    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from(emitOf), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(5);
+    gl.vertexAttribPointer(5, 1, gl.FLOAT, false, 4, 0);
+    gl.bindVertexArray(null);
+  }
+
   // the moving parts: rotors (kanat > 0: spun, motion-blurred) and levers (turned about their axis)
   const dyn = dynDefs.map(d => {
     const m = mesh(d.dosya);
@@ -536,6 +670,12 @@ async function create(canvas, options = {}) {
   gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, 64, 64, 64, 0, gl.RED, gl.UNSIGNED_BYTE, noiseVolume());
   const dither = tex(gl.TEXTURE_2D, { filter: gl.NEAREST, wrap: gl.REPEAT, bytes: 4096 });
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 64, 64, 0, gl.RED, gl.UNSIGNED_BYTE, blueNoise());
+  // the emitters' table, written every frame (emitterTable): 256 columns, rows 0-2 the scene pass' footprints, 3-5 the
+  // reflection's, 6 the share left to each lens' own geometry (x scene, y reflection), 7-11 and 12-16 each emitter's
+  // box (centre and flat flag, three half axes, a flat lens' emitting normal) in the scene and in the mirrored world
+  const EMIT_ROWS = 17, emitTab = new Float32Array(256 * EMIT_ROWS * 4);
+  const emitTex = tex(gl.TEXTURE_2D, { filter: gl.NEAREST, bytes: emitTab.byteLength });
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 256, EMIT_ROWS);
   const blank = tex(gl.TEXTURE_2D, { bytes: 4 });
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
 
@@ -570,6 +710,7 @@ async function create(canvas, options = {}) {
   build('rotor', 'rotor.vert', 'rotor.frag');
   build('haze', 'quad.vert', 'haze.frag');
   build('combine', 'quad.vert', 'combine.frag');
+  build('emit', 'emit.vert', 'emit.frag');
   for (const pass of ['BLOOMPRE', 'DOWN', 'UP', 'REFLCOMP', 'COMPOSE', 'RESOLVEH', 'RESOLVEV'])
     build(pass.toLowerCase(), 'quad.vert', 'post.frag', '#define PASS_' + pass + '\n');
   if (extPar) {
@@ -600,7 +741,7 @@ async function create(canvas, options = {}) {
 
   // texture units: fixed per name, the volumes after them
   const UNIT = { uAlb: 0, uNrm: 1, uArm: 2, uLmA: 3, uLmB: 4, uLmO: 15, uLevha: 5, uRefl: 6, uNoise: 7, uTab: 5, uDepth: 1, uHaze: 2,
-    uScene: 3, uBloom: 4, uSrc: 0, uDither: 6 };
+    uScene: 3, uBloom: 4, uSrc: 0, uDither: 6, uEmitTab: 16 };
   const VOL_UNIT = 8;
   for (const pr of Object.values(programs)) {
     gl.useProgram(pr.p);
@@ -637,8 +778,15 @@ async function create(canvas, options = {}) {
       if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw fail('Çizim hedefi kurulamadı (' + w + ' × ' + h + ')');
       fbs.push(f);
     }
+    let fbColour = null;               // the colour alone: the emitters' footprints read the depth while adding to it
+    if (depth) {
+      fbColour = own('Framebuffer', gl.createFramebuffer());
+      targetObjects.push(fbColour);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbColour);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    return { t, depth, fb: fbs[0], fbs, w, h, levels, size: l => [Math.max(1, w >> l), Math.max(1, h >> l)] };
+    return { t, depth, fb: fbs[0], fbs, fbColour, w, h, levels, size: l => [Math.max(1, w >> l), Math.max(1, h >> l)] };
   }
   function resize() {
     const dpr = options.devicePixelRatio || window.devicePixelRatio || 1;
@@ -853,6 +1001,7 @@ async function create(canvas, options = {}) {
     bindTex(UNIT.uLevha, gl.TEXTURE_2D, blank);
     bindTex(UNIT.uRefl, gl.TEXTURE_2D, mirror || !hasWet ? blank : T.reflMip.t);
     bindTex(UNIT.uNoise, gl.TEXTURE_3D, noise);
+    bindTex(UNIT.uEmitTab, gl.TEXTURE_2D, emitTex);
     bindVolumes();
     const rows = mirror ? floorRows(c, tgt.h) : tgt.h;
     gl.clearColor(0, 0, 0, 1); gl.clearDepth(1);
@@ -862,7 +1011,110 @@ async function create(canvas, options = {}) {
       colourPass();
     }, bandsFor(mirror ? 'reflection' : 'scene'));
     gl.disable(gl.DEPTH_TEST);
+    drawEmitters(c, mirror, tgt);
     gl.bindVertexArray(null);
+  }
+  // ---- the small emitters' footprints (see the load): projected on the CPU every frame, drawn as one instanced draw
+  const EMIT_SIGMA = [0.65, 0.85];             // the footprint's least Gaussian (canvas px): scene pass, reflection
+  const EMIT_FADE = [[2.5, 6], [3.5, 8]];      // the lens' minor extent (canvas px) over which its geometry takes over
+  const hullX = new Float64Array(4096), hullY = new Float64Array(4096), hullI = new Int32Array(4096);
+  // the convex hull of n points (monotone chain) into hullI; returns its length
+  function hull(n) {
+    const ord = Array.from({ length: n }, (_, i) => i).sort((a, b) => hullX[a] - hullX[b] || hullY[a] - hullY[b]);
+    const crossO = (o, a, b) => (hullX[a] - hullX[o]) * (hullY[b] - hullY[o]) - (hullY[a] - hullY[o]) * (hullX[b] - hullX[o]);
+    let k = 0;
+    for (let i = 0; i < n; i++) { while (k >= 2 && crossO(hullI[k - 2], hullI[k - 1], ord[i]) <= 0) k--; hullI[k++] = ord[i]; }
+    for (let i = n - 2, t = k + 1; i >= 0; i--) { while (k >= t && crossO(hullI[k - 2], hullI[k - 1], ord[i]) <= 0) k--; hullI[k++] = ord[i]; }
+    return Math.max(0, k - 1);
+  }
+  function emitterTable(c, refl) {
+    const vp = c.vp;
+    emitTab.fill(0);
+    for (let i = 0; i < emitters.length; i++) {
+      const e = emitters[i];
+      let L;
+      if (e.lamp) {
+        const l = lamps.get(e.lamp);
+        L = l ? scl(l, 1 + 0.3 * (hoverAmt.get(e.lamp) || 0)) : [0, 0, 0];
+      } else L = [groupUniform[e.group * 3] * e.rgb[0], groupUniform[e.group * 3 + 1] * e.rgb[1], groupUniform[e.group * 3 + 2] * e.rgb[2]];
+      for (let m = 0; m < 2; m++) {
+        emitTab[(6 * 256 + i) * 4 + m] = 1;
+        const tg = m ? refl : T.scene;
+        if (!tg || !(L[0] + L[1] + L[2] > 0)) continue;
+        const P = e.pts, n = Math.min(4096, P.length / 3), ys = m ? -1 : 1, b = e.box;
+        // its bounding sphere against the view first (most emitters are off screen)
+        {
+          const bc = [b.centre[0], ys * b.centre[1], b.centre[2]], br = len(b.half);
+          const wc = vp[3] * bc[0] + vp[7] * bc[1] + vp[11] * bc[2] + vp[15];
+          if (wc + br < NEAR) continue;
+          if (wc - br > NEAR) {
+            const xc = (vp[0] * bc[0] + vp[4] * bc[1] + vp[8] * bc[2] + vp[12]) / wc, yc = (vp[1] * bc[0] + vp[5] * bc[1] + vp[9] * bc[2] + vp[13]) / wc;
+            const rx = br / ((wc - br) * c.tx), ry = br / ((wc - br) * c.ty);
+            if (xc - rx > 1.02 || xc + rx < -1.02 || yc - ry > 1.02 || yc + ry < -1.02) continue;
+          }
+        }
+        let zmin = Infinity, ok = true;
+        for (let k = 0; k < n; k++) {
+          const x = P[3 * k], y = ys * P[3 * k + 1], z = P[3 * k + 2];
+          const w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+          if (w < NEAR * 1.5) { ok = false; break; }
+          hullX[k] = ((vp[0] * x + vp[4] * y + vp[8] * z + vp[12]) / w * 0.5 + 0.5) * W;
+          hullY[k] = ((vp[1] * x + vp[5] * y + vp[9] * z + vp[13]) / w * 0.5 + 0.5) * H;
+          zmin = Math.min(zmin, w);
+        }
+        if (!ok) continue;
+        // the outline's area, centroid and second moments (canvas px)
+        const h = hull(n);
+        let A = 0, cx = 0, cy = 0, sxx = 0, syy = 0, sxy = 0;
+        for (let j = 0; j < h; j++) {
+          const p = hullI[j], q = hullI[(j + 1) % h];
+          const x0 = hullX[p], y0 = hullY[p], x1 = hullX[q], y1 = hullY[q], a = x0 * y1 - x1 * y0;
+          A += a; cx += (x0 + x1) * a; cy += (y0 + y1) * a;
+          sxx += (x0 * x0 + x0 * x1 + x1 * x1) * a; syy += (y0 * y0 + y0 * y1 + y1 * y1) * a;
+          sxy += (x0 * y1 + 2 * x0 * y0 + 2 * x1 * y1 + x1 * y0) * a;
+        }
+        A *= 0.5;
+        if (!(A > 1e-5)) continue;
+        cx /= 6 * A; cy /= 6 * A;
+        if (cx < -16 || cy < -16 || cx > W + 16 || cy > H + 16) continue;
+        const vxx = Math.max(0, sxx / (12 * A) - cx * cx), vyy = Math.max(0, syy / (12 * A) - cy * cy), vxy = sxy / (24 * A) - cx * cy;
+        // the rectangle of the same spread along its long axis and the same area
+        const tr = 0.5 * (vxx + vyy), dd = Math.sqrt(Math.max(0, 0.25 * (vxx - vyy) * (vxx - vyy) + vxy * vxy));
+        const ang = 0.5 * Math.atan2(2 * vxy, vxx - vyy);
+        const h1 = Math.max(1e-3, Math.sqrt(3 * (tr + dd))), h2 = A / (4 * h1);
+        const geoShare = smoothstep(EMIT_FADE[m][0], EMIT_FADE[m][1], 2 * h2);
+        emitTab[(6 * 256 + i) * 4 + m] = geoShare;
+        if (geoShare >= 1) continue;
+        const sx = tg.w / W, o = (m * 3 * 256 + i) * 4, o1 = o + 256 * 4, o2 = o1 + 256 * 4;
+        emitTab.set([cx * sx, cy * sx, h1 * sx, h2 * sx], o);
+        emitTab.set([Math.cos(ang), Math.sin(ang), EMIT_SIGMA[m] * sx, zmin], o1);
+        emitTab.set([L[0] * (1 - geoShare), L[1] * (1 - geoShare), L[2] * (1 - geoShare), 0.02 + 0.003 * zmin], o2);
+        const ob = ((7 + 5 * m) * 256 + i) * 4, R = 256 * 4, my = v => [v[0], ys * v[1], v[2]];
+        emitTab.set([...my(b.centre), e.flat ? 1 : 0], ob);
+        for (let k = 0; k < 3; k++) emitTab.set([...my(scl(b.axes[k], b.half[k])), 0], ob + (k + 1) * R);
+        if (e.flat) emitTab.set([...my(e.flat), 0], ob + 4 * R);
+      }
+    }
+    gl.bindTexture(gl.TEXTURE_2D, emitTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, EMIT_ROWS, gl.RGBA, gl.FLOAT, emitTab);
+  }
+  function drawEmitters(c, mirror, tgt) {
+    if (!emitters.length) return;
+    const pr = programs.emit;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tgt.fbColour);
+    gl.viewport(0, 0, tgt.w, tgt.h);
+    gl.useProgram(pr.p);
+    bindTex(UNIT.uEmitTab, gl.TEXTURE_2D, emitTex);
+    bindTex(UNIT.uDepth, gl.TEXTURE_2D, tgt.depth);
+    gl.uniformMatrix4fv(pr.u.uVP, false, c.vp);
+    gl.uniform2f(pr.u.uNearFar, NEAR, FAR);
+    gl.uniform1i(pr.u.uRow, mirror ? 3 : 0);
+    gl.uniform1i(pr.u.uBoxRow, mirror ? 12 : 7);
+    gl.uniform2f(pr.u.uTarget, tgt.w, tgt.h);
+    gl.bindVertexArray(quad);
+    gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, emitters.length);
+    gl.disable(gl.BLEND);
   }
   // the rows of a target in which the floor can be seen (below the horizon of y = 0, with a margin): the reflection
   // is drawn only there
@@ -987,6 +1239,7 @@ async function create(canvas, options = {}) {
     if (moved) timed('volumes', combineVolumes);
     for (const d of dyn) d.shutter = shutter || 0;
     cam = cameraOf(eye, look, fov, W / H);
+    if (emitters.length) emitterTable(cam, hasWet ? T.refl : null);
 
     if (hasWet) {
       timed('reflection', () => drawMeshes(cam, true, T.refl, Q.prepass));
@@ -1138,6 +1391,12 @@ async function create(canvas, options = {}) {
     pick,
     project,
     resize,
+    // the small emitters and their footprints this frame (tests: araclar/salon_kipirti.py)
+    emitters() {
+      return emitters.map((e, i) => ({ lamp: e.lamp || null, group: e.group, n: e.pts.length / 3, flat: e.flat, half: e.box.half,
+        own: [emitTab[(6 * 256 + i) * 4], emitTab[(6 * 256 + i) * 4 + 1]], row: Array.from(emitTab.subarray(i * 4, i * 4 + 4)),
+        L: Array.from(emitTab.subarray((512 + i) * 4, (512 + i) * 4 + 4)), c: [0, 1, 2].map(k => { let s = 0; for (let j = k; j < e.pts.length; j += 3) s += e.pts[j]; return +(s / (e.pts.length / 3)).toFixed(2); }) }));
+    },
     stats() {
       pollTimers();
       // the median of the last frames of every pass the last measured frame ran (the volumes' recombination only

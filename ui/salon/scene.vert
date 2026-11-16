@@ -7,6 +7,7 @@ layout(location = 1) in vec4 aNrm;
 layout(location = 2) in vec4 aTan;
 layout(location = 3) in vec2 aUv;
 layout(location = 4) in vec2 aLm;
+layout(location = 5) in float aEm;     // the small emitter this vertex belongs to + 1 (0: none; salon.js, the load)
 uniform mat4 uVP;
 uniform mat4 uModel;
 uniform float uMirror;         // 1 in the reflection pass
@@ -15,6 +16,7 @@ out vec3 vN;
 out vec4 vT;
 out vec2 vUv;
 out vec2 vLm;
+flat out int vEm;
 invariant gl_Position;
 void main() {
     vec4 w = uModel * vec4(aPos, 1.0);
@@ -24,5 +26,6 @@ void main() {
     vT = vec4(r * aTan.xyz, aTan.w < 0.0 ? -1.0 : 1.0);
     vUv = aUv;
     vLm = aLm;
+    vEm = int(aEm + 0.5);
     gl_Position = uVP * vec4(w.x, uMirror > 0.5 ? -w.y : w.y, w.z, 1.0);
 }

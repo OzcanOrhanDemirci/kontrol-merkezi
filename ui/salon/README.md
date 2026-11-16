@@ -50,6 +50,14 @@ heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cub
 - Rotors (`kanat` > 0): the mesh is projected along its axis once into a polar table (2048 angles x 256 radii) of
   coverage and normal, integrated over the angle. Slow: the mesh itself, crisp. Fast: a disc whose pixels average the
   blades over the swept arc (two reads), crossfading over 0.12-0.3 of the blade spacing swept per frame.
+- Small emitters (11-17): the connected pieces of the group-emissive materials that are thin in at least two
+  directions (lamp lenses, the arch's 13 m light strips; curved strips in ~1 m chunks) and the faces of every `nokta`
+  anchor (setLamp's lenses), at most 255, each with its id in a per-vertex attribute of the hall's mesh. Every frame
+  the CPU projects each one's points (its convex outline: area, centroid, second moments) to an equal-area rectangle of
+  the same spread, and `emit.vert/.frag` add it to the scene and reflection passes convolved with a Gaussian of 0.65
+  (reflection 0.85) canvas px, hidden per sample behind nearer depth. The lens' own emission fades out over a minor
+  extent of 6 -> 2.5 px (reflection 8 -> 3.5): a lens of a few pixels keeps its energy and shape at every sub-pixel
+  phase instead of being hit or missed by the samples.
 
 ## The frame
 
@@ -58,7 +66,7 @@ heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cub
 | volumes | groups' colours into the volumes (only when a colour changes) | the volumes |
 | reflection | the scene mirrored in y = 0 (depth prepass, discard below the floor), only the rows below the horizon | 0.5 x scene pass |
 | reflectionHaze | haze of the mirrored rays from the floor on (outer volume, double steps), composite, 13-tap mip chain | half of that |
-| scene | depth prepass, then forward shading (light map + B-spline close up, GGX, wet floor, levha, lamps, rotor discs) | scale x canvas |
+| scene | depth prepass, then forward shading (light map + B-spline close up, GGX with geometric specular AA, wet floor, levha, lamps, rotor discs), the small emitters' footprints | scale x canvas |
 | haze | the march: fixed steps in metres, half a cell of the finest volume at each point, ending on boundaries | 0.5 x canvas |
 | bloom | Karis-weighted box of the scene composited with the haze, 13-tap down, tent up | 0.5 x canvas |
 | composite | scene x T + in-scatter (joint-bilateral by depth), bloom 4 %, exposure, AgX (Denizaltı's) | scale x canvas |
