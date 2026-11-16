@@ -141,7 +141,8 @@ async function create(canvas, options = {}) {
     scale: options.scale || 2,                  // supersampling: the scene pass at scale x the canvas' device pixels
     hazeScale: 0.5,                             // the haze pass' resolution, share of the canvas
     hazeStep: 1,                                // haze steps: 1 = half a cell; 0.5 = twice as many
-    reflScale: 0.5,                             // the reflection's resolution, share of the scene pass'
+    reflScale: 1,                               // the reflection's resolution, share of the canvas (its shading takes
+                                                // a canvas pixel as its pixel: uPxScale 1, the footprints' sigma)
     prepass: true,                              // depth prepass before the scene pass
     bands: 6,                                   // flushed horizontal bands of the heavy passes
     cubic: true,                                // the light map's B-spline read close up
@@ -869,7 +870,7 @@ async function create(canvas, options = {}) {
     const s = Q.scale, sw = Math.round(w * s), sh = Math.round(h * s);
     if (Math.max(sw, sh) > maxTex) throw fail('Örnekleme ölçeği bu çözünürlükte kartın sınırını aşıyor (' + sw + ' × ' + sh + ')');
     const hw = Math.max(1, Math.round(w * Q.hazeScale)), hh = Math.max(1, Math.round(h * Q.hazeScale));
-    const rw = Math.max(1, Math.round(sw * Q.reflScale)), rh = Math.max(1, Math.round(sh * Q.reflScale));
+    const rw = Math.max(1, Math.round(w * Q.reflScale)), rh = Math.max(1, Math.round(h * Q.reflScale));
     const bloomLevels = Math.max(1, Math.min(6, Math.floor(Math.log2(Math.min(hw, hh))) - 2));
     const reflLevels = Math.max(1, Math.min(7, Math.floor(Math.log2(Math.min(rw, rh))) - 2));
     T = {

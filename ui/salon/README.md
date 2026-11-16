@@ -39,7 +39,7 @@ s.setQuality({...}); s.setTime(seconds); s.dispose()
 ```
 
 `s.quality` (defaults): `scale` 2, `hazeScale` 0.5 (haze pass resolution, share of the canvas), `hazeStep` 1 (1 = half a
-cell; 0.5 = twice the steps), `reflScale` 0.5 (of the scene pass), `prepass` true, `bands` 6 (most flushed bands per
+cell; 0.5 = twice the steps), `reflScale` 1 (of the canvas), `prepass` true, `bands` 6 (most flushed bands per
 heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cubic` true, `rotor` 'auto'.
 
 ## What it does with the pack
