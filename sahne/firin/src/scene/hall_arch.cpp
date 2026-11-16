@@ -151,6 +151,10 @@ void ringAndStrips(Hall& h) {
     std::vector<float2> S = {{rs, zs - 0.03f}, {7.005f, zs - 0.03f}, {7.005f, zs + 0.03f}, {rs, zs + 0.03f}};
     S.push_back(S.front());
     h.at(arch, M_KEMER_ISIK, 0.5f).lathe(S, 0.0f, kPi);
+    // The final two lathe rows bound the flat inward-facing luminous surface, including the kit's edge rounding.
+    // Use those actual facets, not tangent planes (whose ends used to enter the concrete reveal).
+    const int nSeg = h.k.arcSegs(7.005f, kPi, 4);
+    const size_t innerRow = h.s.mesh.v.size() - (nSeg + 1);
     S.pop_back();
     h.at(jambR, M_KEMER_ISIK, 2.0f).extrude(S, 0.0f, kSpring - kBase, false);
     h.at(jambL, M_KEMER_ISIK, 2.0f).extrude(S, 0.0f, kSpring - kBase, false);
@@ -165,12 +169,21 @@ void ringAndStrips(Hall& h) {
         e.L = kKemerL;
         h.s.lights.push_back(e);
     };
-    const int nSeg = 12;
+    const size_t curvedBegin = h.s.lights.size();
+    double area = 0;
     for (int k = 0; k < nSeg; ++k) {
-        const float am = kPi * (k + 0.5f) / nSeg, half = rs * std::sin(0.5f * kPi / nSeg);
-        const float3 rad = v3(std::cos(am), std::sin(am), 0);
-        strip(v3(rs * rad.x, kSpring + rs * rad.y, zs), v3(-rad.y, rad.x, 0) * half, -rad);
+        const float3 a = h.s.mesh.v[innerRow + k].p, b = h.s.mesh.v[innerRow + k + 1].p;
+        const float3 upper = h.s.mesh.v[innerRow - (nSeg + 1) + k].p;
+        const float3 u = (b - a) * 0.5f, v = (upper - a) * 0.5f;
+        strip(a + u + v, u, -normalize(cross(u, v)));
+        h.s.lights.back().v = v;
+        area += 4.0 * length(cross(u, v));
     }
+    // Preserve the old 12 rectangles' integrated flux. This is an area quadrature correction, not a change to
+    // the luminous material: the actual face is slightly narrower because its edge is rounded by the kit.
+    const double oldArea = 12.0 * (2.0 * rs * std::sin(kPi / 24.0f)) * (2.0 * 0.03f);
+    for (size_t i = curvedBegin; i < h.s.lights.size(); ++i)
+        h.s.lights[i].L = float(kKemerL * oldArea / area);
     for (int s : {-1, 1}) strip(v3(s * rs, 0.5f * (kBase + kSpring), zs), v3(0, 0.5f * (kSpring - kBase), 0), v3(float(-s), 0, 0));
 }
 
