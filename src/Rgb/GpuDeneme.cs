@@ -3,6 +3,7 @@
 //   rgb-dene gpu sondur --karta-yaz    zones off (one write, 2D=03)
 //   rgb-dene gpu sira --karta-yaz      white 5 s (MSI's full sequence), blue 5 s (colour + steady), then dark
 //   rgb-dene gpu tekrar [s] --karta-yaz white, then the same white re-sent as colour + steady ~10 times a second for s (15)
+//   rgb-dene gpu gecis --karta-yaz    A/B: the preview transition on the card alone, linear values, then sRGB-encoded
 //   rgb-dene gpu gecis-dokum           computation only: what the card receives in gecis.py's transition
 //   rgb-dene gpu servis                card-less build only: the service's writer through start, on, off, wake, exit
 //
@@ -83,6 +84,43 @@ static class GpuDeneme
                         while (!bitti && sw.Elapsed.TotalSeconds < 5) Thread.Sleep(50);
                     }
                     return 0;
+                case "gecis":
+                {
+                    // A/B of the same transition on the card alone: the engine's values as now (linear light), then the
+                    // same values sRGB-encoded (in case the card's chip applies its own curve and the dark end steps).
+                    var ayar = Ayarlar.Yukle();
+                    ayar.EfektlerKapali = true;
+                    kart.YazmaArasiMs = 25;
+                    Zamanlayici.Iste();
+                    try
+                    {
+                        foreach (bool gama in new[] { false, true })
+                        {
+                            if (bitti) break;
+                            Yaz($"-- {(gama ? "2: göze göre kodlanmış" : "1: şimdiki gibi (doğrusal)")}: 5 sn beyaz, sonra beyazdan maviye, sarıya ~30 sn");
+                            var m = new RenkMotoru(ayar) { Acik = true };
+                            var iz = kart.Iz; kart.Iz = null;
+                            var sw = Stopwatch.StartNew();
+                            double last = 0;
+                            while (!bitti && sw.Elapsed.TotalSeconds < 40)
+                            {
+                                double t = sw.Elapsed.TotalSeconds, c = t < 5 ? 45 : 64;
+                                m.Hesapla(new Girdi { CpuC = c, GpuC = c }, t, Math.Min(0.25, t - last));
+                                last = t;
+                                var l = m.Gpu[0];
+                                Rgb r;
+                                if (gama) { l.ToSrgb(out int rr, out int gg, out int bb); r = new Rgb((byte)rr, (byte)gg, (byte)bb); }
+                                else { byte B8(double x) => (byte)Math.Round(Lin.Clamp(x) * 255); r = new Rgb(B8(l.R), B8(l.G), B8(l.B)); }
+                                if (!kart.Yaz(new[] { r })) { kart.Iz = iz; return 1; }
+                                Thread.Sleep(5);
+                            }
+                            kart.Iz = iz;
+                            if (!gama) { Yaz("-- 3 sn karanlık"); kart.Sondur(); var s3 = Stopwatch.StartNew(); while (!bitti && s3.Elapsed.TotalSeconds < 3) Thread.Sleep(50); }
+                        }
+                    }
+                    finally { Zamanlayici.Birak(); }
+                    return 0;
+                }
                 case "tekrar":
                 {
                     double sn = a.Count > 1 ? double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture) : 15;
