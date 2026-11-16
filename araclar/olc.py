@@ -117,7 +117,9 @@ def cmd_durumlar():
 
 SEQ = """async (sure) => {
   const k = window.__km, s = k.sim;
-  const iv = [], marks = [];
+  const iv = [], marks = [], lt = [];
+  new PerformanceObserver(l => l.getEntries().forEach(e => lt.push([Math.round(e.startTime), Math.round(e.duration)]))).observe({ type: 'longtask' });
+  k.R.slow = null;
   let last = 0;
   k.onFrame = now => { if (last) iv.push([now, now - last]); last = now; };
   const g0 = k.R.gpu.length;
@@ -135,7 +137,7 @@ SEQ = """async (sure) => {
   mark('fan gpu max'); s.send({komut:'fan-gpu'}); await wait(3000);
   mark('sicaklik taramasi'); s.release(); s.S.sweep = true; await wait(Math.max(0, sure * 1000 - 28500));
   k.onFrame = null;
-  return { iv, marks, gpu: k.R.gpu.slice(g0), first: k.R.firstFrameMs, compile: k.R.compileMs, w: k.R.w, h: k.R.h, spp: k.R.spp, sppDyn: k.R.sppDyn };
+  return { lt, slow: k.R.slow, iv, marks, gpu: k.R.gpu.slice(g0), first: k.R.firstFrameMs, compile: k.R.compileMs, w: k.R.w, h: k.R.h, spp: k.R.spp, sppDyn: k.R.sppDyn };
 }"""
 
 
@@ -172,6 +174,8 @@ def cmd_olc():
             if mt <= t:
                 cur = m
         return cur
+    res["uzun_gorevler"] = [[round((t - t0) / 1000, 2), d] for t, d in r["lt"]]
+    res["en_yavas_kare_js"] = r["slow"]
     res["en_uzun"] = [[round((t - t0) / 1000, 2), round(d, 1), at(t)] for t, d in worst]
     (OUT / "olcum.json").write_text(json.dumps({**res, "iv": iv, "gpu": gpu}, indent=1), encoding="utf-8")
     print(json.dumps(res, indent=1, ensure_ascii=False))

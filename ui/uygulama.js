@@ -874,9 +874,14 @@ function frame(now) {
   if (++PACE.n % 60 === 0) choosePace();
   const dt = lastT ? Math.min(0.1, (now - lastT) / 1000) : 1 / 60;
   lastT = now;
+  const p0 = performance.now();
   step(dt);
+  const p1 = performance.now();
   render(dt);
+  const p2 = performance.now();
   updateOverlay(dt);
+  const p3 = performance.now();
+  if (p3 - p0 > (R.slow ? R.slow.total : 8)) R.slow = { total: p3 - p0, step: p1 - p0, render: p2 - p1, overlay: p3 - p2, t: M.t, tab: M.tab, camT: M.camT };
   if (R.frame > 1 && lastFrameNow) perfWin.push(now - lastFrameNow);
   lastFrameNow = now;
   if (host && now - perfAt > 10000) { perfAt = now; reportPerf(); }
@@ -899,6 +904,7 @@ window.__km = { M, R, D, L, setTab, get sim() { return sim; }, step, render, upd
 (async () => {
   try {
     await document.fonts.ready;
+    sound.init();             // build the reverb and noise buffers now, while the shaders compile, not on the first frames
     await initGL();
   } catch (err) {
     console.error(err);
