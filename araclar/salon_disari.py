@@ -34,8 +34,8 @@ def wait_lock():
 
 # still: name, (x, foot, z), yaw deg (0: -z, 90: +x), pitch deg
 STILLS = [
-    ('kapak_ust', (0.0, 35.0, -337.0), 180, -25),        # standing by the hatch, looking at it and the mast
-    ('cati_boyunca', (3.0, 35.0, -330.0), 0, -4),        # along the roof towards the far end (the lamp's pit)
+    ('kapak_ust', (-1.5, 35.0, -334.0), 0, -14),        # standing by the hatch, looking at it and the mast
+    ('cati_boyunca', (3.0, 35.0, -330.0), 180, -4),        # along the roof towards the far end (the lamp's pit)
     ('kuyu_lamba', (9.0, 35.0, -22.0), -125, -22),       # the roof's lamp close up
     ('kenar_disari', (44.0, 35.0, -170.0), 90, 2),       # at the edge, looking out at the void
     ('kenar_asagi', (46.5, 35.0, -120.0), 90, -55),      # over the edge, down along the columns
@@ -48,7 +48,7 @@ JS_PUT = r"""async ([x, foot, z, yaw, pitch, n]) => {
   if (!W.active) W.enter({ noLock: true });
   W.debug.put(x, foot, z, 0);
   W.debug.look(yaw * Math.PI / 180, pitch * Math.PI / 180);
-  for (let i = 0; i < (n || 30); i++) km.step(1 / 30);
+  for (let i = 0; i < (n || 30); i++) { km.step(1 / 30); if (i % 3 === 0) { km.S.render(1 / 30, 1 / 30); await new Promise(r => requestAnimationFrame(r)); } }
   km.S.render(1 / 30, 1 / 30);
   await new Promise(r => requestAnimationFrame(r));
   return { s: W.state(), v: km.S.voidState(), d: km.V.state() };
@@ -71,6 +71,8 @@ def main():
     ap.add_argument('--w', type=int, default=2560)
     ap.add_argument('--h', type=int, default=1440)
     ap.add_argument('--js', default='', help='extra JS run once after load (tuning)')
+    ap.add_argument('--varyant', default='', help='JSON list of fog settings: the stills once per setting')
+    ap.add_argument('--kareler', default='', help='only these stills')
     a = ap.parse_args()
     only = set(a.yalniz.split(','))
     out = Path(a.out)
@@ -92,13 +94,22 @@ def main():
             pg.evaluate(a.js)
         res = {}
         if 'kare' in only:
-            for name, (x, f, z), yaw, pitch in STILLS:
+            variants = json.loads(a.varyant) if a.varyant else [None]
+            names = set(a.kareler.split(',')) if a.kareler else None
+            for vi, fog in enumerate(variants):
+              if fog is not None:
+                  pg.evaluate('(f) => window.__km.S.setVoid({ fog: f })', fog)
+              tag = f'_v{vi}' if fog is not None else ''
+              for name, (x, f, z), yaw, pitch in STILLS:
+                if names and name not in names:
+                    continue
                 wait_lock()
                 if name == 'merdiven_yukari':
                     pg.evaluate('window.__km.V.setOpen(true)')
+                    f = pg.evaluate(f'window.__km.W.debug.groundAt({x}, {z}, 33, 20)')
                     pg.evaluate(JS_PUT, [x, f, z, yaw, pitch, 60])
-                r = pg.evaluate(JS_PUT, [x, f, z, yaw, pitch, 30])
-                shot(pg, out / f'kare_{name}.png')
+                r = pg.evaluate(JS_PUT, [x, f, z, yaw, pitch, 90])
+                shot(pg, out / f'kare_{name}{tag}.png')
                 print('kare', name, 'goz', [round(v, 2) for v in r['s']['eye']], 'void', json.dumps(r['v']['drawn']), 'lamba', r['v']['lamps'], 'ev', pg.evaluate('JSON.stringify([window.__km.W.eye().ev, window.__km.W.eye().target])'), flush=True)
         if 'zaman' in only:
             res['zaman'] = {}

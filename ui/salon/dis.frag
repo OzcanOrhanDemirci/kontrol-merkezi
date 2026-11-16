@@ -50,7 +50,7 @@ vec4 lmRead(sampler2DArray t, vec2 uv, float layer, float wc) {
     return wc > 0.0 ? mix(l, cubicLayer(t, uv, layer), wc) : l;
 }
 // the fog's radiance seen along a direction: a smooth gradient from below to above (the same in post.frag)
-vec3 fogSky(float y) { return mix(uFogDown, uFogUp, smoothstep(-0.85, 0.7, y)); }
+vec3 fogSky(float y) { float t = smoothstep(-0.9, 0.9, y); return mix(uFogDown, uFogUp, t * t); }   // light from above: the horizon a quarter of the way
 
 void main() {
     vec4 A = uMatA[uMat], B = uMatB[uMat], C = uMatC[uMat];
@@ -122,7 +122,7 @@ void main() {
     }
     // the void's light on the surface: diffuse from the fog round the normal, the rest as a dim environment
     vec3 env = fogSky(s.n.y) * uAmb;
-    float occ = open * s.ao;
+    float occ = max(open, 0.4) * s.ao;           // the openness is the bake's, within 0.5 m: thin edges read 0
     c += s.albedo * (1.0 - s.metal) * env * occ;
     c += fogSky(reflect(-V, s.n).y) * uAmb * envBRDF(s.f0, s.rough, max(dot(s.n, V), 1e-4)) * occ;
 

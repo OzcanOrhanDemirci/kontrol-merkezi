@@ -43,7 +43,7 @@ uniform vec3 uFogUp, uFogDown;
 uniform vec3 uBlockLo, uBlockHi;
 uniform float uCamInside;      // 1: the camera is in the block (the stair under the hatch)
 uniform float uHomeHaze;
-vec3 fogSky(float y) { return mix(uFogDown, uFogUp, smoothstep(-0.85, 0.7, y)); }
+vec3 fogSky(float y) { float t = smoothstep(-0.9, 0.9, y); return mix(uFogDown, uFogUp, t * t); }   // light from above: the horizon a quarter of the way
 // the outside's share of a ray of length dist from the eye: its transmittance and the fog's light
 vec4 voidFog(vec3 rd, float dist) {
     vec3 inv = 1.0 / mix(rd, vec3(1e-9), lessThan(abs(rd), vec3(1e-9)));

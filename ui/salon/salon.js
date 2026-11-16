@@ -893,7 +893,7 @@ async function create(canvas, options = {}) {
       }
       gl.uniformMatrix4fv(pr.u.uModel, false, IDENTITY);
       gl.bindVertexArray(geo.vao);
-      for (const it of (voidOn() ? interiorItems : staticItems)) colour ? drawItem(pr, it, 1) : drawRaw(it);
+      if (!(voidOn() && VOID.noInterior)) for (const it of (voidOn() ? interiorItems : staticItems)) colour ? drawItem(pr, it, 1) : drawRaw(it);
       for (const d of dyn) {
         if (d.void && voidOn()) continue;          // the hatch's lid: drawn with the exterior
         const share = rotorShare(d);
@@ -911,7 +911,6 @@ async function create(canvas, options = {}) {
           if (prepass) { gl.depthFunc(gl.EQUAL); gl.depthMask(false); }
         }
       }
-      if (!mirror && voidOn()) drawVoid(c, colour);
     };
     const colourPass = () => {
       if (prepass) { gl.depthFunc(gl.EQUAL); gl.depthMask(false); }
@@ -966,6 +965,14 @@ async function create(canvas, options = {}) {
       if (prepass) { gl.colorMask(false, false, false, false); runMeshes(programs.depth, false); gl.colorMask(true, true, true, true); }
       colourPass();
     }, bandsFor(mirror ? 'reflection' : 'scene'));
+    // the void's facilities once over the whole target, not per band (each band would redo all their vertices)
+    if (!mirror && voidOn()) {
+      gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+      if (prepass) { gl.colorMask(false, false, false, false); drawVoid(c, false); gl.colorMask(true, true, true, true); gl.depthFunc(gl.EQUAL); gl.depthMask(false); }
+      drawVoid(c, true);
+      gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+      gl.flush();
+    }
     gl.disable(gl.DEPTH_TEST);
     gl.bindVertexArray(null);
   }
@@ -1151,15 +1158,16 @@ async function create(canvas, options = {}) {
     list: [],                                   // [{ o: [x, y, z], yaw, col: [r, g, b] (full colour, 0..1), home }]
     lid: 0,                                     // our hatch's lid, radians about its axis (+: open)
     kOthers: 30,                                // the other facilities' group-0 intensity (their lamps are steady)
-    fog: { sigma: 0.0042, up: [0.030, 0.036, 0.042], down: [0.010, 0.012, 0.015], amb: 1.0, pierce: 0.55, haloR: 3.0, haloK: 1.0 },
+    fog: { sigma: 0.0028, up: [0.070, 0.087, 0.092], down: [0.004, 0.005, 0.0056], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
     force: null,                                // tests: true / false overrides the automatic switch
-    on: false, inBlock: true, homeHaze: 1, n: 0, lamps: 0, drawn: [0, 0, 0],
+    on: false, inBlock: true, homeHaze: 1, n: 0, lamps: 0, drawn: [0, 0, 0], noInterior: false,
   };
   const voidOn = () => VOID.on;
   const kapakDyn = dyn.find(d => d.void) || null;
   const boxLoHi = k => { const e = [len(k.x), len(k.y), len(k.z)]; return [sub(k.merkez, e), add(k.merkez, e)]; };
   const blockBox = anchors.dis_blok && anchors.dis_blok.kutu ? boxLoHi(anchors.dis_blok.kutu) : null;
   const boundsBox = anchors.dis_sinir && anchors.dis_sinir.kutu ? boxLoHi(anchors.dis_sinir.kutu) : null;
+  const hatchBox = anchors.kapak && anchors.kapak.kutu ? anchors.kapak.kutu : null;
   const fenerAnchor = anchors.dis_fener && anchors.dis_fener.kutu ? anchors.dis_fener.kutu.merkez : null;
   const fenerLight = (pack.isiklar || []).find(l => l.tur === 'kure' && fenerAnchor && len(sub(l.merkez, fenerAnchor)) < 0.2);
   const fenerMat = mats.find(m => m.ad === 'dis_fener');
@@ -1219,7 +1227,14 @@ async function create(canvas, options = {}) {
     let dB = 0;
     for (let i = 0; i < 3; i++) dB += Math.pow(Math.max(0, blockBox[0][i] - e[i], e[i] - blockBox[1][i]), 2);
     VOID.homeHaze = 1 - smoothstep(150, 300, Math.sqrt(dB));
-    const f = VOID.fog, rGeo = 5.6 / f.sigma, rLamp = 6.2 / (f.sigma * f.pierce);
+    // the hall can only be seen from outside through the open hatch: skip all of it unless the hatch is open, near
+    // enough to show a few pixels of the stair, and in view
+    VOID.noInterior = !VOID.inBlock;
+    if (VOID.noInterior && hatchBox && VOID.lid > 0.02) {
+      const q = sub(hatchBox.merkez, e), d = len(q), z = dot(q, c.F), r = 3.5;
+      if (d < 140 && z > -r && Math.abs(dot(q, c.R)) < z * c.tx + r * 1.5 && Math.abs(dot(q, c.U)) < z * c.ty + r * 1.5) VOID.noInterior = false;
+    }
+    const f = VOID.fog, rGeo = 4.6 / f.sigma, rLamp = 6.2 / (f.sigma * f.pierce);
     const g0 = groups[0], kOurs = g0[3], ours = [g0[0] * kOurs, g0[1] * kOurs, g0[2] * kOurs];
     const pxAngle = 2 * c.ty / Math.max(1, H);
     const sx = Math.sqrt(1 + c.tx * c.tx), sy = Math.sqrt(1 + c.ty * c.ty);
@@ -1622,7 +1637,7 @@ async function create(canvas, options = {}) {
       if (o.fog) Object.assign(VOID.fog, o.fog);
       if ('force' in o) VOID.force = o.force;
     },
-    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog } }),
+    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog } }),
     setHeat(h) { heat = Math.min(1, Math.max(0, h || 0)); },   // the arch opening's shimmer (0..1, from the temperature)
     setQuality(q) { Object.assign(Q, q); T = null; W = 0; resize(); },
     render,

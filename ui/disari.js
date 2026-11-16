@@ -30,7 +30,7 @@ const L = {
   INSET: 9,                  // the landing keeps this far from the deck's edge (m)
   OPEN: 105 * Math.PI / 180, // the lid stands open at this angle
   OPEN_S: 1.5, CLOSE_S: 1.25,// its swing (s)
-  EV_U: 0.5,                 // the journey point (share of its length) the eye's exposure refers to while outside
+  EV_U: 0.0,                 // the journey point (share of its length) the eye's exposure refers to while outside
 };
 
 function hash(i, j, k) {     // 0..1, from integers (the same every run)
