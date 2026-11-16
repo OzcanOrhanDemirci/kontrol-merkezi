@@ -125,10 +125,23 @@ public sealed class RenkMotoru
 
     /// <summary>Local model generating. 1 "akış": three soft dark gaps drift round every ring, like text streaming
     /// out; the keyboard carries them left to right. 2 "kıpırtı": every LED dims and recovers on its own slow,
-    /// unsynchronised rhythm, a quiet living texture.</summary>
-    static double YzFactor(int variant, int ring, double ang, double x, int led, double t, double e)
+    /// unsynchronised rhythm, a quiet living texture. 3 "fanlar yanıp söner": only the fan rings switch on and off,
+    /// 1.0 s, short soft edges (the pump and keyboard stay steady; the warning is faster, 0.7 s, and blinks everything).
+    /// 4 "fanlar derin nabız": only the fan rings pulse deeply and roundly down to ~15 %, 1.2 s.
+    /// 5 is a white wave on the keyboard (see Hesapla), not a brightness factor.
+    /// ring -1 = keyboard; pump = the AIO's pump ring.</summary>
+    static double YzFactor(int variant, int ring, bool pump, double ang, double x, int led, double t, double e)
     {
         if (e < 0.001) return 1;
+        if (variant == 5) return 1;
+        if (variant == 3 || variant == 4)
+        {
+            if (ring < 0 || pump) return 1;
+            if (variant == 4) return 1 - e * 0.85 * (0.5 - 0.5 * Math.Cos(2 * Math.PI * t / 1.2));
+            double s = 0.5 + 0.5 * Math.Cos(2 * Math.PI * t / 1.0);
+            double on = Smooth01(Math.Max(0, Math.Min(1, (s - 0.3) * 2.0)));
+            return 1 - e * 0.92 * (1 - on);
+        }
         if (variant == 2)
         {
             double h1 = Hash(led * 1.7 + 0.3) * 6.283, h2 = Hash(led * 3.1 + 0.9) * 6.283;
@@ -185,7 +198,7 @@ public sealed class RenkMotoru
         double blink = 1;
         if (_eWarn > 0.001)
         {
-            double s = 0.5 + 0.5 * Math.Cos(2 * Math.PI * t / 1.1);          // 1.1 s cycle
+            double s = 0.5 + 0.5 * Math.Cos(2 * Math.PI * t / 0.7);          // 0.7 s: faster than any calm effect
             double on = Smooth01(Math.Max(0, Math.Min(1, (s - 0.3) * 2.5))); // mostly on or off, short soft edges
             blink = 1 - _eWarn * 0.9 * (1 - on);
         }
@@ -226,7 +239,7 @@ public sealed class RenkMotoru
             {
                 double ang = 2 * Math.PI * i / n;
                 int led = _ringStart[r] + i;
-                var c = aioBase * (YzFactor(yzV, r, ang, 0, led, t, eAi) * CpuFactor(cpuV, (r + (double)i / n * 0.3) / span, t, eCpu));
+                var c = aioBase * (YzFactor(yzV, r, r == pump, ang, 0, led, t, eAi) * CpuFactor(cpuV, (r + (double)i / n * 0.3) / span, t, eCpu));
 
                 // thinking: a soft highlight orbits every ring (2.6 s per turn), pulled toward white
                 if (_eThink > 0.001)
@@ -265,7 +278,14 @@ public sealed class RenkMotoru
         for (int z = 0; z < Klavye.Length; z++)
         {
             double x = (z + 0.5) / Klavye.Length;
-            var c = baseCol * (YzFactor(yzV, -1, 0, x, 100 + z, t, eAi) * CpuFactor(cpuV, (rings + x) / span, t, eCpu));
+            var c = baseCol * (YzFactor(yzV, -1, false, 0, x, 100 + z, t, eAi) * CpuFactor(cpuV, (rings + x) / span, t, eCpu));
+            if (yzV == 5 && eAi > 0.001)
+            {
+                // local model, candidate 5: a sibling of Jarvis's thinking wave, right to left and slower, keyboard only
+                double pos = 1.25 - 1.5 * Frac(t / 3.6);
+                double lobe = Math.Exp(-(x - pos) * (x - pos) / (2 * 0.13 * 0.13));
+                c = Lin.Mix(c, new Lin(1, 1, 1), 0.5 * lobe * eAi);
+            }
             if (_eThink > 0.001)
             {
                 double pos = -0.25 + 1.5 * Frac(t / 2.6);

@@ -2,7 +2,7 @@
 
     python araclar/renk.py goster                       table: each stop, the shared colour and each device's own
     python araclar/renk.py tut 46                       lights on, hold the 46 °C stop
-    python araclar/renk.py efekt yapayzeka 1 [46]       play a load-effect candidate (yapayzeka|islemci, 1|2) over a
+    python araclar/renk.py efekt yapayzeka 3 [46]       play a load-effect candidate (yapayzeka 1-5, islemci 1|2) over a
                                                         held temperature (default 46); 'efekt bitir' stops it
     python araclar/renk.py efekt sec islemci 2          make that candidate the one the app uses
     python araclar/renk.py efekt uyari [85]             play the over-temperature warning blink (no heat needed)
@@ -125,8 +125,8 @@ def main():
             print(f"uyarı oynuyor @ {c} °C (gerçekte ortalama {load().get('uyariDerece', 90)} °C'yi geçince)")
         elif a[1] == "sec":
             kind, n = a[2], int(a[3])
-            if kind not in ("yapayzeka", "islemci") or n not in (1, 2):
-                sys.exit("efekt sec yapayzeka|islemci 1|2")
+            if not ((kind == "yapayzeka" and 1 <= n <= 5) or (kind == "islemci" and n in (1, 2))):
+                sys.exit("efekt sec yapayzeka 1-5 | islemci 1|2")
             d = load()
             d.setdefault("efektler", {})[kind] = n
             save(d)
@@ -134,8 +134,8 @@ def main():
         else:
             kind, n = a[1], int(a[2])
             c = float(a[3]) if len(a) > 3 else 46.0
-            if kind not in ("yapayzeka", "islemci") or n not in (1, 2):
-                sys.exit("efekt yapayzeka|islemci 1|2 [sıcaklık]")
+            if not ((kind == "yapayzeka" and 1 <= n <= 5) or (kind == "islemci" and n in (1, 2))):
+                sys.exit("efekt yapayzeka 1-5 | islemci 1|2 [sıcaklık]")
             o = {"komut": "onizle", "c": c, "yapayzeka": kind == "yapayzeka", "islemci": kind == "islemci",
                  "yzEfekt": n if kind == "yapayzeka" else None, "islemciEfekt": n if kind == "islemci" else None}
             send({"komut": "rgb", "acik": True}, o)
