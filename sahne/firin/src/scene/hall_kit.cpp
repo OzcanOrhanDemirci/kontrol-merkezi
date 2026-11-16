@@ -13,7 +13,7 @@ namespace salon::hall {
 const char* const kMatNames[M_COUNT] = {
     "beton_zemin", "beton_duvar", "beton_kolon", "beton_tavan", "beton_anit", "celik_boyali_kasa", "celik_boyali_gpu",
     "celik_kanat", "celik_pasli", "celik_sac", "metal_koyu", "kablo", "cam_lamba", "kemer_isik", "kuyu_isik", "boya",
-    "pano_yuz", "ekran_yuz", "tabela_yuz", "mercek"};
+    "pano_yuz", "ekran_yuz", "tabela_yuz", "mercek", "cekirdek_isik"};
 
 // ---------------------------------------------------------------------------------------------------------------------
 // materials
@@ -137,6 +137,7 @@ const Fallback kFallback[M_COUNT] = {
     {{0.03f, 0.03f, 0.03f}, 0.25f, 0.0f, 1.0f},    // ekran_yuz
     {{0.12f, 0.12f, 0.11f}, 0.6f, 0.0f, 1.0f},     // tabela_yuz
     {{0.30f, 0.30f, 0.30f}, 0.1f, 0.0f, 1.0f},     // mercek
+    {{0.80f, 0.80f, 0.80f}, 0.9f, 0.0f, 1.0f},     // cekirdek_isik
 };
 
 }   // namespace
@@ -186,6 +187,7 @@ void loadMaterials(Scene& s, const std::string& assetDir) {
             case M_KOYU: m.flags = MF_METAL; break;   // its ARM's metal channel averages 0.9
             case M_CAM_LAMBA: m.flags = MF_EMISSIVE; m.group = GROUP_LAMBA; m.emitScale = kLambaL; break;
             case M_KEMER_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KEMER; m.emitScale = kKemerL; break;
+            case M_CEKIRDEK_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KEMER; m.emitScale = kCekirdekL; break;
             case M_KUYU_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KUYU; m.emitScale = kKuyuL; break;
             case M_BOYA: m.flags = MF_NO_OCCLUDE | MF_LEVHA; break;
             case M_PANO: case M_EKRAN: case M_TABELA: case M_MERCEK: m.flags = MF_LEVHA; break;
