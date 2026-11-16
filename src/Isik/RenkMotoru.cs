@@ -23,6 +23,7 @@ public sealed class Girdi
     public bool Islemci;               // CPU under sustained heavy load (decided with hysteresis by the caller)
     public JarvisDurum Jarvis;
     public int? YzEfekt, IslemciEfekt; // preview only: play this candidate instead of the chosen one
+    public bool? Uyari;                // preview only: force the over-temperature warning
 }
 
 public sealed class RenkMotoru
@@ -44,7 +45,8 @@ public sealed class RenkMotoru
     readonly int _aioCount;
 
     double? _smooth1, _smooth;
-    double _eAi, _eCpu, _master;
+    double _eAi, _eCpu, _eWarn, _master;
+    bool _warn;
     double _eThink, _eWait, _eClosed, _eRestart;
     double _hazirAt = -100, _wakeAt = -100;
     JarvisDurum _lastJ = JarvisDurum.Yok;
@@ -62,6 +64,7 @@ public sealed class RenkMotoru
     public Lin Cikis { get; private set; }                        // average of what goes to the devices
     public bool YapayZekaEfekti => _eAi > 0.05;
     public bool IslemciEfekti => _eCpu > 0.05;
+    public bool Uyari => _eWarn > 0.05;
 
     public RenkMotoru(Ayarlar a)
     {
@@ -88,7 +91,7 @@ public sealed class RenkMotoru
     /// <summary>Carry the running state over from the engine this one replaces (live settings reload: no fade, no jump).</summary>
     public void DevamEt(RenkMotoru o)
     {
-        _smooth1 = o._smooth1; _smooth = o._smooth; _eAi = o._eAi; _eCpu = o._eCpu; _master = o._master;
+        _smooth1 = o._smooth1; _smooth = o._smooth; _eAi = o._eAi; _eCpu = o._eCpu; _eWarn = o._eWarn; _warn = o._warn; _master = o._master;
         _eThink = o._eThink; _eWait = o._eWait; _eClosed = o._eClosed; _eRestart = o._eRestart;
         _hazirAt = o._hazirAt; _wakeAt = o._wakeAt; _lastJ = o._lastJ;
     }
@@ -174,6 +177,19 @@ public sealed class RenkMotoru
         int yzV = g.YzEfekt ?? _a.YapayZekaEfekti, cpuV = g.IslemciEfekt ?? _a.IslemciEfekti;
         double eAi = Smooth01(Math.Min(1, _eAi)), eCpu = Smooth01(Math.Min(1, _eCpu));
 
+        // over-temperature warning: the raw average (not the 30 s drift, a warning must not wait) above the limit,
+        // off 2 °C below. A clear blink, unlike the calm effects; the hue stays the temperature's (red up there).
+        if (avg.HasValue) _warn = _warn ? avg.Value > _a.UyariDerece - 2 : avg.Value > _a.UyariDerece;
+        bool warn = g.Uyari ?? _warn;
+        _eWarn = Approach(_eWarn, warn ? 1 : 0, dt, 0.25);
+        double blink = 1;
+        if (_eWarn > 0.001)
+        {
+            double s = 0.5 + 0.5 * Math.Cos(2 * Math.PI * t / 1.1);          // 1.1 s cycle
+            double on = Smooth01(Math.Max(0, Math.Min(1, (s - 0.3) * 2.5))); // mostly on or off, short soft edges
+            blink = 1 - _eWarn * 0.9 * (1 - on);
+        }
+
         // ---- Jarvis envelopes
         var j = g.Jarvis;
         if (j != _lastJ)
@@ -239,7 +255,7 @@ public sealed class RenkMotoru
                         c = Lin.Mix(c * (1 - 0.7 * _eRestart), new Lin(1, 1, 1), lobe * _eRestart);
                     }
                 }
-                c = (c * master).Clamped();
+                c = (c * (blink * master)).Clamped();
                 Aio[led] = c;
                 sr += c.R; sg += c.G; sb += c.B;
             }
@@ -258,10 +274,10 @@ public sealed class RenkMotoru
             }
             if (settle > 0) c = Lin.Mix(c, new Lin(1, 1, 1), settle);
             if (wake > 0) c = Lin.Mix(c, new Lin(1, 1, 1), wake);
-            Klavye[z] = (c * breath * master).Clamped();
+            Klavye[z] = (c * (breath * blink * master)).Clamped();
         }
 
-        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (baseCol * CpuFactor(cpuV, 0.5, t, eCpu) * breath * master).Clamped();
+        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (baseCol * (CpuFactor(cpuV, 0.5, t, eCpu) * breath * blink * master)).Clamped();
 
         Cikis = _aioCount > 0 ? new Lin(sr / _aioCount, sg / _aioCount, sb / _aioCount) : baseCol * master;
     }

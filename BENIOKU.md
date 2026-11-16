@@ -7,8 +7,10 @@ Bu bilgisayarın fanlarını ve RGB ışıklarını tek pencereden yöneten masa
   Anahtarı'nın çip kodu aynen). İkinci düğme ekran kartı fanlarını en yükseğe alır, tekrar basınca kartın kendi
   otomatiğine döndürür. Afterburner'ın fan denetimi açıksa küçük bir uyarı çıkar, çünkü düğmeyle çakışır.
 - **RGB:** bütün ışıklar birlikte açılır ya da kapanır. Açıkken renk bilgisayarın sıcaklığını izler (işlemci ve
-  ekran kartı sıcaklığının düz ortalaması, yaklaşık 30 saniyeye yayılmış, ani dalgalanmaları izlemez): soğuk beyaz, serin açık mavi, ılık koyu mavi,
-  sıcak sarı, çok sıcak turuncu, en sıcakta kırmızı; geçişler yumuşak. Işık her zaman tam parlaklıkta.
+  ekran kartı sıcaklığının düz ortalaması, yaklaşık 30 saniyeye yayılmış, ani dalgalanmaları izlemez). Boşta ve
+  hafif ılınmalarda beyaz (52 °C'ye kadar); ılıyınca koyu mavi (58), arada doğal geçiş olarak açık mavi; sonra sarı
+  (64), turuncu (74), kırmızı (80,5 ve üstü). Geçişler yumuşak, ışık her zaman tam parlaklıkta. Ortalama 90 °C'yi
+  geçerse ışıklar uyarı olarak yanıp söner.
   - Renk yalnız sıcaklıktan gelir. Yerel yapay zekâ modeli yanıt yazarken ve işlemci uzun süre (30 sn) yoğun
     yükteyken renk değişmez; ışığın üstünde sakin birer efekt oynar (parlaklık ve hareket). Hangi efektin
     oynayacağı `ayarlar.json`'da `efektler` altında seçilir (iki aday var).

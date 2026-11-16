@@ -57,7 +57,7 @@ const M = {
 const L = {
   halo: new Float32Array(84 * 3), kbd: new Float32Array(30), prevHalo: new Float32Array(84 * 3), refHalo: new Float32Array(84 * 3),
   tog: [0, 0, 0], ringL: [0, 0, 0], ringR: [0, 0, 0], soft: [0, 0, 0], mark: [1, 1, 1],
-  stopsLin: [], stopsT: [38, 46, 54, 64, 74, 84],
+  stopsLin: [], stopsT: [52, 58, 64, 74, 80.5],
 };
 
 const sound = window.KM_SES;
@@ -187,7 +187,7 @@ const HC = [0, 24, 27.5], FCL = [-7.6, 0.6, 9.25], FCR = [7.6, 0.6, 9.25];
 const NEUTRAL = [1.0, 0.93, 0.84];
 let scaleMin = 32, scaleMax = 90;
 
-function stops() { return (D.durum && D.durum.rgb && D.durum.rgb.duraklar && D.durum.rgb.duraklar.length >= 6) ? D.durum.rgb.duraklar : null; }
+function stops() { return (D.durum && D.durum.rgb && D.durum.rgb.duraklar && D.durum.rgb.duraklar.length >= 2) ? D.durum.rgb.duraklar : null; }
 
 function updateLights(dt) {
   const iz = D.isik;
@@ -244,9 +244,10 @@ function updateLights(dt) {
     L.stopsT = st.map(s => s.c);
     const key = JSON.stringify(st.map(s => [s.c, s.renk]));
     if (key !== L.lutKey) { L.lutKey = key; L.lut = null; }
-    scaleMin = Math.floor((st[0].c - 6) / 2) * 2; scaleMax = Math.ceil((st[st.length - 1].c + 6) / 2) * 2;
+    const uy = (D.durum.rgb.uyariDerece || 90) + 2;   // keep the warning limit on the scale
+    scaleMin = Math.floor((st[0].c - 10) / 2) * 2; scaleMax = Math.ceil(Math.max(st[st.length - 1].c + 6, uy) / 2) * 2;
   } else if (!L.stopsLin.length) {
-    L.stopsLin = [[235, 242, 255], [150, 205, 255], [40, 80, 255], [255, 205, 40], [255, 115, 15], [255, 20, 8]].map(linRgb);
+    L.stopsLin = [[255, 255, 255], [20, 50, 255], [255, 210, 0], [255, 110, 0], [255, 0, 0]].map(linRgb);
   }
   const isi = D.durum && D.durum.isi;
   const tv = isi ? (isi.yumusak != null ? isi.yumusak : isi.ort) : null;
@@ -580,7 +581,7 @@ function renderRgb() {
     else if (rgb.beklemede) modeSub = `${rgb.beklemeDakika || 15} dakikadır klavye ve fare kullanılmadı;<br>ışıklar yumuşakça söndü`;
     // the two load effects ride on the temperature colour; the window names them, the colour stays the temperature's
     const ef = rgb.efektler || {};
-    const efl = [ef.yapayzeka && 'yerel model yanıt yazıyor', ef.islemci && 'işlemci yoğun yükte'].filter(Boolean);
+    const efl = [ef.uyari && 'sıcaklık uyarısı', ef.yapayzeka && 'yerel model yanıt yazıyor', ef.islemci && 'işlemci yoğun yükte'].filter(Boolean);
     if (efl.length && on && !rgb.beklemede) modeSub += '<br>ışıkta efekt: <b>' + efl.join('</b> · <b>') + '</b>';
   }
   $('#mode').innerHTML = mode;
@@ -606,7 +607,8 @@ function renderRgb() {
 // stops along the arc (HTML ticks), rebuilt when the stops change
 let tickKey = '';
 function buildTicks() {
-  const st = stops() || L.stopsT.map(c => ({ c }));
+  const uy = D.durum && D.durum.rgb && D.durum.rgb.uyariDerece;
+  const st = (stops() || L.stopsT.map(c => ({ c }))).filter(s => !s.gizli).concat(uy ? [{ c: uy, ad: 'uyarı: yanıp söner' }] : []);
   const key = st.map(s => s.c + (s.ad || '')).join(',');
   if (key === tickKey) return;
   tickKey = key;

@@ -1,6 +1,6 @@
 """Walk the real lights through every colour and state (morning calibration with Özcan watching the case).
 
-    python araclar/onizle.py tur            temperature sweep 34 -> 90 °C, then the two overrides, then the Jarvis states
+    python araclar/onizle.py tur            temperature sweep 44 -> 88 °C, then the two overrides, then the Jarvis states
     python araclar/onizle.py sicaklik 64    hold one temperature (Ctrl+C ends; preview is cleared on exit)
     python araclar/onizle.py temizle        clear the preview, back to live values
 
@@ -47,10 +47,10 @@ def main():
             while True:
                 time.sleep(1)
         # temperature sweep: 1 °C every 0.6 s (the engine smooths over ~5 s, as in real use)
-        c = 34.0
+        c = 44.0
         send(f, {"komut": "onizle", "c": c})
         time.sleep(6)
-        while c < 90:
+        while c < 88:
             c += 1
             print(f"{c:.0f} °C", flush=True)
             send(f, {"komut": "onizle", "c": c})
@@ -63,6 +63,7 @@ def main():
             ("işlemci yoğun yükte, aday 1 (kalp)", {"c": 50, "islemci": True, "islemciEfekt": 1}, 10),
             ("işlemci yoğun yükte, aday 2 (yük dalgası)", {"c": 50, "islemci": True, "islemciEfekt": 2}, 10),
             ("geri: yalnız sıcaklık", {"c": 50}, 5),
+            ("sıcaklık uyarısı (90 °C üstü)", {"c": 85, "uyari": True}, 8),
             ("Jarvis düşünüyor", {"c": 50, "jarvis": "dusunuyor"}, 10),
             ("Jarvis hazır (bir kez parlar)", {"c": 50, "jarvis": "hazir"}, 5),
             ("Jarvis yanıtını bekliyor", {"c": 50, "jarvis": "bekliyor"}, 12),

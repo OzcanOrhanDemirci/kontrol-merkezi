@@ -7,12 +7,11 @@ window.KM_BENZETIM = function (deliver) {
   const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
   const lerp = (a, b, t) => a + (b - a) * t;
   const DURAKLAR = [
-    { c: 38, renk: [230, 240, 255], ad: 'soğuk beyaz' },        // the service's defaults (src/Isik/Ayarlar.cs)
-    { c: 46, renk: [110, 190, 255], ad: 'serin açık mavi' },
-    { c: 54, renk: [20, 50, 255], ad: 'ılık koyu mavi' },
+    { c: 52, renk: [255, 255, 255], ad: 'beyaz' },              // the service's defaults (src/Isik/Ayarlar.cs)
+    { c: 58, renk: [20, 50, 255], ad: 'ılık koyu mavi' },
     { c: 64, renk: [255, 210, 0], ad: 'sıcak sarı' },
     { c: 74, renk: [255, 110, 0], ad: 'çok sıcak turuncu' },
-    { c: 84, renk: [255, 0, 0], ad: 'en sıcak kırmızı' },
+    { c: 80.5, renk: [255, 0, 0], ad: 'kırmızı' },
   ];
   const S = {
     yonetici: true,
@@ -72,7 +71,7 @@ window.KM_BENZETIM = function (deliver) {
           { kimlik: 'klavye', ad: 'SteelSeries Apex 3', bagli: true, hata: null },
           { kimlik: 'gpu', ad: 'MSI RTX 4080 Gaming X Trio', bagli: false, kilitli: true, hata: null },
         ],
-        duraklar: DURAKLAR,
+        duraklar: DURAKLAR, uyariDerece: 90,
       },
     };
   }

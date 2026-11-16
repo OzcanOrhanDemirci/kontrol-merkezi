@@ -17,6 +17,7 @@ public sealed class Durak
     public double C;       // °C of the smoothed CPU/GPU average
     public int[] Renk;     // sRGB as designed on screen
     public string Ad;
+    public bool Gizli;     // a blend point only (e.g. a device correction inside a transition): no label on the scale
 }
 
 /// <summary>A device's own stop colours: what to send it so it shows what the reference device (keyboard) shows.
@@ -31,19 +32,24 @@ public sealed class Ayarlar
     /// <summary>Per-device colour per stop (hue-dependent matching), e.g. "aio". The keyboard is the reference.</summary>
     public Dictionary<string, CihazRenk> CihazRenkleri = new();
 
-    // Stops from cold to hot. Temperatures come from this machine's range: GPU idles at ~37 °C with its fans
-    // stopped (measured 11-16 02:10), the 7900X idles in the 40s and runs to its 95 °C design limit under all-core
-    // load; gaming puts both in the 60-80 band. Average: idle ~41-45, desk work ~45-50, games ~63-75, both maxed ~85.
-    // The service writes isi-gecmisi.csv so the morning refinement uses his real days, not this estimate.
+    // Stops from cold to hot, set 11-16 from his own readings (isi-gecmisi.csv, 09:29-10:25, CPU and GPU average):
+    // at the desk (GPU under 40 °C) median 46.6, 90 % under 51.9, peak 57.9; with the GPU working 10 % under 57.4.
+    // Özcan: "Genelde beyaz olsun [...] hafif anlık ılımalarda da o beyazlığı korusun. Ilıyınca [...] koyu mavi olsun;
+    // koyuya geçerken açık mavi ister istemez o geçişte var." So white holds flat up to 52 (desk work and short
+    // warm-ups, which the 30 s drift also absorbs), dark blue is sustained warmth from 58, light blue is only the
+    // middle of that blend. Red at (94 + 67) / 2 = 80.5, his CPU 94 / GPU 67 reading, and above.
     public List<Durak> Duraklar = new()
     {
-        new Durak { C = 38, Renk = new[] { 230, 240, 255 }, Ad = "soğuk beyaz" },
-        new Durak { C = 46, Renk = new[] { 110, 190, 255 }, Ad = "serin açık mavi" },
-        new Durak { C = 54, Renk = new[] { 20, 50, 255 }, Ad = "ılık koyu mavi" },
+        new Durak { C = 52, Renk = new[] { 255, 255, 255 }, Ad = "beyaz" },
+        new Durak { C = 58, Renk = new[] { 20, 50, 255 }, Ad = "ılık koyu mavi" },
         new Durak { C = 64, Renk = new[] { 255, 210, 0 }, Ad = "sıcak sarı" },
         new Durak { C = 74, Renk = new[] { 255, 110, 0 }, Ad = "çok sıcak turuncu" },
-        new Durak { C = 84, Renk = new[] { 255, 0, 0 }, Ad = "en sıcak kırmızı" },
+        new Durak { C = 80.5, Renk = new[] { 255, 0, 0 }, Ad = "kırmızı" },
     };
+
+    /// <summary>Average temperature (raw, not the 30 s drift) above which the lights blink as a warning; off 2 °C below.
+    /// Özcan: "Ortalama sıcaklık 90 dereceyi geçerse ışıklar yanıp sönsün, uyarı gibi efekt olarak."</summary>
+    public double UyariDerece = 90;
 
     /// <summary>Local model generating an answer: rose pink, the one hue family the temperature palette never visits.</summary>
     /// <summary>Which candidate pattern plays for the two load effects (1 or 2; RenkMotoru.YzFactor/CpuFactor).
@@ -82,10 +88,11 @@ public sealed class Ayarlar
                 var list = new List<Durak>();
                 foreach (var o in dl)
                     if (o is Dictionary<string, object> x)
-                        list.Add(new Durak { C = Convert.ToDouble(x["c"]), Renk = Ints(x["renk"], 3), Ad = x.TryGetValue("ad", out var ad) ? ad as string : "" });
+                        list.Add(new Durak { C = Convert.ToDouble(x["c"]), Renk = Ints(x["renk"], 3), Ad = x.TryGetValue("ad", out var ad) ? ad as string : "", Gizli = x.TryGetValue("gizli", out var gz) && gz is bool gb && gb });
                 if (list.Count >= 2 && list.Zip(list.Skip(1), (p, q) => q.C > p.C).All(v => v)) a.Duraklar = list;
                 else Program.Log("ayarlar: duraklar geçersiz (en az 2, artan sıcaklık), varsayılan kullanılıyor");
             }
+            if (d.TryGetValue("uyariDerece", out var ud)) a.UyariDerece = Convert.ToDouble(ud);
             if (d.TryGetValue("beklemeDakika", out var bd)) a.BeklemeDakika = Math.Max(0, Convert.ToInt32(bd));
             if (d.TryGetValue("efektler", out var ef) && ef is Dictionary<string, object> efd)
             {
@@ -130,7 +137,8 @@ public sealed class Ayarlar
             var d = new Dictionary<string, object>
             {
                 ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: yerel model ve işlemci yükü efektinin adayı (1 ya da 2). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
-                ["duraklar"] = Duraklar.Select(x => new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }).ToList(),
+                ["duraklar"] = Duraklar.Select(x => { var o = new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }; if (x.Gizli) o["gizli"] = true; return o; }).ToList(),
+                ["uyariDerece"] = UyariDerece,
                 ["beklemeDakika"] = BeklemeDakika,
                 ["efektler"] = new Dictionary<string, object> { ["yapayzeka"] = YapayZekaEfekti, ["islemci"] = IslemciEfekti },
                 ["kazanc"] = Kazanc,

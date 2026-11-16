@@ -45,8 +45,9 @@ sealed class Servis : IDisposable
         public double? C;
         public bool? YapayZeka, Islemci;
         public int? YzEfekt, IslemciEfekt;
+        public bool? Uyari;
         public JarvisDurum? Jarvis;
-        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null && YzEfekt == null && IslemciEfekt == null;
+        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null && YzEfekt == null && IslemciEfekt == null && Uyari == null;
     }
     readonly YerelModel _model = new();
     readonly Afterburner _ab = new();
@@ -219,6 +220,7 @@ sealed class Servis : IDisposable
                 if (d.TryGetValue("c", out var c) && c != null) z.C = Convert.ToDouble(c, Inv);
                 z.YapayZeka = Json.B(d, "yapayzeka");
                 z.Islemci = Json.B(d, "islemci");
+                z.Uyari = Json.B(d, "uyari");
                 if (d.TryGetValue("yzEfekt", out var ye) && ye != null) z.YzEfekt = Convert.ToInt32(ye);
                 if (d.TryGetValue("islemciEfekt", out var ie) && ie != null) z.IslemciEfekt = Convert.ToInt32(ie);
                 var jv = Json.S(d, "jarvis");
@@ -528,7 +530,7 @@ sealed class Servis : IDisposable
                     {
                         CpuC = z.C ?? gi.CpuC, GpuC = z.C ?? gi.GpuC, CpuYuk = gi.CpuYuk, GpuYuk = gi.GpuYuk,
                         YapayZeka = z.YapayZeka ?? gi.YapayZeka, Islemci = z.Islemci ?? gi.Islemci, Jarvis = z.Jarvis ?? gi.Jarvis,
-                        YzEfekt = z.YzEfekt, IslemciEfekt = z.IslemciEfekt,
+                        YzEfekt = z.YzEfekt, IslemciEfekt = z.IslemciEfekt, Uyari = z.Uyari,
                     };
                 _motor.Hesapla(gi, t, dt);
                 if (!_uyku) WriteDevices();
@@ -621,7 +623,8 @@ sealed class Servis : IDisposable
 
         j.Obj("rgb").Bool("acik", _motor.Acik)
          .Bool("beklemede", _motor.Acik && _beklemede).Int("beklemeDakika", _ayar.BeklemeDakika)
-         .Obj("efektler").Bool("yapayzeka", _motor.YapayZekaEfekti).Bool("islemci", _motor.IslemciEfekti).End()
+         .Obj("efektler").Bool("yapayzeka", _motor.YapayZekaEfekti).Bool("islemci", _motor.IslemciEfekti).Bool("uyari", _motor.Uyari).End()
+         .Num("uyariDerece", _ayar.UyariDerece)
          .Str("jarvis", (_jarvis?.Durum ?? JarvisDurum.Yok) switch
          {
              JarvisDurum.Dusunuyor => "dusunuyor", JarvisDurum.Bekliyor => "bekliyor", JarvisDurum.Hazir => "hazir",
@@ -637,7 +640,7 @@ sealed class Servis : IDisposable
         if (!_rgb.Any(d => d.Kimlik == "gpu"))
             j.Obj().Str("kimlik", "gpu").Str("ad", "MSI RTX 4080 Gaming X Trio").Bool("bagli", false).Bool("kilitli", true).Null("hata").End();
         j.End().Arr("duraklar");
-        foreach (var s in _ayar.Duraklar) j.Obj().Num("c", s.C).Rgb("renk", s.Renk[0], s.Renk[1], s.Renk[2]).Str("ad", s.Ad).End();
+        foreach (var s in _ayar.Duraklar) j.Obj().Num("c", s.C).Rgb("renk", s.Renk[0], s.Renk[1], s.Renk[2]).Str("ad", s.Ad).Bool("gizli", s.Gizli).End();
         j.End().End();
         return j.End().ToString();
     }
