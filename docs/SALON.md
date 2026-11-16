@@ -330,7 +330,7 @@ Its numbers are the `hall::up` constants in `hall_kit.h`.
   lamp's pit). No sky: outside, only the facility's own lamps light it in the bake.
 - **Light map.** The walk's surfaces 4 cm texels (`dMin` 10 m at `--texel-scale 2.5`), the roof's lamp and mast 6.4 cm,
   the deck from 32 cm round the hatch and the lamp to 1.25 m, walls, underside and columns 2.5 m. At `--texel-scale
-  2.5`: 34.83 M texels on 3 pages (the hall 33.77 M, the way up 0.66 M, the lamp and mast 0.12 M, the deck 0.24 M, the
+  2.5`: 34.80 M texels on 3 pages (the hall 33.77 M, the way up 0.66 M, the lamp and mast 0.09 M, the deck 0.24 M, the
   far exterior 0.05 M), 12.04 M volume cells.
 
 `salon.exe dump --out DIR` writes the scene as plain binaries + JSON; `python sahne/araclar/geo_onizle.py DIR` renders the
