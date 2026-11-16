@@ -153,10 +153,11 @@ void ceilingAndWalls(Hall& h) {
         h.oneChart(vm, cm);
     }
     {
-        // the end wall, with the opening into the heat core's chamber behind the arch (x +-12, y 0..26; the chamber
-        // closes itself on every side, hall_arch.cpp): three pieces round the hole, each its own chart
-        const float hx = 12.0f, hy = 26.0f;
-        for (int q = 0; q < 3; ++q) {
+        // the end wall, with the opening into the heat core's chamber behind the arch (x +-12, floor to ceiling: the
+        // chamber is full height and closes itself on every side, hall_arch.cpp): two pieces beside the hole, each its
+        // own chart
+        const float hx = 12.0f, hy = kH;
+        for (int q = 0; q < (hy < kH ? 3 : 2); ++q) {
             const size_t vm = h.vmark();
             const uint32_t cm = h.cmark();
             if (q == 0) h.patch(v3(-kW, 0, kZ1), v3(-hx, 0, kZ1), v3(-kW, kH, kZ1), v3(-hx, kH, kZ1), v3(0, 0, 1), M_DUVAR, 8.0f);

@@ -1,12 +1,15 @@
 // The monument at the hall's end (docs/SALON.md "Arch"): a hydraulic work in raw cast concrete, built into the end wall
 // and the ceiling. Two piers 13 m wide stand the full height in thick pours (a construction joint every lift); between
 // them a 14 x 19.2 m opening 8 m deep, closed by a riveted steel sluice gate raised to 40 % of the opening; above it a
-// heavy lintel with the temperature display in a recessed service housing, and the hoist bay where the gate's top, its
-// hoist frame and winches stand. Behind the gate (chamberInterior) the chamber runs 30 m deep through receding concrete
-// frames to the heat core, a stack of steel rings round a glowing heart: the one light of the place (group 1). It pours
-// out under the gate and through the gaps at its sides; dim floodlights in the plinth only fill the face.
-// On the piers the six stop lamps in a gauge row (cold to hot, left to right) with their plates; before the steps the
-// console with the RGB lever, its plate, the three device lamps and plates; service doors, the exit sign, caged lamps.
+// heavy lintel (two pours) with the temperature display in a recessed service housing and over it the gauge: five stop
+// lamps in a row, cold to hot from left to right, their plates under them, lit by a hooded strip. Above the lintel the
+// hoist bay, open at the back into the chamber. Behind the gate (chamberInterior) the chamber runs 30 m deep, full
+// height, through receding concrete portals to the heat core, a stack of steel rings round a glowing finned heart: the
+// one light of the place (group 1; no floodlights). It pours out under the gate (the tongue across the plaza), through
+// the gaps at its sides, and over the portals into the hoist bay, where the gate's top, the hoist girders and the
+// winches stand as silhouettes in a second glowing rectangle high up: the monument reads from the hall's middle.
+// Before the steps a low console (the gap under the gate stays in view over it) with the RGB lever, its plate, the
+// three device lamps and plates; service doors, the exit sign, caged lamps.
 #include "scene/hall_kit.h"
 
 #include <algorithm>
@@ -26,9 +29,11 @@ constexpr float kSill = 1.2f;            // the plinth's top, the opening's sill
 constexpr float kLift = 3.2f;            // pour height: a construction joint every lift from the sill
 constexpr float kOpenHW = 7.0f;          // the opening, 14 m wide ...
 constexpr float kOpenTop = kSill + 6 * kLift;   // ... to 20.4 (19.2 m tall), on a joint
-constexpr float kLintelTop = 25.2f;      // the lintel; the hoist bay above it to the ceiling
-constexpr float kBayBack = -261.6f;      // the hoist bay's back wall
-constexpr float kRevealEnd = -263.0f;    // the opening's end, the chamber's start
+constexpr float kLintelTop = kOpenTop + 2 * kLift;   // the lintel, two pours to 26.8; the hoist bay above it
+constexpr float kRevealEnd = -263.0f;    // the opening's end, the chamber's start (the bay opens into it too)
+// the display's housing in the lintel (a recess 0.5 m deep) and the gauge row over it
+constexpr float kHousRX = 4.5f, kHousY0 = 20.9f, kHousY1 = 23.9f;
+constexpr float kGaugeY = 25.85f;        // the stop lamps' centres; their plates 1.25 m lower
 // the gate
 constexpr float kGateZ = -260.4f;        // its skin plate's downstream face; the girders stand out towards +z
 constexpr float kGateDepth = 0.9f;       // skin to the girders' front flanges
@@ -40,9 +45,13 @@ constexpr float kGirderPitch = 2.2f;     // its main girders; the core's heavy r
 constexpr float kPostIn = 6.15f;         // the end posts' inner faces
 // the chamber
 constexpr float kChamberBack = -293.0f;  // 30 m behind the gate
-constexpr float kChamberHW = 12.0f, kChamberTop = 26.0f;
+constexpr float kChamberHW = 12.0f;      // full height: its ceiling is the hall's (kTop), so the glow reaches the bay
+constexpr float kPortalTop = kSill + 7 * kLift;   // the receding portals end at 23.6: the light passes over them
 constexpr float kCoreZ = -288.0f;        // the heat core's axis
-constexpr float kCoreBase = kSill + 1.4f, kHeartTop = 16.4f, kHeartHW = 1.7f;
+// the heart: a square glowing column 4 m wide, 18.4 m tall, with eight glowing fins out to r 3.4 inside the rings.
+// Its brightness comes from its area (~580 m2 of cekirdek_isik), not from a higher radiance: it never blows out
+constexpr float kCoreBase = kSill + 1.4f, kHeartTop = 21.0f, kHeartHW = 2.0f, kFinR = 3.4f;
+constexpr float kRingIn = 3.6f, kRingOut = 4.6f;
 // the console before the steps
 constexpr float kConsoleZ = -240.6f;     // its front face
 
@@ -164,8 +173,9 @@ void mass(Hall& h) {
                  kSill, kTop);
     }
     // the lintel: a beam 3 m deep in front of the gate's slot, its face framing the display's housing (a 9 x 3 m recess
-    // 0.5 m deep); behind the slot the upstream block over the chamber's mouth
-    const float zr = kFace - 0.5f, rx = 4.5f, ry0 = 21.2f, ry1 = 24.2f;
+    // 0.5 m deep); behind the slot the upstream block over the chamber's mouth. Their tops are the hoist bay's floor; the
+    // bay has no back wall: it looks into the chamber, whose ceiling is the hall's
+    const float zr = kFace - 0.5f, rx = kHousRX, ry0 = kHousY0, ry1 = kHousY1;
     h.box(v3(0, 0.5f * (kOpenTop + kLintelTop), 0.5f * (zr + kGateZ + 1.4f)), v3(kOpenHW, 0.5f * (kLintelTop - kOpenTop), 0.5f * (zr - kGateZ - 1.4f)),
           0.04f, M_DUVAR, 3.0f);
     auto skin = [&](float x0, float x1, float y0, float y1) {
@@ -177,9 +187,7 @@ void mass(Hall& h) {
     skin(rx, kOpenHW, ry0, ry1);
     h.box(v3(0, 0.5f * (kOpenTop + kLintelTop), 0.5f * (kGateZ - 0.6f + kRevealEnd)),
           v3(kOpenHW, 0.5f * (kLintelTop - kOpenTop), 0.5f * (kGateZ - 0.6f - kRevealEnd)), 0.04f, M_DUVAR, 3.0f);
-    // the hoist bay's back wall
-    liftFace(h, axes(v3(0, 0, kBayBack), X, Y, Z), -kOpenHW, kOpenHW, kLintelTop, kTop);
-    // the walkway's railing along the lintel's front edge, 25 m up
+    // the walkway's railing along the lintel's front edge, 27 m up
     h.railing({v3(-kOpenHW, kLintelTop, kFace - 0.15f), v3(kOpenHW, kLintelTop, kFace - 0.15f)}, 1.75f, M_KOYU);
     // the jambs' steel at the gate: armour plates with bolt rows, and the guide rails the gate's rollers run on
     for (int s : {-1, 1}) {
@@ -256,13 +264,13 @@ void hoist(Hall& h) {
         for (float q : {-0.75f, 0.75f}) h.box(v3(x + q, yg + 0.62f, zc + 0.17f), v3(0.12f, 0.12f, 1.55f), 0.01f, M_KOYU, 0.5f);
         winch(h, v3(x, yg + 1.32f, zc + 0.55f), float(s));
         for (float q : {-0.08f, 0.08f}) h.rod(v3(x + q, yg + 1.32f, zc + 0.02f), v3(x + q, kGateTop + 0.5f, zc), 0.032f, M_PASLI, 0.5f);
-        h.cagedLamp(v3(s * kOpenHW, 27.4f, kFace - 1.3f), v3(float(-s), 0, 0), kBulbBoard);
     }
+    // no service lamps in the bay: the gate's top, the girders and the winches stand dark against the core's glow
 }
 
 void displayAndStops(Hall& h) {
     // the display at the housing's back, a steel liner round the recess, a bezel, a drip hood over it
-    const float zr = kFace - 0.5f, rx = 4.5f, ry0 = 21.2f, ry1 = 24.2f, dy = 22.7f, dw = 8.0f, dh = 2.0f;
+    const float zr = kFace - 0.5f, rx = kHousRX, ry0 = kHousY0, ry1 = kHousY1, dy = 0.5f * (ry0 + ry1), dw = 8.0f, dh = 2.0f;
     h.levha("kilit_tasi_ekran", "kilit_tasi_ekran", v3(0, dy, zr + 0.062f), Z, dw, dh, M_EKRAN);
     for (int s : {-1, 1}) {
         h.box(v3(0, s > 0 ? ry1 - 0.015f : ry0 + 0.015f, kFace - 0.25f), v3(rx, 0.015f, 0.25f), 0.005f, M_KOYU, 1.0f);
@@ -275,12 +283,14 @@ void displayAndStops(Hall& h) {
         for (float y : {dy - 0.5f * dh - 0.07f, dy + 0.5f * dh + 0.07f}) h.nut(facing(v3(x, y, zr + 0.08f), Z), 0.04f, M_KOYU);
     }
     h.box(v3(0, ry1 + 0.06f, kFace + 0.2f), v3(rx + 0.2f, 0.03f, 0.2f), 0.01f, M_KOYU, 1.0f);
-    // the stop lamps: a gauge row across both piers at the display's height, on a steel rail; the plates below
-    const float xs[6] = {-16.6f, -13.2f, -9.8f, 9.8f, 13.2f, 16.6f};
-    const float yl = 23.6f, zf = kPierZ;
-    for (int s : {-1, 1}) h.box(v3(s * 13.3f, yl, zf + 0.06f), v3(5.0f, 0.16f, 0.06f), 0.015f, M_KOYU, 2.0f);
-    for (int i = 0; i < 6; ++i) {
-        const float3 c = v3(xs[i], yl, zf + 0.12f);
+    // the gauge: the service's five colour stops as five lamps in one row over the display, cold to hot from left to
+    // right, on a steel rail across the lintel; each plate under its lamp
+    constexpr int kStops = 5;
+    const float pitch = 2.9f, yl = kGaugeY, zf = kFace;
+    h.box(v3(0, yl, zf + 0.06f), v3(2.0f * pitch + 0.6f, 0.16f, 0.06f), 0.015f, M_KOYU, 2.0f);
+    for (int i = 0; i < kStops; ++i) {
+        const float x = (i - 2) * pitch;
+        const float3 c = v3(x, yl, zf + 0.12f);
         const Xform t = facing(c, Z);
         h.at(t, M_KOYU, 0.1f).roundedCylinder(0.42f, 0.0f, 0.28f, 0.025f);
         h.at(t * Xform::at(v3(0, 0, 0.28f)), M_KOYU, 0.1f).torus(0.39f, 0.028f);
@@ -292,17 +302,40 @@ void displayAndStops(Hall& h) {
         an.type = "nokta";
         an.box = {c + v3(0, 0, 0.28f), v3(0.45f, 0, 0), v3(0, 0.45f, 0), v3(0, 0, 0.2f)};
         h.s.anchors.push_back(an);
-        const float3 pc = v3(xs[i], 22.0f, zf);
+        const float3 pc = v3(x, yl - 1.25f, zf);
         h.box(pc + v3(0, 0, 0.01f), v3(1.06f, 0.56f, 0.01f), 0.004f, M_SAC, 0.5f);
         for (int q = 0; q < 4; ++q) h.nut(facing(pc + v3(q % 2 ? 0.98f : -0.98f, q / 2 ? 0.48f : -0.48f, 0.02f), Z), 0.04f, M_KOYU);
         h.levha("durak_plaka_" + std::to_string(i), "durak_plaka_" + std::to_string(i), pc + v3(0, 0, 0.022f), Z, 2.0f, 1.0f, M_TABELA);
     }
+    // the plates' own lamp (group 2): a steel hood on arms 0.45 m out between the lamps and the plates, a light strip
+    // under it shining down and back onto the plates (the face is no longer floodlit: the piers stand dark against the
+    // glow; the stop lamps light themselves)
+    {
+        const float out = 0.45f, yh = yl - 0.6f, hw = 2.0f * pitch + 0.9f;
+        for (float x : {-hw + 0.3f, -0.5f * pitch, 0.5f * pitch, hw - 0.3f})
+            h.bar(v3(x, yh, zf), v3(x, yh, zf + out), 0.04f, 0.04f, Y, M_KOYU);
+        h.box(v3(0, yh + 0.04f, zf + out), v3(hw, 0.03f, 0.08f), 0.01f, M_KOYU, 0.5f);
+        const float3 dn = normalize(v3(0, -1.0f, -0.55f));
+        const float3 c = v3(0, yh + 0.005f, zf + out);
+        h.at(facing(c, dn, v3(-1, 0, 0)), M_CAM_LAMBA, 1.0f).quad(0.05f, 2 * (hw - 0.1f));
+        Emitter e;
+        e.type = Emitter::RECT;
+        e.group = GROUP_LAMBA;
+        e.c = c + dn * 0.002f;
+        e.u = v3(hw - 0.1f, 0, 0);
+        e.v = normalize(cross(dn, X)) * 0.025f;
+        e.n = dn;
+        e.L = kSignLampL;
+        e.lobe = 4.0f;
+        h.s.lights.push_back(e);
+    }
 }
 
 void console(Hall& h) {
-    // a steel control cabinet on a concrete pedestal before the steps, its top sloping up towards the monument; the
-    // plates on its upright front at the arriving eye's height
-    const float zf = kConsoleZ, depth = 1.2f, y0 = 0.9f, hf = 1.75f, hb = 1.9f, x0 = -5.0f, x1 = 5.0f;
+    // a low steel control cabinet on a concrete pedestal before the steps, its top sloping up towards the monument: it
+    // stays under the arriving eye's line to the gate's sill (2.1 m over its back), so the gap under the gate and the
+    // light's tongue on the plinth stay in view over it; the plates on its upright front, in the frame's lower edge
+    const float zf = kConsoleZ, depth = 1.2f, y0 = 0.55f, hf = 1.3f, hb = 1.45f, x0 = -5.0f, x1 = 5.0f;
     h.box(v3(0, 0.5f * y0, zf - 0.5f * depth), v3(5.2f, 0.5f * y0, 0.5f * depth + 0.15f), 0.03f, M_KOLON, 2.0f);
     const Xform t = axes(v3(x0, y0, zf), v3(0, 0, -1), Y, X);
     h.at(t, M_KOYU, 2.0f).extrude(Kit::roundOutline({{0, 0}, {depth, 0}, {depth, hb}, {0, hf}}, 0.03f, 3), 0.0f, x1 - x0, true);
@@ -343,19 +376,19 @@ void console(Hall& h) {
         an.axis = X;
         h.s.anchors.push_back(an);
     }
-    h.levha("plaka_rgb", "plaka_rgb", v3(lx, y0 + 0.85f, zf + 0.003f), Z, 1.6f, 0.8f, M_TABELA);
-    h.anchor("anahtar_rgb", "tik", Xform::at(v3(lx, y0 + 1.25f, zf - 0.45f)), v3(0.9f, 1.3f, 0.75f));
+    h.levha("plaka_rgb", "plaka_rgb", v3(lx, y0 + 0.75f, zf + 0.003f), Z, 1.6f, 0.8f, M_TABELA);
+    h.anchor("anahtar_rgb", "tik", Xform::at(v3(lx, y0 + 1.0f, zf - 0.45f)), v3(0.9f, 1.3f, 0.75f));
     // the device lamps on the front above their plates (a header strip), the plates in a row
     const char* dev[3] = {"aio", "klavye", "gpu"};
     for (int i = 0; i < 3; ++i) {
         const float x = -1.1f + 2.4f * i;
-        const float3 c = v3(x, y0 + 1.47f, zf);
+        const float3 c = v3(x, y0 + 1.07f, zf);
         const Xform lt = facing(c, Z);
         h.at(lt, M_KOYU, 0.05f).roundedCylinder(0.15f, 0.0f, 0.08f, 0.012f);
         h.at(lt * Xform::at(v3(0, 0, 0.08f)), M_KOYU, 0.05f).torus(0.13f, 0.014f);
         lens(h, c + v3(0, 0, 0.082f), Z, 0.12f);
         h.anchor(std::string("lamba_") + dev[i], "nokta", facing(c + v3(0, 0, 0.09f), Z), v3(0.16f, 0.16f, 0.08f));
-        h.levha(std::string("cihaz_") + dev[i], std::string("cihaz_") + dev[i], v3(x, y0 + 0.9f, zf + 0.003f), Z, 2.0f, 0.5f, M_TABELA);
+        h.levha(std::string("cihaz_") + dev[i], std::string("cihaz_") + dev[i], v3(x, y0 + 0.6f, zf + 0.003f), Z, 2.0f, 0.5f, M_TABELA);
     }
     // two lamps on posts at its ends, lighting its plates
     for (int s = -1; s <= 1; s += 2) {
@@ -363,26 +396,6 @@ void console(Hall& h) {
         h.box(b + v3(0, 0.01f, 0), v3(0.15f, 0.01f, 0.15f), 0.004f, M_KOYU, 0.3f);
         h.rod(b, b + v3(0, 3.1f, 0), 0.05f, M_KOYU);
         h.cagedLamp(b + v3(0, 2.8f, 0.05f), Z, kBulbBoard);
-    }
-}
-
-// floodlights sunk in the plinth before the piers (group 1): a dim fill that grazes the lifts upwards in the
-// temperature colour; the core is the light, these only keep the face readable
-void floods(Hall& h) {
-    const float z = kPierZ + 1.4f, tilt = 7.0f * kPi / 180.0f;
-    for (float x : {-13.6f, -9.6f, 9.6f, 13.6f}) {
-        h.box(v3(x, kSill + 0.06f, z), v3(0.55f, 0.06f, 0.28f), 0.012f, M_KOYU, 0.5f);
-        h.at(axes(v3(x, kSill + 0.121f, z), X, v3(0, 0, -1), Y), M_KEMER_ISIK, 1.0f).quad(0.9f, 0.36f);
-        Emitter e;
-        e.type = Emitter::RECT;
-        e.group = GROUP_KEMER;
-        e.c = v3(x, kSill + 0.122f, z);
-        e.u = v3(0.45f, 0, 0);
-        e.v = v3(0, 0, 0.18f);
-        e.n = v3(0, std::cos(tilt), -std::sin(tilt));
-        e.L = kKemerFloodL;
-        e.lobe = 24.0f;
-        h.s.lights.push_back(e);
     }
 }
 
@@ -405,35 +418,36 @@ void doors(Hall& h) {
 
 }   // namespace
 
-// Everything behind the gate's plane: the chamber 30 m deep (its own floor, walls, ceiling and back wall: the hall's
-// end wall needs an opening x in [-12, 12], y in [0, 26] for it), four receding concrete frames in the shell's lifts
-// with the gate's steel (a girder of its section under each lintel), and at the end the heat core: a stack of steel
-// rings round a glowing heart (cekirdek_isik, group 1; four RECT emitters on its faces), on a concrete drum, held by a
-// steel portal with a winch like the gate's.
+// Everything behind the gate's plane: the chamber 30 m deep and full height (its own floor, walls and back wall; its
+// ceiling over the mass is the hall's, behind the end wall its own: the hall's end wall is open over it, x in [-12, 12],
+// floor to ceiling), four receding concrete portals in the shell's lifts with the gate's steel (a girder of its section
+// under each lintel), all ending at 23.6 so the core's light passes over them into the hoist bay, and at the end the
+// heat core: a square glowing column with eight glowing fins (cekirdek_isik, group 1; a RECT emitter on every glowing
+// face) inside a stack of steel rings, on a concrete drum, held by a steel portal with a winch like the gate's.
 void chamberInterior(Hall& h) {
     const float zm = 0.5f * (kRevealEnd + kChamberBack), dz = 0.5f * (kRevealEnd - kChamberBack);
     h.box(v3(0, 0.5f * kSill, zm), v3(kChamberHW, 0.5f * kSill, dz), 0.03f, M_KOLON, 4.0f);
     for (int s : {-1, 1}) {
         const float3 n = v3(float(-s), 0, 0);
         liftFace(h, axes(v3(s * kChamberHW, 0, 0), cross(Y, n), Y, n), s > 0 ? kChamberBack : -kRevealEnd, s > 0 ? kRevealEnd : -kChamberBack,
-                 kSill, kChamberTop);
-        // the mouth's wall beside the opening (facing the chamber)
-        h.patch(v3(s * kOpenHW, kSill, kRevealEnd), v3(s * kChamberHW, kSill, kRevealEnd), v3(s * kOpenHW, kOpenTop, kRevealEnd),
-                v3(s * kChamberHW, kOpenTop, kRevealEnd), v3(0, 0, -1), M_DUVAR, 3.0f);
+                 kSill, kTop);
+        // the mouth's wall beside the opening and the bay (facing the chamber); over the opening the upstream block's
+        // own back face, over that the bay's open back
+        h.patch(v3(s * kOpenHW, kSill, kRevealEnd), v3(s * kChamberHW, kSill, kRevealEnd), v3(s * kOpenHW, kTop, kRevealEnd),
+                v3(s * kChamberHW, kTop, kRevealEnd), v3(0, 0, -1), M_DUVAR, 3.0f);
     }
-    h.patch(v3(-kChamberHW, kOpenTop, kRevealEnd), v3(kChamberHW, kOpenTop, kRevealEnd), v3(-kChamberHW, kChamberTop, kRevealEnd),
-            v3(kChamberHW, kChamberTop, kRevealEnd), v3(0, 0, -1), M_DUVAR, 3.0f);
-    h.patch(v3(-kChamberHW, kChamberTop, kRevealEnd), v3(kChamberHW, kChamberTop, kRevealEnd), v3(-kChamberHW, kChamberTop, kChamberBack),
-            v3(kChamberHW, kChamberTop, kChamberBack), v3(0, -1, 0), M_TAVAN, 4.0f);
-    liftFace(h, axes(v3(0, 0, kChamberBack), X, Y, Z), -kChamberHW, kChamberHW, kSill, kChamberTop);
+    h.patch(v3(-kChamberHW, kTop, kMassBack), v3(kChamberHW, kTop, kMassBack), v3(-kChamberHW, kTop, kChamberBack),
+            v3(kChamberHW, kTop, kChamberBack), v3(0, -1, 0), M_TAVAN, 4.0f);
+    liftFace(h, axes(v3(0, 0, kChamberBack), X, Y, Z), -kChamberHW, kChamberHW, kSill, kTop);
 
-    // the receding frames: each pour a box (its rounded edges are the joints), each frame narrower and lower
+    // the receding portals: each pour a box (its rounded edges are the joints), each narrower and lower, all ending at
+    // the same joint (kPortalTop) with the open chamber above them
     for (int k = 0; k < 4; ++k) {
-        const float zc = kRevealEnd - 4.5f - 5.5f * k, hz = 0.8f;
+        const float zc = kRevealEnd - 4.0f - 5.0f * k, hz = 0.8f;
         const float w = kOpenHW - 0.4f - 0.6f * k, top = kOpenTop - 0.8f - 0.7f * k;
-        for (float y = kSill; y < kChamberTop - 1e-3f; y += kLift) {
-            const float y1 = std::min(kChamberTop, y + kLift), yc = 0.5f * (y + y1), hy = 0.5f * (y1 - y);
-            if (y >= top - 1e-3f) {   // above the opening a pour spans the frame
+        for (float y = kSill; y < kPortalTop - 1e-3f; y += kLift) {
+            const float y1 = std::min(kPortalTop, y + kLift), yc = 0.5f * (y + y1), hy = 0.5f * (y1 - y);
+            if (y >= top - 1e-3f) {   // above the opening a pour spans the portal
                 h.box(v3(0, yc, zc), v3(kChamberHW, hy, hz), 0.05f, M_DUVAR, 3.0f);
                 continue;
             }
@@ -445,50 +459,67 @@ void chamberInterior(Hall& h) {
         h.ibeam(v3(-w, top - 0.4f, zc + 0.35f), v3(w, top - 0.4f, zc + 0.35f), 0.8f, 0.42f, 0.03f, 0.04f, Y, M_KANAT);
     }
 
-    // the heat core: the concrete drum, the heart, the rings, the tie columns, the cap
-    h.at(axes(v3(0, kSill, kCoreZ), X, v3(0, 0, -1), Y), M_DUVAR, 1.0f).roundedCylinder(4.6f, 0.0f, kCoreBase - kSill, 0.05f);
+    // the heat core: the concrete drum, the heart and its fins, the rings, the tie columns, the cap
+    h.at(axes(v3(0, kSill, kCoreZ), X, v3(0, 0, -1), Y), M_DUVAR, 1.0f).roundedCylinder(5.2f, 0.0f, kCoreBase - kSill, 0.05f);
     const float hh = 0.5f * (kHeartTop - kCoreBase), yh = 0.5f * (kHeartTop + kCoreBase);
-    for (int i = 0; i < 4; ++i) {
-        const float a = 0.25f * kPi + 0.5f * kPi * i;
-        const float3 n = v3(std::cos(a), 0, std::sin(a)), xa = cross(Y, n);
-        const float3 c = v3(0, yh, kCoreZ) + n * kHeartHW;
-        h.quad(axes(c, xa, Y, n), 2 * kHeartHW, kHeartTop - kCoreBase, M_CEKIRDEK_ISIK, 2.0f);
+    const float3 axis = v3(0, yh, kCoreZ);
+    auto glow = [&](float3 c, float3 n, float halfW) {   // a glowing face 2 halfW x 2 hh at c facing n, and its emitter
+        const float3 xa = cross(Y, n);
+        h.quad(axes(c, xa, Y, n), 2 * halfW, kHeartTop - kCoreBase, M_CEKIRDEK_ISIK, 2.0f);
         Emitter e;
         e.type = Emitter::RECT;
         e.group = GROUP_KEMER;
         e.c = c + n * 0.001f;
-        e.u = xa * kHeartHW;
+        e.u = xa * halfW;
         e.v = v3(0, hh, 0);
         e.n = n;
         e.L = kCekirdekL;
         h.s.lights.push_back(e);
+    };
+    for (int i = 0; i < 4; ++i) {   // the column, a corner towards the hall
+        const float a = 0.25f * kPi + 0.5f * kPi * i;
+        const float3 n = v3(std::cos(a), 0, std::sin(a));
+        glow(axis + n * kHeartHW, n, kHeartHW);
     }
-    const float ri = kHeartHW * 1.4142f + 0.12f;
+    // the fins: 0.12 m plates, one from each face's middle and one from each corner, out to kFinR; both sides and the
+    // outer edge glow (the edge without an emitter of its own: 0.12 m of it adds little)
+    const float ft = 0.06f;
+    for (int i = 0; i < 8; ++i) {
+        const float a = 0.25f * kPi * i;
+        const float3 r = v3(std::cos(a), 0, std::sin(a)), tg = cross(r, Y);
+        const float r0 = (i % 2 ? kHeartHW : kHeartHW * 1.41421f) - 0.02f, rm = 0.5f * (r0 + kFinR), hw = 0.5f * (kFinR - r0);
+        for (float s : {-1.0f, 1.0f}) glow(axis + r * rm + tg * (s * ft), tg * s, hw);
+        h.quad(axes(axis + r * kFinR, cross(Y, r), Y, r), 2 * ft, kHeartTop - kCoreBase, M_CEKIRDEK_ISIK, 2.0f);
+    }
     for (int k = 0; k * kGirderPitch + 3.0f < kHeartTop; ++k) {
         const float y = 3.0f + kGirderPitch * k;
-        annulus(h, y, kCoreZ, ri, 3.95f, 0.36f, M_KANAT);
+        annulus(h, y, kCoreZ, kRingIn, kRingOut, 0.36f, M_KANAT);
         if (y + kGirderPitch < kHeartTop)
-            for (int q = 1; q <= 2; ++q) annulus(h, y + kGirderPitch * q / 3.0f, kCoreZ, ri, 3.6f, 0.16f, M_KANAT);
+            for (int q = 1; q <= 2; ++q) annulus(h, y + kGirderPitch * q / 3.0f, kCoreZ, kRingIn, kRingIn + 0.55f, 0.16f, M_KANAT);
     }
+    const float yTie = kHeartTop + 0.6f;
     for (int i = 0; i < 8; ++i) {
         const float a = kPi * i / 4.0f + kPi / 8.0f;
         const float3 r = v3(std::cos(a), 0, std::sin(a));
-        h.box(axes(v3(0, 0.5f * (kCoreBase + 17.0f), kCoreZ) + r * 4.1f, cross(Y, r), Y, r), v3(0.16f, 0.5f * (17.0f - kCoreBase), 0.18f), 0.015f,
-              M_KOYU, 3.0f);
+        h.box(axes(v3(0, 0.5f * (kCoreBase + yTie), kCoreZ) + r * (kRingOut + 0.25f), cross(Y, r), Y, r), v3(0.16f, 0.5f * (yTie - kCoreBase), 0.18f),
+              0.015f, M_KOYU, 3.0f);
     }
-    h.at(axes(v3(0, kHeartTop, kCoreZ), X, v3(0, 0, -1), Y), M_KOYU, 1.0f).roundedCylinder(4.3f, 0.0f, 0.6f, 0.04f);
+    const float rCap = kRingOut + 0.3f;
+    h.at(axes(v3(0, kHeartTop, kCoreZ), X, v3(0, 0, -1), Y), M_KOYU, 1.0f).roundedCylinder(rCap, 0.0f, 0.6f, 0.04f);
     // the portal: two columns in guide channels, a girder across, the winch and its ropes down to the cap's lug
+    const float xp = 6.0f, yg = kHeartTop + 5.5f;
     for (int s : {-1, 1}) {
-        h.ibeam(v3(s * 5.3f, kSill, kCoreZ), v3(s * 5.3f, 21.0f, kCoreZ), 0.8f, 0.5f, 0.03f, 0.05f, Z, M_KOYU);
-        h.box(v3(s * 4.75f, kHeartTop + 0.3f, kCoreZ), v3(0.5f, 0.25f, 0.3f), 0.02f, M_KOYU, 0.5f);   // the cap's guide arm
+        h.ibeam(v3(s * xp, kSill, kCoreZ), v3(s * xp, yg - 0.5f, kCoreZ), 0.8f, 0.5f, 0.03f, 0.05f, Z, M_KOYU);
+        const float xa0 = rCap - 0.1f, xa1 = xp - 0.25f;   // the cap's guide arm
+        h.box(v3(s * 0.5f * (xa0 + xa1), kHeartTop + 0.3f, kCoreZ), v3(0.5f * (xa1 - xa0), 0.25f, 0.3f), 0.02f, M_KOYU, 0.5f);
     }
-    h.ibeam(v3(-5.8f, 21.5f, kCoreZ), v3(5.8f, 21.5f, kCoreZ), 1.0f, 0.5f, 0.03f, 0.05f, Y, M_KOYU);
-    winch(h, v3(0, 22.9f, kCoreZ + 0.55f), 1.0f);
+    h.ibeam(v3(-xp - 0.5f, yg, kCoreZ), v3(xp + 0.5f, yg, kCoreZ), 1.0f, 0.5f, 0.03f, 0.05f, Y, M_KOYU);
+    winch(h, v3(0, yg + 1.4f, kCoreZ + 0.55f), 1.0f);
     h.box(v3(0, kHeartTop + 0.95f, kCoreZ), v3(0.06f, 0.35f, 0.3f), 0.01f, M_KOYU, 0.3f);
-    for (float q : {-0.08f, 0.08f}) h.rod(v3(q, 22.9f, kCoreZ + 0.02f), v3(q, kHeartTop + 1.1f, kCoreZ), 0.032f, M_PASLI, 0.5f);
+    for (float q : {-0.08f, 0.08f}) h.rod(v3(q, yg + 1.4f, kCoreZ + 0.02f), v3(q, kHeartTop + 1.1f, kCoreZ), 0.032f, M_PASLI, 0.5f);
 
     // anchors for the live parts: the heart (breathing), the opening's air (heat shimmer)
-    h.anchor("cekirdek", "nokta", Xform::at(v3(0, 0.5f * (kCoreBase + kHeartTop + 0.6f), kCoreZ)), v3(4.3f, 0.5f * (kHeartTop + 0.6f - kCoreBase), 4.3f));
+    h.anchor("cekirdek", "nokta", Xform::at(v3(0, 0.5f * (kCoreBase + kHeartTop + 0.6f), kCoreZ)), v3(rCap, 0.5f * (kHeartTop + 0.6f - kCoreBase), rCap));
     h.anchor("kemer_agiz", "nokta", Xform::at(v3(0, 0.5f * (kSill + kOpenTop), 0.5f * (kPierZ + kRevealEnd))),
              v3(kOpenHW, 0.5f * (kOpenTop - kSill), 0.5f * (kPierZ - kRevealEnd)));
 }
@@ -500,7 +531,6 @@ void buildArch(Hall& h) {
     hoist(h);
     displayAndStops(h);
     console(h);
-    floods(h);
     doors(h);
     chamberInterior(h);
 }

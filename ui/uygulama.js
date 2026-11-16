@@ -284,26 +284,27 @@ function updateTexts() {
     cpu: linked() ? round1(isi.cpu) : null, gpu: linked() ? round1(isi.gpu) : null, renk: tc, kapali: !on,
   }, { emissive: on ? 1.6 : 0.7 });
   putLevha('plaka_rgb', { acik: linked() && rgb ? on : null, bosta: idle, hover: M.hover === 'anahtar_rgb' });
-  const st = (stops() || []).filter(s => !s.gizli).slice(0, 6);
+  const st = (stops() || []).filter(s => !s.gizli).slice(0, STOP_LAMPS);
   const valid = linked() && (isi.yumusak != null || isi.ort != null);
   const cur = valid ? st.reduce((k, s, i) => (M.temp >= s.c ? i : k), -1) : -1;
   const slots = stopSlots(st.length), used = new Set(slots);
   st.forEach((s, i) => putLevha('durak_plaka_' + slots[i], {
     derece: s.c, ad: s.ad || '', renk: window.KM_RENK.full(window.KM_RENK.fromSrgb(s.renk)), secili: i === cur,
   }));
-  for (let k = 0; k < 6; k++) if (!used.has(k)) putLevha('durak_plaka_' + k, { derece: null, ad: '', renk: [0, 0, 0], secili: false });
+  for (let k = 0; k < STOP_LAMPS; k++) if (!used.has(k)) putLevha('durak_plaka_' + k, { derece: null, ad: '', renk: [0, 0, 0], secili: false });
   const devs = (rgb && rgb.cihazlar) || [];
   [['aio', 'cihaz_aio'], ['klavye', 'cihaz_klavye'], ['gpu', 'cihaz_gpu']].forEach(([k, n]) => putLevha(n, deviceState(devs.find(c => c.kimlik === k))));
 }
 // the small lamps: the colour scale's stops around the arch light up to the temperature; device lamps by state
-function stopSlots(n) {               // which of the arch's six lamps carries stop i of n
-  const SLOTS = 6;
+const STOP_LAMPS = 5;                 // the gauge over the arch's display: durak_0..4, cold to hot from left to right
+function stopSlots(n) {               // which of the gauge's five lamps carries stop i of n
+  const SLOTS = STOP_LAMPS;
   if (n >= SLOTS) return [...Array(SLOTS).keys()];
   return [...Array(n).keys()].map(i => (n === 1 ? 0 : Math.round(i * (SLOTS - 1) / (n - 1))));
 }
 function updateLamps() {
   if (!S) return;
-  const st = (stops() || []).filter(s => !s.gizli).slice(0, 6);
+  const st = (stops() || []).filter(s => !s.gizli).slice(0, STOP_LAMPS);
   const on = rgbOn(), valid = linked() && D.durum && D.durum.isi && (D.durum.isi.yumusak != null || D.durum.isi.ort != null);
   const slots = stopSlots(st.length), used = new Set(slots);
   st.forEach((s, i) => {
@@ -311,7 +312,7 @@ function updateLamps() {
     const part = valid && !lit && i > 0 && M.temp > st[i - 1].c ? clamp((M.temp - st[i - 1].c) / (s.c - st[i - 1].c), 0, 1) * 0.35 : 0;
     S.setLamp('durak_' + slots[i], window.KM_RENK.full(window.KM_RENK.fromSrgb(s.renk)), (0.04 + 0.96 * Math.max(lit, part)) * (on ? 3.0 : 0.6));
   });
-  for (let k = 0; k < 6; k++) if (!used.has(k)) S.setLamp('durak_' + k, [0, 0, 0], 0);
+  for (let k = 0; k < STOP_LAMPS; k++) if (!used.has(k)) S.setLamp('durak_' + k, [0, 0, 0], 0);
   const devs = (D.durum && D.durum.rgb && D.durum.rgb.cihazlar) || [];
   [['aio', 'lamba_aio'], ['klavye', 'lamba_klavye'], ['gpu', 'lamba_gpu']].forEach(([k, n]) => {
     const s = deviceState(devs.find(c => c.kimlik === k));
