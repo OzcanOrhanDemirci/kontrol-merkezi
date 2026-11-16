@@ -309,15 +309,16 @@ void doorsAndLamps(Hall& h) {
     for (float x : kRowX) {
         ++ri;
         const float ax = std::fabs(x);
-        const float share = ax < 10.0f ? 0.9f : ax < 30.0f ? 0.55f : 0.35f;   // how many columns of the row are lit
-        const float sx = x > 0 ? -1.0f : 1.0f;                                  // towards the aisle
+        const float share = ax < 10.0f ? 0.9f : ax < 30.0f ? 0.75f : 0.6f;    // how many columns of the row are lit
         const float tilt = 12.0f * kPi / 180.0f;
-        const float3 n = v3(-sx * std::sin(tilt), std::cos(tilt), 0);          // up, leaning onto the column's face
         int ci = 0;
-        for (float z = kColZ0; z >= kColZ1 - 1e-3f; z -= kColStep) {
-            ++ci;
-            if (hash(ri, ci) > share) continue;
-            const float gain = 0.55f + 0.9f * hash(ri + 17, ci + 5);
+        for (float z = kColZ0; z >= kColZ1 - 1e-3f; z -= kColStep)
+          for (int face = 0; face < (ax > 10.0f && ax < 30.0f ? 2 : 1); ++face) {   // the middle rows: both lanes
+            if (face == 0) ++ci;
+            const float sx = (x > 0 ? -1.0f : 1.0f) * (face ? -1.0f : 1.0f);       // towards the aisle (or away)
+            const float3 n = v3(-sx * std::sin(tilt), std::cos(tilt), 0);          // up, leaning onto the face
+            if (hash(ri + 31 * face, ci) > share) continue;
+            const float gain = 0.55f + 0.9f * hash(ri + 17 + 7 * face, ci + 5);
             const float3 base = v3(x + sx * 1.9f, 0.0f, z);
             h.box(base + v3(0, 0.07f, 0), v3(0.24f, 0.07f, 0.34f), 0.012f, M_KOYU, 0.5f);
             h.at(axes(base + v3(0, 0.141f, 0), v3(0, 0, 1), v3(1, 0, 0), v3(0, 1, 0)), M_CAM_LAMBA, 1.0f).quad(0.5f, 0.3f);

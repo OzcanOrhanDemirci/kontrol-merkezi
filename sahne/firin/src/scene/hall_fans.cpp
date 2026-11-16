@@ -357,7 +357,7 @@ void fan(Hall& h, const FanSpec& f) {
         const float3 tv = normalize(cross(tn, r));                                    // up the slope
         const float3 tc = base + up * 0.98f;
         h.box(axes(tc, r, tv, tn), v3(0.48f, 0.34f, 0.035f), 0.012f, f.paint, 0.5f);
-        h.levha(std::string("masa_") + f.tag, std::string("pano_") + f.tag, tc + tn * 0.038f + tv * 0.02f, tn, 0.56f, 0.56f, M_PANO, tv);
+        h.levha(std::string("masa_ekran_") + f.tag, std::string("pano_") + f.tag, tc + tn * 0.038f + tv * 0.02f, tn, 0.56f, 0.56f, M_PANO, tv);
         // the lever: hinge across the desk at its outer end, the handle rising and pulled towards the viewer
         const float3 pivot = base + up * 1.02f + r * (float(-side) * 0.6f) - t * 0.05f;   // the inner end: in frame
         h.box(pivot - up * 0.08f, v3(0.12f, 0.09f, 0.12f), 0.015f, M_KABLO, 0.2f);

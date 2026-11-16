@@ -42,7 +42,7 @@ constexpr float kCekirdekL = 8.0f;   // group 1: the heat core's heart behind th
 constexpr float kKemerFloodL = 700.0f;  // group 1: each plinth floodlight's radiance (lobe 24, a 0.9 x 0.36 m slot): a dim
                                         //   fill on the piers' faces, four together ~5 % of the heart's flux (was 2600)
 constexpr float kFanFloodL = 300.0f;  // group 2: each fan floodlight (a 0.5 x 0.36 m glass, lobe 10)
-constexpr float kColUpL = 120.0f;    // group 2: each column uplight (a 0.5 x 0.3 m glass, lobe 14), dimmer than the fans'
+constexpr float kColUpL = 330.0f;    // group 2: each column uplight (a 0.5 x 0.3 m glass, lobe 14), dimmer than the fans'
 constexpr float kSignLampL = 60.0f;  // group 2: a hanging sign's light strip (0.05 x 4 m, lobe 4) onto its face
 constexpr float kDeskLampL = 25.0f;  // group 2: the fan desks' small hooded lamps (a 5.5 cm disc, lobe 3)
 constexpr float kLambaL = 8.0f;      // group 2: the caged service lamps' bulbs and the lit door frame

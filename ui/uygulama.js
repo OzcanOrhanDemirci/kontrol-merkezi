@@ -92,6 +92,12 @@ function buildJourney(views) {
       const w0 = 1 - smooth(s / 45), w1 = smooth((s - (total - 70)) / 70);
       let dir = add(add(mul(d0, w0), mul(d1, w1)), mul(ahead, Math.max(0, 1 - w0 - w1)));
       if (s >= total - 1e-3) dir = d1;
+      // in the lane between the rows the camera turns across them (up to ~22 degrees towards the aisle), so the view
+      // opens diagonally over the forest of columns instead of down a second corridor
+      const lane = clamp((eye[0] - 6) / 8, 0, 1);
+      const yaw = -0.38 * smooth(lane) * Math.sign(eye[0] || 1);
+      const cy = Math.cos(yaw), sy = Math.sin(yaw), d = norm(dir);
+      dir = [d[0] * cy - d[2] * sy, d[1], d[0] * sy + d[2] * cy];
       return { eye, dir: norm(dir), fov: lerp(f0.fov || 50, f1.fov || 50, smooth(s / total)) };
     },
   };
@@ -133,7 +139,7 @@ function exposureAt(s) {
 const NEUTRAL_LAMP = [1.0, 0.78, 0.52];
 // each light group's intensity against its baked white (the bake's units are each group's own); #k0=..&k1=..&k2=..
 // overrides them for tuning
-const GK = [30, 3, 6].map((d, i) => (params.has('k' + i) ? +params.get('k' + i) : d));
+const GK = [30, 12, 6].map((d, i) => (params.has('k' + i) ? +params.get('k' + i) : d));
 function stops() { return (D.durum && D.durum.rgb && D.durum.rgb.duraklar && D.durum.rgb.duraklar.length >= 2) ? D.durum.rgb.duraklar : null; }
 const linked = () => D.link === 'bagli';
 const rgbOn = () => !!(linked() && D.durum && D.durum.rgb && D.durum.rgb.acik);
