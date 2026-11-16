@@ -574,7 +574,6 @@ function renderRgb() {
   let mode = '—', modeSub = '';
   if (rgb) {
     if (rgb.kip === 'yapayzeka') { mode = 'Yerel model yanıt yazıyor'; modeSub = 'bitince sıcaklık rengine döner'; }
-    else if (rgb.kip === 'islemci') { mode = 'İşlemci tam yükte, <i>ekran kartı boşta</i>'; modeSub = 'yük bitince sıcaklık rengine döner'; }
     else {
       mode = 'Bilgisayarın <i>sıcaklığı</i>';
       modeSub = `işlemci <b>${isi.cpu != null ? fmt1(isi.cpu) + '°' : '—'}</b> · ekran kartı <b>${isi.gpu != null ? fmt1(isi.gpu) + '°' : '—'}</b><br>ortalaması yumuşatılarak renge döner`;

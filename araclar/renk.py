@@ -1,7 +1,7 @@
 """Per-device colour calibration (hue-dependent), live on the real lights.
 
     python araclar/renk.py goster                       table: each stop, the shared colour and each device's own
-    python araclar/renk.py tut 46                       lights on, hold the 46 °C stop (also: yapayzeka, islemci)
+    python araclar/renk.py tut 46                       lights on, hold the 46 °C stop (also: yapayzeka)
     python araclar/renk.py kaydir aio 46 -10 0 +20      nudge the AIO's colour for that stop by dR dG dB, apply live
     python araclar/renk.py ayarla aio 46 85 132 255     set it outright, apply live
     python araclar/renk.py sifirla aio 46               back to the shared colour (null)
@@ -20,7 +20,7 @@ import sys
 
 PIPE = "\\\\.\\pipe\\KontrolMerkezi"
 YOL = os.path.join(os.environ["LOCALAPPDATA"], "KontrolMerkezi", "ayarlar.json")
-OZEL = {"yapayzeka": "yapayZeka", "islemci": "islemci"}
+OZEL = {"yapayzeka": "yapayZeka"}
 
 
 def send(*objs):
@@ -42,7 +42,7 @@ def save(d):
 
 
 def stop_index(d, key):
-    """'46' -> stop index; 'yapayzeka'/'islemci' -> None (override)."""
+    """'46' -> stop index; 'yapayzeka' -> None (override)."""
     if key in OZEL:
         return None
     c = float(key)
@@ -54,7 +54,7 @@ def stop_index(d, key):
 
 def shared(d, key):
     i = stop_index(d, key)
-    return d["duraklar"][i]["renk"] if i is not None else d["yapayZekaRengi" if key == "yapayzeka" else "islemciRengi"]
+    return d["duraklar"][i]["renk"] if i is not None else d["yapayZekaRengi"]
 
 
 def own_get(d, dev, key):

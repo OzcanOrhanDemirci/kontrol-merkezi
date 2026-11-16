@@ -43,9 +43,9 @@ sealed class Servis : IDisposable
     sealed class Zorla
     {
         public double? C;
-        public bool? YapayZeka, Islemci;
+        public bool? YapayZeka;
         public JarvisDurum? Jarvis;
-        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null;
+        public bool Bos => C == null && YapayZeka == null && Jarvis == null;
     }
     readonly YerelModel _model = new();
     readonly Afterburner _ab = new();
@@ -63,9 +63,6 @@ sealed class Servis : IDisposable
     readonly List<CihazYazici> _yazicilar;
 
     volatile Girdi _girdi = new();
-    double _cpuEma;
-    DateTime _islemciSince = DateTime.MinValue, _islemciOffSince = DateTime.MinValue;
-    bool _islemci;
 
     // fan state (guarded by _lock)
     readonly object _lock = new();
@@ -213,13 +210,12 @@ sealed class Servis : IDisposable
                 break;
             case "onizle":
             {
-                // {"komut":"onizle","c":64,"kip":"yapayzeka"|"islemci"|null,"jarvis":"dusunuyor"|...} ; {"komut":"onizle"} clears
+                // {"komut":"onizle","c":64,"kip":"yapayzeka"|"sicaklik"|null,"jarvis":"dusunuyor"|...} ; {"komut":"onizle"} clears
                 var z = new Zorla();
                 if (d.TryGetValue("c", out var c) && c != null) z.C = Convert.ToDouble(c, Inv);
                 var kip = Json.S(d, "kip");
                 if (kip == "yapayzeka") z.YapayZeka = true;
-                if (kip == "islemci") { z.Islemci = true; z.YapayZeka = false; }
-                if (kip == "sicaklik") { z.Islemci = false; z.YapayZeka = false; }
+                if (kip == "sicaklik") z.YapayZeka = false;
                 var jv = Json.S(d, "jarvis");
                 if (jv != null && Enum.TryParse<JarvisDurum>(jv, true, out var jd)) z.Jarvis = jd;
                 _zorla = z;
@@ -405,7 +401,7 @@ sealed class Servis : IDisposable
 
     static Girdi With(Girdi g, JarvisDurum? j = null) => new()
     {
-        CpuC = g.CpuC, GpuC = g.GpuC, CpuYuk = g.CpuYuk, GpuYuk = g.GpuYuk, YapayZeka = g.YapayZeka, Islemci = g.Islemci,
+        CpuC = g.CpuC, GpuC = g.GpuC, CpuYuk = g.CpuYuk, GpuYuk = g.GpuYuk, YapayZeka = g.YapayZeka,
         Jarvis = j ?? g.Jarvis,
     };
 
@@ -437,17 +433,6 @@ sealed class Servis : IDisposable
         }
         g.YapayZeka = _model.Uretiyor;
 
-        // CPU full load while the GPU idles, with hysteresis: on after 3 s above, off after 3 s below.
-        _cpuEma += (g.CpuYuk - _cpuEma) * (1 - Math.Exp(-0.5 / 2.0));
-        var now = DateTime.UtcNow;
-        bool high = _cpuEma >= 85 && g.GpuYuk <= 15, low = _cpuEma < 70 || g.GpuYuk > 30;
-        if (high) { _islemciOffSince = DateTime.MinValue; if (_islemciSince == DateTime.MinValue) _islemciSince = now; }
-        else _islemciSince = DateTime.MinValue;
-        if (low) { if (_islemciOffSince == DateTime.MinValue) _islemciOffSince = now; }
-        else _islemciOffSince = DateTime.MinValue;
-        if (!_islemci && _islemciSince != DateTime.MinValue && now - _islemciSince > TimeSpan.FromSeconds(3)) { _islemci = true; Program.Log("ışık: işlemci tam yükte, ekran kartı boşta"); }
-        if (_islemci && _islemciOffSince != DateTime.MinValue && now - _islemciOffSince > TimeSpan.FromSeconds(3)) { _islemci = false; Program.Log("ışık: işlemci yükü bitti"); }
-        g.Islemci = _islemci;
         _girdi = g;
 
         if (tick % 2 == 0 && !_uyku)
@@ -519,7 +504,7 @@ sealed class Servis : IDisposable
                     gi = new Girdi
                     {
                         CpuC = z.C ?? gi.CpuC, GpuC = z.C ?? gi.GpuC, CpuYuk = gi.CpuYuk, GpuYuk = gi.GpuYuk,
-                        YapayZeka = z.YapayZeka ?? gi.YapayZeka, Islemci = z.Islemci ?? gi.Islemci, Jarvis = z.Jarvis ?? gi.Jarvis,
+                        YapayZeka = z.YapayZeka ?? gi.YapayZeka, Jarvis = z.Jarvis ?? gi.Jarvis,
                     };
                 _motor.Hesapla(gi, t, dt);
                 if (!_uyku) WriteDevices();
@@ -611,7 +596,7 @@ sealed class Servis : IDisposable
         }
 
         j.Obj("rgb").Bool("acik", _motor.Acik)
-         .Str("kip", _motor.Kip switch { IsikKipi.YapayZeka => "yapayzeka", IsikKipi.Islemci => "islemci", _ => "sicaklik" })
+         .Str("kip", _motor.Kip switch { IsikKipi.YapayZeka => "yapayzeka", _ => "sicaklik" })
          .Str("jarvis", (_jarvis?.Durum ?? JarvisDurum.Yok) switch
          {
              JarvisDurum.Dusunuyor => "dusunuyor", JarvisDurum.Bekliyor => "bekliyor", JarvisDurum.Hazir => "hazir",

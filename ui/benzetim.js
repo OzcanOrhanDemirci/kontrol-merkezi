@@ -34,7 +34,6 @@ window.KM_BENZETIM = function (deliver) {
   function baseColor() {
     let c = K.palet(DURAKLAR, S.yumusak);
     if (S.kip === 'yapayzeka') c = K.full(K.fromSrgb([255, 36, 128]));
-    if (S.kip === 'islemci') c = K.full(K.fromSrgb([0, 235, 255]));
     return K.toSrgb(c);
   }
 
@@ -48,7 +47,7 @@ window.KM_BENZETIM = function (deliver) {
       isi: {
         cpu: S.yonetici ? +S.cpu.toFixed(1) : null, gpu: +S.gpu.toFixed(1),
         ort: S.yonetici ? +((S.cpu + S.gpu) / 2).toFixed(1) : +S.gpu.toFixed(1),
-        yumusak: +S.yumusak.toFixed(1), cpuYuk: S.kip === 'islemci' ? 100 : 6, gpuYuk: S.kip === 'yapayzeka' ? 96 : 2,
+        yumusak: +S.yumusak.toFixed(1), cpuYuk: 6, gpuYuk: S.kip === 'yapayzeka' ? 96 : 2,
       },
       fan: {
         kasa: {
@@ -194,7 +193,6 @@ window.KM_BENZETIM = function (deliver) {
         r: () => command({ komut: 'rgb', acik: !S.rgb }),
         t: () => { S.sweep = !S.sweep; S.hold = null; },
         y: () => sim.kip(S.kip === 'yapayzeka' ? 'sicaklik' : 'yapayzeka'),
-        i: () => sim.kip(S.kip === 'islemci' ? 'sicaklik' : 'islemci'),
         j: () => sim.jarvis(JARVIS[(JARVIS.indexOf(S.jarvis) + 1) % JARVIS.length]),
         k: () => command({ komut: 'fan-kasa' }),
         g: () => command({ komut: 'fan-gpu' }),
@@ -210,7 +208,7 @@ window.KM_BENZETIM = function (deliver) {
     },
     help: [
       ['R', 'ışıklar aç / kapat'], ['T', 'sıcaklık taraması'], ['1–6', 'durak sıcaklığına sabitle'], ['0', 'sabitlemeyi bırak'],
-      ['Y', 'yerel model yazıyor'], ['I', 'işlemci tam yükte'], ['J', 'Jarvis durumu'],
+      ['Y', 'yerel model yazıyor'], ['J', 'Jarvis durumu'],
       ['K', 'kasa fanları'], ['G', 'ekran kartı fanları'], ['B', 'GPU fanları başka programda'], ['A', 'Afterburner fan kontrolü'],
       ['E', 'yönetici izni'], ['D', 'servis bağlantısı'], ['F1', 'bu liste'],
     ],

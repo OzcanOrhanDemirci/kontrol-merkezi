@@ -24,7 +24,7 @@ public sealed class Durak
 public sealed class CihazRenk
 {
     public int[][] Duraklar;   // one per stop, same order as Ayarlar.Duraklar
-    public int[] YapayZeka, Islemci;
+    public int[] YapayZeka;
 }
 
 public sealed class Ayarlar
@@ -48,8 +48,6 @@ public sealed class Ayarlar
 
     /// <summary>Local model generating an answer: rose pink, the one hue family the temperature palette never visits.</summary>
     public int[] YapayZekaRengi = { 255, 36, 128 };
-    /// <summary>CPU at full load while the GPU idles: cyan, with its own slow pulse so it never reads as a transition.</summary>
-    public int[] IslemciRengi = { 0, 235, 255 };
 
     /// <summary>Per-device channel gains (R, G, B) for matching the three devices' whites; 1 = untouched.</summary>
     public Dictionary<string, double[]> Kazanc = new()
@@ -84,7 +82,6 @@ public sealed class Ayarlar
                 else Program.Log("ayarlar: duraklar geçersiz (en az 2, artan sıcaklık), varsayılan kullanılıyor");
             }
             if (d.TryGetValue("yapayZekaRengi", out var yz)) a.YapayZekaRengi = Ints(yz, 3);
-            if (d.TryGetValue("islemciRengi", out var ir)) a.IslemciRengi = Ints(ir, 3);
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
                 foreach (var kv in kd) a.Kazanc[kv.Key] = Doubles(kv.Value, 3);
             if (d.TryGetValue("cihazRenkleri", out var crs) && crs is Dictionary<string, object> crd)
@@ -95,7 +92,6 @@ public sealed class Ayarlar
                     if (x.TryGetValue("duraklar", out var dd) && dd is IEnumerable dl2)
                         cr.Duraklar = dl2.Cast<object>().Select(o => o == null ? null : Ints(o, 3)).ToArray();
                     if (x.TryGetValue("yapayZeka", out var yz2) && yz2 != null) cr.YapayZeka = Ints(yz2, 3);
-                    if (x.TryGetValue("islemci", out var ic2) && ic2 != null) cr.Islemci = Ints(ic2, 3);
                     a.CihazRenkleri[kv.Key] = cr;
                 }
             if (d.TryGetValue("aioHalkalari", out var ah))
@@ -105,8 +101,8 @@ public sealed class Ayarlar
                 else Program.Log("ayarlar: aioHalkalari geçersiz, varsayılan kullanılıyor");
             }
             if (d.TryGetValue("pompaHalkasi", out var ph)) a.PompaHalkasi = Convert.ToInt32(ph);
-            var all = new[] { a.YapayZekaRengi, a.IslemciRengi }.Concat(a.Duraklar.Select(x => x.Renk))
-                .Concat(a.CihazRenkleri.Values.SelectMany(c => (c.Duraklar ?? new int[0][]).Concat(new[] { c.YapayZeka, c.Islemci })))
+            var all = new[] { a.YapayZekaRengi }.Concat(a.Duraklar.Select(x => x.Renk))
+                .Concat(a.CihazRenkleri.Values.SelectMany(c => (c.Duraklar ?? new int[0][]).Concat(new[] { c.YapayZeka })))
                 .Where(x => x != null);
             foreach (var arr in all)
                 for (int i = 0; i < arr.Length; i++) arr[i] = Math.Max(0, Math.Min(255, arr[i]));
@@ -124,14 +120,13 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın ve iki özel durumun rengi (null = ortak renk); klavye referanstır. Canlı uygulamak: python araclar/onizle.py yukle.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın ve yerel model renginin karşılığı (null = ortak renk); klavye referanstır. Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }).ToList(),
                 ["yapayZekaRengi"] = YapayZekaRengi,
-                ["islemciRengi"] = IslemciRengi,
                 ["kazanc"] = Kazanc,
                 ["cihazRenkleri"] = CihazRenkleri.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
                 {
-                    ["duraklar"] = kv.Value.Duraklar, ["yapayZeka"] = kv.Value.YapayZeka, ["islemci"] = kv.Value.Islemci,
+                    ["duraklar"] = kv.Value.Duraklar, ["yapayZeka"] = kv.Value.YapayZeka,
                 }),
                 ["aioHalkalari"] = AioHalkalari,
                 ["pompaHalkasi"] = PompaHalkasi,

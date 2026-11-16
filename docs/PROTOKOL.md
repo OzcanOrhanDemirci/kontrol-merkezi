@@ -55,7 +55,7 @@ Values:
 - `isi.*` may be `null` when a sensor is unavailable (CPU temperature needs the elevated service).
 - `fan.kasa.durum`: `max` | `bios` | `geciyor` (switching) | `bilinmiyor`. `fan.gpu.durum`: `max` | `oto` | `geciyor` | `baska` (someone else, e.g. Afterburner, holds manual control) | `bilinmiyor`.
 - `kullanilabilir: false` with a Turkish `neden` (reason) when the button cannot work (no admin, no driver).
-- `rgb.kip`: `sicaklik` (temperature colour) | `yapayzeka` (local model generating) | `islemci` (CPU full load, GPU idle).
+- `rgb.kip`: `sicaklik` (temperature colour) | `yapayzeka` (local model generating).
 - `rgb.jarvis`: `yok` (no info) | `dusunuyor` (thinking) | `bekliyor` (waiting for Özcan's answer) | `hazir` (idle, nothing asked) | `kapali` (closed) | `yeniden` (restarting).
 - `duraklar`: the six temperature colour stops, cold to hot, `c` in °C of the averaged temperature.
 
@@ -90,7 +90,7 @@ Values:
 { "komut": "rgb", "acik": true }      // all RGB on (temperature colour) / off
 ```
 
-Development only (never sent by the window): `{"komut":"onizle","c":64,"kip":"yapayzeka"|"islemci"|"sicaklik","jarvis":"dusunuyor"}` forces values for a preview of the real lights (`{"komut":"onizle"}` clears), `{"komut":"ayar-yukle"}` reloads `ayarlar.json`, `{"komut":"kapat"}` stops the service cleanly (used by the installer).
+Development only (never sent by the window): `{"komut":"onizle","c":64,"kip":"yapayzeka"|"sicaklik","jarvis":"dusunuyor"}` forces values for a preview of the real lights (`{"komut":"onizle"}` clears), `{"komut":"ayar-yukle"}` reloads `ayarlar.json`, `{"komut":"kapat"}` stops the service cleanly (used by the installer).
 
 ## Window host <-> page (WebView2, not the service)
 

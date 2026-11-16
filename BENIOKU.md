@@ -10,7 +10,6 @@ Bu bilgisayarın fanlarını ve RGB ışıklarını tek pencereden yöneten masa
   ekran kartı sıcaklığının düz ortalaması, birkaç saniyeye yayılmış): soğuk beyaz, serin açık mavi, ılık koyu mavi,
   sıcak sarı, çok sıcak turuncu, en sıcakta kırmızı; geçişler yumuşak. Işık her zaman tam parlaklıkta.
   - Yerel yapay zekâ modeli yanıt yazarken ışık **pembeye** döner ve halkalarda akar.
-  - İşlemci tam yükte, ekran kartı boştayken ışık **camgöbeği** olur ve yavaşça nabız atar.
   - Jarvis düşünürken her halkada yumuşak bir parıltı döner; senden yanıt beklerken bütün ışıklar yavaşça nefes
     alır; kapalıyken pompa halkası sönük bir kor gibi durur; yeniden açılırken pompa halkasında beyaz bir nokta döner;
     geri gelince bir kez parlar.

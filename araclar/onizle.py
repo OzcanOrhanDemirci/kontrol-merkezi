@@ -60,8 +60,6 @@ def main():
             ("ılık (50 °C)", {"c": 50}, 6),
             ("yerel model yanıt yazıyor", {"c": 50, "kip": "yapayzeka"}, 10),
             ("geri: sıcaklık", {"c": 50, "kip": "sicaklik"}, 5),
-            ("işlemci tam yükte, ekran kartı boşta", {"c": 60, "kip": "islemci"}, 10),
-            ("geri: sıcaklık", {"c": 60, "kip": "sicaklik"}, 5),
             ("Jarvis düşünüyor", {"c": 50, "jarvis": "dusunuyor"}, 10),
             ("Jarvis hazır (bir kez parlar)", {"c": 50, "jarvis": "hazir"}, 5),
             ("Jarvis yanıtını bekliyor", {"c": 50, "jarvis": "bekliyor"}, 12),

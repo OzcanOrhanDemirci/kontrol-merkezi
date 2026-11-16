@@ -1,7 +1,7 @@
 // The light engine: from temperatures, loads and states to one colour per LED, 30 times a second.
 //
 //   base   = temperature palette at the smoothed CPU/GPU average (OKLCh blend between stops, full brightness)
-//   blend  -> override colours (local model generating; CPU full while GPU idle), each fading in and out softly
+//   blend  -> override colour (local model generating), each fading in and out softly
 //   motion -> the override's own slow pattern, then the Jarvis effects on top (thinking shimmer, waiting breath, ...)
 //   master -> RGB on/off fade
 //
@@ -12,14 +12,13 @@ using System;
 namespace KontrolMerkezi.Isik;
 
 public enum JarvisDurum { Yok, Dusunuyor, Bekliyor, Hazir, Kapali, Yeniden }
-public enum IsikKipi { Sicaklik, YapayZeka, Islemci }
+public enum IsikKipi { Sicaklik, YapayZeka }
 
 public sealed class Girdi
 {
     public double? CpuC, GpuC;
     public double CpuYuk, GpuYuk;      // 0..100
     public bool YapayZeka;             // local model generating right now
-    public bool Islemci;               // CPU full load while GPU idle (decided with hysteresis by the caller)
     public JarvisDurum Jarvis;
 }
 
@@ -37,7 +36,7 @@ public sealed class RenkMotoru
     sealed class Palette
     {
         public Lab[] Stops;
-        public Lab Ai, Cpu;
+        public Lab Ai;
         public Lin AiLight, AiShimmer;
     }
     readonly Palette _ref, _aioPal;
@@ -45,7 +44,7 @@ public sealed class RenkMotoru
     readonly int _aioCount;
 
     double? _smooth;
-    double _wAi, _wCpu, _master;
+    double _wAi, _master;
     double _eThink, _eWait, _eClosed, _eRestart;
     double _hazirAt = -100, _wakeAt = -100;
     JarvisDurum _lastJ = JarvisDurum.Yok;
@@ -84,7 +83,6 @@ public sealed class RenkMotoru
         }
         p.AiLight = L(own?.YapayZeka ?? a.YapayZekaRengi);
         p.Ai = Lab.From(p.AiLight);
-        p.Cpu = Lab.From(L(own?.Islemci ?? a.IslemciRengi));
         p.AiShimmer = Lin.Mix(p.AiLight, new Lin(1, 0.45, 0.75), 0.6).Full();
         return p;
     }
@@ -92,7 +90,7 @@ public sealed class RenkMotoru
     /// <summary>Carry the running state over from the engine this one replaces (live settings reload: no fade, no jump).</summary>
     public void DevamEt(RenkMotoru o)
     {
-        _smooth = o._smooth; _wAi = o._wAi; _wCpu = o._wCpu; _master = o._master;
+        _smooth = o._smooth; _wAi = o._wAi; _master = o._master;
         _eThink = o._eThink; _eWait = o._eWait; _eClosed = o._eClosed; _eRestart = o._eRestart;
         _hazirAt = o._hazirAt; _wakeAt = o._wakeAt; _lastJ = o._lastJ;
     }
@@ -120,7 +118,6 @@ public sealed class RenkMotoru
     Lin Base(Palette pal, double tc)
     {
         var lab = Lab.From(Palet(pal, tc));
-        if (_wCpu > 0.001) lab = Lab.Mix(lab, pal.Cpu, _wCpu);
         if (_wAi > 0.001) lab = Lab.Mix(lab, pal.Ai, _wAi);
         return lab.ToLin().Full();
     }
@@ -137,11 +134,10 @@ public sealed class RenkMotoru
 
         // ---- overrides (soft)
         _wAi = Approach(_wAi, g.YapayZeka ? 1 : 0, dt, OverrideTau);
-        _wCpu = Approach(_wCpu, g.Islemci && !g.YapayZeka ? 1 : 0, dt, OverrideTau);
         var baseCol = Base(_ref, tc);       // keyboard, GPU, and what the window shows
         var aioBase = Base(_aioPal, tc);
         Taban = baseCol;
-        Kip = g.YapayZeka ? IsikKipi.YapayZeka : g.Islemci ? IsikKipi.Islemci : IsikKipi.Sicaklik;
+        Kip = g.YapayZeka ? IsikKipi.YapayZeka : IsikKipi.Sicaklik;
 
         // ---- Jarvis envelopes
         var j = g.Jarvis;
@@ -159,7 +155,6 @@ public sealed class RenkMotoru
 
         // global factors
         double breath = 1 - _eWait * 0.62 * Smooth01(0.5 - 0.5 * Math.Cos(2 * Math.PI * t / 5.2));   // 1 -> 0.38 -> 1, 5.2 s
-        double cpuPulse = 1 - _wCpu * 0.45 * Smooth01(0.5 - 0.5 * Math.Cos(2 * Math.PI * t / 1.7));  // pump-like, 1.7 s
         double hz = t - _hazirAt;
         double settle = hz >= 0 && hz < 1.8 ? 0.38 * Math.Sin(Math.PI * hz / 1.8) : 0;               // one soft swell
         double wk = t - _wakeAt;
@@ -183,7 +178,6 @@ public sealed class RenkMotoru
                     double f = 0.5 + 0.5 * Math.Sin(ang * 2 - t * 2.4 + r * 1.3);
                     c = Lin.Mix(c, _aioPal.AiShimmer, 0.45 * f * _wAi);
                 }
-                c = c * cpuPulse;
 
                 // thinking: a soft highlight orbits every ring (2.6 s per turn), pulled toward white
                 if (_eThink > 0.001)
@@ -228,7 +222,6 @@ public sealed class RenkMotoru
                 double f = 0.5 + 0.5 * Math.Sin(x * 6.3 - t * 2.4);
                 c = Lin.Mix(c, _ref.AiShimmer, 0.45 * f * _wAi);
             }
-            c = c * cpuPulse;
             if (_eThink > 0.001)
             {
                 double pos = -0.25 + 1.5 * Frac(t / 2.6);
@@ -240,7 +233,7 @@ public sealed class RenkMotoru
             Klavye[z] = (c * breath * master).Clamped();
         }
 
-        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (baseCol * cpuPulse * breath * master).Clamped();
+        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (baseCol * breath * master).Clamped();
 
         Cikis = _aioCount > 0 ? new Lin(sr / _aioCount, sg / _aioCount, sb / _aioCount) : baseCol * master;
     }
