@@ -42,12 +42,20 @@ read-only review of a finished piece before an expensive step.
   Not tried in the real window (pointer lock in WebView2 unconfirmed).
 - Architecture (merged, oven): chamber doors, passages, 182-riser stair (~32 s), hatch `kapak` (dinamik), raised block
   on 8 columns to y -604, roof deck y 35, roof lamp pit over the shaft, mast lamp; exterior = materials `dis_*`.
-  Preview bake `.tmp/paket-on2` (ts 4/256, 11 min; Fanlar/arch views unchanged). **Final bake running since 01:32**
-  into `.tmp/paket-son2` (ts 2.5, 1024, stair lamps ×2), log `.tmp/gece/bake-son2.log`, ~60 min. After it:
+  Preview bake `.tmp/paket-on2` (ts 4/256, 11 min; Fanlar/arch views unchanged). **Final bake running since 01:40 as a detached process (salon.exe, pid 34256)**
+  into `.tmp/paket-son2` (ts 2.5, 1024, stair lamps ×2), log `.tmp/gece/bake-son2.log` (+ `.err`), ~60-65 min, done ~02:45. After it:
   `python sahne/araclar/paket_e5.py .tmp/paket-son2`, then it replaces `sahne/paket` (keep the old one as
   `.tmp/paket-eski`), `dotnet build -c Release --no-incremental` copies it to bin\Release\sahne.
 - Void, hatch, fall and loop — helper *bosluk* (agent aa49ccaff5f95de23) working on the preview pack; report due by
   04:30 at the latest. If it is not at the bar, ship walk mode inside the hall only and say the outside is not done.
+
+## Helpers at the restart
+
+Both running helpers were asked at 01:40 to commit and write a status file in their own worktree:
+`.claude/worktrees/agent-a7368f56e3c926064/.tmp/stab-durum.md` (stability, branch worktree-agent-a7368f56e3c926064)
+and `.claude/worktrees/agent-aa49ccaff5f95de23/.tmp/bosluk-durum.md` (void/loop). Continue each with a new helper
+briefed from that file and its branch (merge salon-gece into it first). Branches already merged: the walk, oven and
+opening worktrees (agent-a1f831a…, agent-abe74550…, agent-aa285b9…): those worktrees can be cleared.
 
 ## Tools made tonight
 
