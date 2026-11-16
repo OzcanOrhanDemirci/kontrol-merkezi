@@ -57,7 +57,7 @@ duraklarını gerçek günlere göre ayarlamak için), `ayarlar.json` (renk dura
 renk eşleme çarpanları; servis yeniden başlayınca geçerli), `okuma.txt` (`KontrolMerkezi.exe oku` dökümü).
 
 Pencerede ara ara kısa donma görülürse: `araclar\donma-testi.ps1` ölçer; RTSS (RivaTuner) penceredeki kancası
-yüzünden olduğu anlaşılırsa `araclartss-istisna.cmd` RTSS'e yalnız bu pencere için "kanca yok" profili ekler
+yüzünden olduğu anlaşılırsa `araclar\rtss-istisna.cmd` RTSS'e yalnız bu pencere için "kanca yok" profili ekler
 (`rtss-istisna.cmd geri` kaldırır).
 
 Işık denemeleri: `KontrolMerkezi.exe rgb-dene aio renk FF0000 5`, `rgb-dene aio dalga 30` (LED sırasını gösterir),
