@@ -52,6 +52,12 @@ public sealed class MsiGpuV2 : IRgbCihaz
     public int YazmaArasiMs { get => yazmaArasi; set => yazmaArasi = Math.Max(0, Math.Min(50, value)); }
     volatile int yazmaArasi = 30;
 
+    /// <summary>Pause after the steady-mode write (22=13) instead of YazmaArasiMs; -1 = the same. Stages 11-16: 25 ms after
+    /// every write is taken, 10 and 5 ms are silently ignored (the card stays on its colour, no error); this tests
+    /// whether the chip needs the time after the latch rather than between the colour writes.</summary>
+    public int SabitSonrasiMs { get => sabitSonrasi; set => sabitSonrasi = Math.Max(-1, Math.Min(100, value)); }
+    volatile int sabitSonrasi = -1;
+
     /// <summary>Colour changes sent since start (the service logs the rate while the card is lit).</summary>
     public int Guncellemeler => guncellemeler;
     int guncellemeler;
@@ -177,7 +183,8 @@ public sealed class MsiGpuV2 : IRgbCihaz
         {
             yol.Yaz(k, d);
             Iz?.Invoke($"{DateTime.Now:HH:mm:ss.fff} yaz 0x68 port1 {k:X2}={d:X2}");
-            if (YazmaArasiMs > 0) Thread.Sleep(YazmaArasiMs);   // after every write, also the last (the next sequence may follow at once)
+            int ara = k == RegMod && d == ModSabit && SabitSonrasiMs >= 0 ? SabitSonrasiMs : YazmaArasiMs;
+            if (ara > 0) Thread.Sleep(ara);   // after every write, also the last (the next sequence may follow at once)
         }
     }
 

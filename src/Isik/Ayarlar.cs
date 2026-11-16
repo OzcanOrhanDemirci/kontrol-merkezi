@@ -68,6 +68,8 @@ public sealed class Ayarlar
 
     /// <summary>Pause after each write to the card's light controller, ms (MSI's pace 30 = ~8 colour changes/s).</summary>
     public int GpuYazmaArasiMs = 30;
+    /// <summary>Pause after the card's steady-mode write instead of GpuYazmaArasiMs, ms; -1 = the same.</summary>
+    public int GpuSabitSonrasiMs = -1;
 
 
     /// <summary>Lights fade out after this many minutes without real mouse/keyboard input (0 = never). Özcan 11-16:
@@ -134,6 +136,7 @@ public sealed class Ayarlar
             if (d.TryGetValue("pompaHalkasi", out var ph)) a.PompaHalkasi = Convert.ToInt32(ph);
             if (d.TryGetValue("gpuAcilistaKarart", out var gk) && gk is bool gkb) a.GpuAcilistaKarart = gkb;
             if (d.TryGetValue("gpuYazmaArasiMs", out var gm)) a.GpuYazmaArasiMs = Math.Max(0, Math.Min(50, Convert.ToInt32(gm)));
+            if (d.TryGetValue("gpuSabitSonrasiMs", out var gs)) a.GpuSabitSonrasiMs = Math.Max(-1, Math.Min(100, Convert.ToInt32(gs)));
             var all = a.Duraklar.Select(x => x.Renk)
                 .Concat(a.CihazRenkleri.Values.SelectMany(c => c.Duraklar ?? new int[0][]))
                 .Where(x => x != null);
@@ -160,6 +163,7 @@ public sealed class Ayarlar
                 ["efektler"] = new Dictionary<string, object> { ["kapali"] = EfektlerKapali, ["yapayzeka"] = YapayZekaEfekti, ["islemci"] = IslemciEfekti },
                 ["gpuAcilistaKarart"] = GpuAcilistaKarart,
                 ["gpuYazmaArasiMs"] = GpuYazmaArasiMs,
+                ["gpuSabitSonrasiMs"] = GpuSabitSonrasiMs,
                 ["kazanc"] = Kazanc,
                 ["cihazRenkleri"] = CihazRenkleri.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
                 {

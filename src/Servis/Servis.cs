@@ -239,8 +239,8 @@ sealed class Servis : IDisposable
                 m.DevamEt(_motor);
                 _ayar = a;
                 _motor = m;
-                foreach (var g in _rgb.OfType<MsiGpuV2>()) g.YazmaArasiMs = a.GpuYazmaArasiMs;
-                Program.Log("ayarlar yeniden yüklendi | ekran kartı yazma arası " + a.GpuYazmaArasiMs + " ms");
+                foreach (var g in _rgb.OfType<MsiGpuV2>()) { g.YazmaArasiMs = a.GpuYazmaArasiMs; g.SabitSonrasiMs = a.GpuSabitSonrasiMs; }
+                Program.Log("ayarlar yeniden yüklendi | ekran kartı yazma arası " + a.GpuYazmaArasiMs + " ms, sabit sonrası " + a.GpuSabitSonrasiMs + " ms");
                 Publish();
                 break;
             }
@@ -473,7 +473,7 @@ sealed class Servis : IDisposable
             {
                 int n = gk.Guncellemeler, d = n - _gpuSay;
                 _gpuSay = n;
-                if (d > 0) Program.Log($"ekran kartı: 10 sn'de {d} renk değişimi, ortalama {d / 10.0:0.#}/sn (yazma arası {gk.YazmaArasiMs} ms)");
+                if (d > 0) Program.Log($"ekran kartı: 10 sn'de {d} renk değişimi, ortalama {d / 10.0:0.#}/sn (yazma arası {gk.YazmaArasiMs} ms, sabit sonrası {gk.SabitSonrasiMs} ms)");
             }
 
         if (DateTime.UtcNow - _lastHistory > TimeSpan.FromSeconds(60))

@@ -13,7 +13,7 @@ static class RgbCihazlari
     {
         var list = new List<IRgbCihaz> { new CoolerMasterA1(), new SteelSeriesApex3() };
 #pragma warning disable CS0162
-        if (MsiGpuV2.KartaYazabilir) list.Add(new MsiGpuV2 { YazmaArasiMs = a.GpuYazmaArasiMs });
+        if (MsiGpuV2.KartaYazabilir) list.Add(new MsiGpuV2 { YazmaArasiMs = a.GpuYazmaArasiMs, SabitSonrasiMs = a.GpuSabitSonrasiMs });
 #pragma warning restore CS0162
         return list;
     }
