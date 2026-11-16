@@ -763,7 +763,8 @@ async function create(canvas, options = {}) {
         gl.generateMipmap(gl.TEXTURE_2D);
         const t = lv.t; lv.t = lv.next; lv.next = t;
         lv.emissive = j.emissive;
-        levhaJobs.delete(name);
+        if (j.pending) { j.bytes = j.pending.bytes; j.emissive = j.pending.emissive; j.pending = null; j.row = 0; }
+        else levhaJobs.delete(name);
       }
       if (budget <= 0) break;
     }
@@ -1362,7 +1363,11 @@ async function create(canvas, options = {}) {
         lv.next = tex(gl.TEXTURE_2D, { mips: true, aniso: true, bytes: w * h * 4 * 4 / 3 });
         gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(w, h))) + 1, gl.SRGB8_ALPHA8, w, h);
       }
-      levhaJobs.set(name, { lv, bytes, row: 0, emissive: Math.max(0, opts.emissive || 0) });
+      const emissive = Math.max(0, opts.emissive || 0), job = levhaJobs.get(name);
+      // a drawing arriving while one is half uploaded waits for it (the newest wins): restarting would let quick
+      // updates keep the big keystone display from ever completing
+      if (job && job.row > 0) job.pending = { bytes, emissive };
+      else levhaJobs.set(name, { lv, bytes, row: 0, emissive, pending: null });
       return true;
     },
     setLamp(name, c, k) { lamps.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
