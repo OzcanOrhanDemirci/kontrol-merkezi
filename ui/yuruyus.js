@@ -551,7 +551,8 @@ function create(o) {
   // ---------------------------------------------------------------- the centre's target
   // the same test as a pointer pick (a fan counts only on its disc), along the view within reach
   function centreHit() {
-    return S() && S().pickRay ? S().pickRay(pose.eye, pose.dir, C.REACH) : null;
+    const n = S() && S().pickRay ? S().pickRay(pose.eye, pose.dir, C.REACH) : null;
+    return n && o.actions && o.actions[n] ? n : null;   // only what walk mode can act on
   }
   function setHover(n) {
     if (M.hover === n) return;
