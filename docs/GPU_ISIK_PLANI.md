@@ -3,9 +3,10 @@
 Card: MSI RTX 4080 Gaming X Trio, PCI 10DE:2704, subsystem 1462:5111. Goal: drive its lighting from Kontrol Merkezi
 with volatile writes only, never changing what the card stores (power-on lighting stays as it is now).
 
-State tonight: `src/Rgb/MsiGpuV2.cs` exists but has never run. It needs `DerlemeIzni = true` (compile time) AND the
-environment variable `KONTROL_GPU_ISIK=acik` (run time); both are off. Nothing constructs it. No I2C or NvAPI traffic
-of any kind has been sent to the card, not even a read or a probe.
+**Current state (2026-11-16, 13:00):** done and built, not yet installed. `src/Rgb/MsiGpuV2.cs` sends only writes MSI
+made; the card is part of RGB like the AIO and keyboard (temperature colour, all on/off, idle-off, sleep), with no
+effect of its own. The sections below are the history of how it got there: the morning proof, the power-off tests, the
+three viewings with Özcan. The last section is the result and what is open.
 
 ## What OpenRGB 1.1's source says
 
@@ -89,7 +90,8 @@ the approved step. Power-off check: `docs/GPU_ADIM4_KONTROL.md`.
 
 - Write register 0x3F.
 - Probe or scan addresses, or read registers "to see" before step 1 has shown MSI doing the same read.
-- Run the GPU driver while MSI Center, Afterburner's RGB or OpenRGB is running.
+- Run the GPU driver while MSI Center, Afterburner's RGB or OpenRGB is running, or run `rgb-dene gpu` while the installed
+  service drives the card.
 
 ## Open question: is the zone switch 0x2D stored? (2026-11-16, 12:15)
 
@@ -118,3 +120,44 @@ desktop), firewall rules, registry, ProgramData; 10 plug-ins with their own quie
 WD_BLACK D50, WD_BLACK AN1500, Verbatim, AMD Ryzen Master SDK with its driver); MSI's MsIo64 boot driver (January);
 the logger log folder; the built logger and colour-tool binaries. Kept: Afterburner, RTSS, and the BIOS-installed
 MSI Driver Utility Installer and msiswacpi driver.
+
+## Power-off test with MSI gone (2026-11-16, 12:26): the zone switch is never stored
+
+Shutdown, PSU off ~10 s: the card lit **steady white at the logo** (MSI's saved Steady white, full brightness, 12:03)
+and stayed white, no flicker after the desktop. MSI's saved "off" (2D=03 + 3F) did not hold: the zone switch 0x2D is
+never stored, only mode, colour and brightness are, and only by 3F. Reading (B) above holds. Özcan chose (12:4x) never
+to save, 3F stays absolute: "açılışta beyaz olması benim için sorun değil". The card is white from power-on until the
+service takes over (about a minute after the power button; also after waking from S3 sleep, which cuts the card's power).
+
+## Runs and viewings on the card (2026-11-16), all volatile, every write logged
+
+Log: `%LOCALAPPDATA%\KontrolMerkezi\gpu-deneme.txt`. Every write returned status 0. The NvAPI call is the 64-bit layout
+of MSI's call (ver 3, D0, port 1 set, i2cSpeed FFFF, 400 kHz) from an unelevated process.
+
+- 12:36 `2D=03` alone: the card went from its white to dark.
+- Viewing 1 (12:44): MSI's full sequence white then blue: "5 saniye beyaz 5 saniye mavi güzeldi". R/G/B alone after a
+  full red: ignored, it stayed red. Fades sent as full sequences: seen as off/on (the programming step 22=1C darkens the
+  LEDs until 22=13).
+- Viewing 2 (12:47): R, G, B followed by 22=13 changes the colour cleanly ("renklerin hepsi çalıştı"). White fades:
+  ~7/s steppy; ~27/s (no pause between writes) plain off/on.
+- Viewing 3 (12:52): fades at ~11, ~20 (two curves) and ~35 updates/s: "kısılıp açılma anlaşılmıyor [...] renk
+  değiştirse [...] renklerin geçişi net görünür". Brightness changes do not read on this card; colour changes do.
+
+## Result (2026-11-16, 13:00)
+
+- Driver: the first colour after an open or an off is MSI's full sequence (2D=00, 22=1C, 36=64, 38=02, R, G, B, 22=13);
+  every later change is R, G, B, 22=13; off is 2D=03; 30 ms after each write (MSI's pace, ~8 changes/s). Allow-list of
+  (register, value) pairs from the capture; 0x3F refused by the bus class as well. Unchanged colours are not re-sent
+  (the controller holds them, no keep-alive).
+- Özcan's decision: no effect on the card, "efekt değil, sıcaklıkla aynı senkronizede". The card shows the temperature
+  colour in step with the AIO and keyboard; the local-model effect is "akış" on the keyboard and fans
+  (`efektler.yapayzeka = 1`, set in his `ayarlar.json` on 11-16; the previous file is `ayarlar.json.yedek-2026-11-16`).
+- Start and wake: the service darkens the card (2D=03) unless RGB is on, in which case the first frame paints the
+  temperature colour. No fade (fades do not read on the card).
+- Build: the normal build contains the NvAPI write; `-p:GpuIsik=kapali` builds one without any path to the card, whose
+  `rgb-dene gpu sira|sondur|servis` only simulate. Before a card run, check which build it is: the I2C function id
+  bytes `5A C6 3A 28` appear once in the card build's exe and never in the other.
+- Open: after the install Özcan watches a temperature transition on the card next to the others: smooth, abrupt or
+  stepped? If stepped, a card effect built around the steps (a breath, an on/off) may come back as a later step.
+- Not checked yet: the installed service on the card (start darkening, RGB on/off, idle-off, sleep/wake); per-device
+  colour match of the card against the keyboard (`cihazRenkleri.gpu` if needed).

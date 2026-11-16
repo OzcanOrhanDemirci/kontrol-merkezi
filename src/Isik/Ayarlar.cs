@@ -54,23 +54,15 @@ public sealed class Ayarlar
     /// <summary>Local model generating an answer: rose pink, the one hue family the temperature palette never visits.</summary>
     /// <summary>Which candidate pattern plays for the two load effects (local model 1-5, CPU 1-2; RenkMotoru.YzFactor/CpuFactor).
     /// Hue never changes for them: "rengi sadece sıcaklığa bağlayalım" (Özcan 11-16).</summary>
-    // Local model: 0 = none on the case and keyboard. Özcan 11-16 picked none of 1-5; the GPU's own LEDs are to show it
-    // once the GPU lighting is proven (docs/GPU_ISIK_PLANI.md).
-    public int YapayZekaEfekti = 0, IslemciEfekti = 1;
-
-    /// <summary>The card's local-model candidate (RenkMotoru.GpuYzFactor): 0 none, 1 nefes, 2 yanıp söner, 3 akış.
-    /// Özcan picks on the real card; 1 until then.</summary>
-    public int GpuYapayZekaEfekti = 1;
+    // Local model: 1 "akış" on the case and keyboard. Özcan 11-16: first meant for the GPU's own LEDs, but the card
+    // cannot show effects ("efekt değil, sıcaklıkla aynı senkronizede"), so "akış" on the keyboard and fans.
+    public int YapayZekaEfekti = 1, IslemciEfekti = 1;
 
     /// <summary>The card lights its stored Steady white whenever it gets power (its on/off switch is never stored, and
     /// Özcan chose 11-16 never to save: "açılışta beyaz olması benim için sorun değil"). At service start and after
-    /// sleep the service takes that white over: a soft fade, over this many seconds, to dark or to the temperature
-    /// colour if RGB is on. 0 = leave the card alone.</summary>
-    public double GpuBaslangicSn = 2.0;
+    /// sleep the service takes that white over: dark, or the temperature colour if RGB is on.</summary>
+    public bool GpuAcilistaKarart = true;
 
-    /// <summary>Colour changes send only R, G, B after one full sequence (3 writes, not 8). Off until run 2 on the card
-    /// shows the controller takes it.</summary>
-    public bool GpuYalnizRenk = false;
 
     /// <summary>Lights fade out after this many minutes without real mouse/keyboard input (0 = never). Özcan 11-16:
     /// "15 dakika işlem yoksa, ama mouse klavye hareketi olarak [...] RGB'ler yumuşak şekilde kapanır".</summary>
@@ -114,7 +106,6 @@ public sealed class Ayarlar
             {
                 if (efd.TryGetValue("yapayzeka", out var e1)) a.YapayZekaEfekti = Math.Max(0, Math.Min(5, Convert.ToInt32(e1)));
                 if (efd.TryGetValue("islemci", out var e2)) a.IslemciEfekti = Convert.ToInt32(e2) == 2 ? 2 : 1;
-                if (efd.TryGetValue("gpuYapayzeka", out var e3)) a.GpuYapayZekaEfekti = Math.Max(0, Math.Min(3, Convert.ToInt32(e3)));
             }
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
                 foreach (var kv in kd) a.Kazanc[kv.Key] = Doubles(kv.Value, 3);
@@ -134,8 +125,7 @@ public sealed class Ayarlar
                 else Program.Log("ayarlar: aioHalkalari geçersiz, varsayılan kullanılıyor");
             }
             if (d.TryGetValue("pompaHalkasi", out var ph)) a.PompaHalkasi = Convert.ToInt32(ph);
-            if (d.TryGetValue("gpuBaslangicSn", out var gk)) a.GpuBaslangicSn = Math.Max(0, Math.Min(10, Convert.ToDouble(gk)));
-            if (d.TryGetValue("gpuYalnizRenk", out var gy) && gy is bool gyb) a.GpuYalnizRenk = gyb;
+            if (d.TryGetValue("gpuAcilistaKarart", out var gk) && gk is bool gkb) a.GpuAcilistaKarart = gkb;
             var all = a.Duraklar.Select(x => x.Renk)
                 .Concat(a.CihazRenkleri.Values.SelectMany(c => c.Duraklar ?? new int[0][]))
                 .Where(x => x != null);
@@ -155,13 +145,12 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: yerel model (0 = yok, 1-5), ekran kartında yerel model (gpuYapayzeka: 0 yok, 1 nefes, 2 yanıp söner, 3 akış) ve işlemci yükü (1-2) efektinin adayı. gpuBaslangicSn: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra o beyazdan bu kadar saniyede yumuşakça karanlığa (RGB açıksa sıcaklık rengine) geçer (0 = karta dokunma). gpuYalnizRenk: renk değişiminde yalnız R, G, B gönderilir (kartta denenince açılır). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: yerel model (0 = yok, 1-5) ve işlemci yükü (1-2) efektinin adayı. gpuAcilistaKarart: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra onu karartır (RGB açıksa sıcaklık rengine geçirir). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => { var o = new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }; if (x.Gizli) o["gizli"] = true; return o; }).ToList(),
                 ["uyariDerece"] = UyariDerece,
                 ["beklemeDakika"] = BeklemeDakika,
-                ["efektler"] = new Dictionary<string, object> { ["yapayzeka"] = YapayZekaEfekti, ["gpuYapayzeka"] = GpuYapayZekaEfekti, ["islemci"] = IslemciEfekti },
-                ["gpuBaslangicSn"] = GpuBaslangicSn,
-                ["gpuYalnizRenk"] = GpuYalnizRenk,
+                ["efektler"] = new Dictionary<string, object> { ["yapayzeka"] = YapayZekaEfekti, ["islemci"] = IslemciEfekti },
+                ["gpuAcilistaKarart"] = GpuAcilistaKarart,
                 ["kazanc"] = Kazanc,
                 ["cihazRenkleri"] = CihazRenkleri.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
                 {

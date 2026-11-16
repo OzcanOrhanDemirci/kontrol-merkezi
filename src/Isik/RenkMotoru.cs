@@ -23,7 +23,6 @@ public sealed class Girdi
     public bool Islemci;               // CPU under sustained heavy load (decided with hysteresis by the caller)
     public JarvisDurum Jarvis;
     public int? YzEfekt, IslemciEfekt; // preview only: play this candidate instead of the chosen one
-    public int? GpuYzEfekt;            // preview only: the card's local-model candidate
     public bool? Uyari;                // preview only: force the over-temperature warning
 }
 
@@ -134,7 +133,7 @@ public sealed class RenkMotoru
     /// ring -1 = keyboard; pump = the AIO's pump ring.</summary>
     static double YzFactor(int variant, int ring, bool pump, double ang, double x, int led, double t, double e)
     {
-        if (e < 0.001 || variant == 0) return 1;   // 0 = no effect on the case/keyboard (Özcan: it belongs on the GPU's own LEDs)
+        if (e < 0.001 || variant == 0) return 1;   // 0 = no effect
         if (variant == 5) return 1;
         if (variant == 3 || variant == 4)
         {
@@ -153,26 +152,6 @@ public sealed class RenkMotoru
         double ph = ring >= 0 ? 3 * ang - 2 * Math.PI * t / 3.4 + ring * 1.1 : 2 * Math.PI * (2.2 * x - t / 3.4);
         double gap = Math.Pow(Math.Max(0, Math.Cos(ph)), 4);
         return 1 - e * 0.6 * gap;
-    }
-
-    /// <summary>Local model generating, on the graphics card's own LEDs (one colour for the whole card, so only
-    /// brightness over time). 1 "nefes": a deep slow breath, full down to ~5 % linear light (about a fifth to the
-    /// eye) and back, 2.5 s. 2 "yanıp söner": off and on once a second, soft edges (the 90 °C warning is faster and
-    /// blinks everything). 3 "akış": quick irregular small dips, like text streaming out (needs fast updates).
-    /// 0 = none. No heartbeat: the CPU-load effect already beats on the card too.</summary>
-    static double GpuYzFactor(int variant, double t, double e)
-    {
-        if (e < 0.001 || variant <= 0) return 1;
-        if (variant == 1) return 1 - e * 0.95 * (0.5 - 0.5 * Math.Cos(2 * Math.PI * t / 2.5));
-        if (variant == 2)
-        {
-            double s = 0.5 + 0.5 * Math.Cos(2 * Math.PI * t / 1.0);
-            double on = Smooth01(Math.Max(0, Math.Min(1, (s - 0.3) * 2.0)));
-            return 1 - e * 0.97 * (1 - on);
-        }
-        // 3: three incommensurate ripples; only their joint peaks make a dip, so the rhythm never repeats visibly
-        double n = Math.Max(0, Math.Sin(t * 9.1) * Math.Sin(t * 5.3 + 1.7) * Math.Sin(t * 2.2 + 0.4));
-        return 1 - e * 0.6 * Math.Min(1, n * 2.2);
     }
 
     /// <summary>CPU under sustained heavy load. 1 "kalp": a calm lub-dub, the light rests a little lower and each
@@ -320,8 +299,9 @@ public sealed class RenkMotoru
             Klavye[z] = (c * (breath * blink * master)).Clamped();
         }
 
-        int gpuYzV = g.GpuYzEfekt ?? _a.GpuYapayZekaEfekti;
-        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (gpuBase * (CpuFactor(cpuV, 0.5, t, eCpu) * GpuYzFactor(gpuYzV, t, eAi) * breath * blink * master)).Clamped();
+        // The card: the temperature colour, in step with the others; no local-model effect (Özcan 11-16: "efekt değil,
+        // sıcaklıkla aynı senkronizede"). Brightness effects ride along but barely read on it (one colour, 36=64 fixed).
+        for (int i = 0; i < Gpu.Length; i++) Gpu[i] = (gpuBase * (CpuFactor(cpuV, 0.5, t, eCpu) * breath * blink * master)).Clamped();
 
         Cikis = _aioCount > 0 ? new Lin(sr / _aioCount, sg / _aioCount, sb / _aioCount) : baseCol * master;
     }

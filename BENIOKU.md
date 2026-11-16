@@ -10,17 +10,21 @@ Bu bilgisayarın fanlarını ve RGB ışıklarını tek pencereden yöneten masa
   ekran kartı sıcaklığının düz ortalaması, yaklaşık 30 saniyeye yayılmış, ani dalgalanmaları izlemez). Boşta ve
   hafif ılınmalarda beyaz (52 °C'ye kadar); ılıyınca koyu mavi (58), arada doğal geçiş olarak açık mavi; sonra sarı
   (64), turuncu (74), kırmızı (80,5 ve üstü). Geçişler yumuşak, ışık her zaman tam parlaklıkta. Ortalama 90 °C'yi
-  geçerse ışıklar uyarı olarak yanıp söner.
+  geçerse ışıklar uyarı olarak yanıp söner. Ekran kartının ışığı da bunlara katılır: aynı sıcaklık rengini, öbürleriyle
+  aynı anda gösterir; tek renktir ve kendine ait efekti yoktur.
   - Renk yalnız sıcaklıktan gelir. Yerel yapay zekâ modeli yanıt yazarken ve işlemci uzun süre (30 sn) yoğun
     yükteyken renk değişmez; ışığın üstünde sakin birer efekt oynar (parlaklık ve hareket). Hangi efektin
-    oynayacağı `ayarlar.json`'da `efektler` altında seçilir (iki aday var).
+    oynayacağı `ayarlar.json`'da `efektler` altında seçilir. Yerel model için seçilen "akış": halkalarda ve klavyede
+    yumuşak koyu boşluklar akar.
   - Jarvis düşünürken her halkada yumuşak bir parıltı döner; senden yanıt beklerken bütün ışıklar yavaşça nefes
     alır; kapalıyken pompa halkası sönük bir kor gibi durur; yeniden açılırken pompa halkasında beyaz bir nokta döner;
     geri gelince bir kez parlar.
 - Pencerenin ışığı kasanın ışığıdır: ekrandaki sahne o an kasanın gösterdiği renkle aydınlanır.
 
 Klavye ve fare 15 dakika kullanılmazsa ışıklar yumuşakça söner (arkada çalışan işler sayılmaz); ilk dokunuşta geri
-yanar. Bilgisayar her açıldığında ışıklar kapalı başlar. Pencere kapalıyken ekran kartına hiç iş yüklemez.
+yanar. Bilgisayar her açıldığında ışıklar kapalı başlar. Tek istisna ekran kartı: her güç alışında (açılış, uykudan
+uyanış) kendi kayıtlı beyazını yakar, servis gelince (oturum açıldıktan birkaç saniye sonra) söner; kartın belleğine
+hiçbir şey yazılmadığı için bu böyle kalır. Pencere kapalıyken ekran kartına hiç iş yüklemez.
 
 ## Kurulum (bir kez)
 
@@ -41,7 +45,7 @@ PowerShell'de `kur.ps1 -Kaldir`.
 - Uyku: uykuya geçerken ışıklar kararır; uyanınca ışıklar yeniden açılır ve en yükseğe alınmış fanlar donanım
   unuttuysa yeniden en yükseğe alınır.
 - Ayrıntılar: `docs/PROTOKOL.md` (süreçler ve mesajlar), `docs/RGB_SURUCULER.md` (sürücüler, neyin kalıcı yazdığı),
-  `docs/GPU_ISIK_PLANI.md` (ekran kartı ışığının kanıt planı).
+  `docs/GPU_ISIK_PLANI.md` (ekran kartı ışığının kanıtı ve denemeleri).
 
 ## Güvenlik
 
@@ -52,7 +56,8 @@ PowerShell'de `kur.ps1 -Kaldir`.
   otomatiğine döndürür.
 - RGB: yalnız cihazların geçici (canlı) renk yolu kullanılır. Cihazın belleğine kaydeden komutlar hiç gönderilmez, o
   yüzden açılıştaki "kapalı" hâlleri değişmez.
-- Ekran kartının ışığına bu gece hiç dokunulmadı (okuma bile yok). Sürücüsü kilitli; kanıt adımı birlikte yapılacak.
+- Ekran kartının ışığına yalnız MSI'ın kendi programının gönderdiği komutlar gider (16 Kasım'da kaydedildi), kaydetme
+  komutu hiçbir zaman. Renk değişimleri kartın belleğini yıpratmaz; kart her açılışta kendi kayıtlı beyazına döner.
 
 ## Dosyalar
 

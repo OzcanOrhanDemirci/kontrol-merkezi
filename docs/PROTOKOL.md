@@ -44,7 +44,7 @@ Name `\\.\pipe\KontrolMerkezi` (created by the service, DACL: current user + SYS
     "cihazlar": [
       { "kimlik": "aio", "ad": "Cooler Master Halo 360", "bagli": true, "hata": null },
       { "kimlik": "klavye", "ad": "SteelSeries Apex 3", "bagli": true, "hata": null },
-      { "kimlik": "gpu", "ad": "MSI RTX 4080 Gaming X Trio", "bagli": false, "kilitli": true, "hata": null }
+      { "kimlik": "gpu", "ad": "MSI RTX 4080 Gaming X Trio", "bagli": true, "hata": null }
     ],
     "duraklar": [ { "c": 38, "renk": [235, 242, 255], "ad": "soğuk beyaz" } ]
   }

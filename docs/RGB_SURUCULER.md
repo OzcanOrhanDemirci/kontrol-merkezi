@@ -7,7 +7,7 @@ Internal note (English). Drivers live in `src/Rgb/`, all implement `IRgbCihaz`. 
 |---|---|---|---|---|
 | Cooler Master Halo 360 (ARGB Gen 2 A1, 2516:0173, fw 0x1600) | `CoolerMasterA1` | HID interface 1, usage page 0xFF01, 65-byte reports | 84 | tested on hardware 2026-11-16 |
 | SteelSeries Apex 3 (1038:161A) | `SteelSeriesApex3` | HID interface 3, usage page 0xFFC0, 33-byte reports | 10 zones | tested on hardware 2026-11-16 |
-| MSI RTX 4080 Gaming X Trio (10DE:2704 / 1462:5111) | `MsiGpuV2` | NvAPI I2C port 1, address 0x68 | 1 | **locked, never run**; see `GPU_ISIK_PLANI.md` |
+| MSI RTX 4080 Gaming X Trio (10DE:2704 / 1462:5111) | `MsiGpuV2` | NvAPI I2C port 1, address 0x68 | 1 | MSI's recorded sequence, on hardware 2026-11-16; see `GPU_ISIK_PLANI.md` |
 
 ## Rule applied to every device
 
@@ -120,6 +120,6 @@ names. These parts follow OpenRGB closely enough to count as close translations,
 - `CoolerMasterA1`: the realtime entry sequence and timing (`SendRealtimePreamble`), the three-report frame layout
   (`SendRealtimeFrameLocked`), and the reply matching in `Komut` (`SendCommandPage`), from `CMARGBGen2A1Controller.cpp`.
 - `SteelSeriesApex3.Gonder`: the two-report sequence of `SteelSeriesApexTZoneController::SetColor`.
-- `MsiGpuV2.Sabit`: the static-mode register sequence of `RGBController_MSIGPUv2::DeviceUpdateAll`.
-- `MsiGpuV2.NvApi`: the `NV_I2C_INFO_V3` layout and NvAPI function ids from `dependencies/NVFC/nvapi.h/.cpp`
+- `MsiGpuV2`: no longer OpenRGB's sequence; it sends what MSI Mystic Light was recorded sending (`docs/gpu-kayit/`).
+- `NvApiYolu` (in `MsiGpuV2.cs`): the `NV_I2C_INFO_V3` layout and NvAPI function ids from `dependencies/NVFC/nvapi.h/.cpp`
   (no licence header in those files) and the call shape of `i2c_smbus/Windows/i2c_smbus_nvapi.cpp`.

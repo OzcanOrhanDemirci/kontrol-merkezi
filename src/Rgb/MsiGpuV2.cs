@@ -1,9 +1,12 @@
 // MSI RTX 4080 Gaming X Trio lighting (PCI 10DE:2704, subsystem 1462:5111): the light controller at I2C address 0x68
 // on the card's port 1, reached through NvAPI I2C.
 //
-// What is sent is exactly what MSI Mystic Light sent on 2026-11-16 (docs/gpu-kayit/), minus its save:
-//   colour : 2D=00 (zones on), 22=1C (programming), 36=64 (full brightness), 38=02, 30=R, 31=G, 32=B, 22=13 (steady)
-//   off    : 2D=03 (both zones off)
+// What is sent are writes MSI Mystic Light made on 2026-11-16 (docs/gpu-kayit/), never its save:
+//   first colour : 2D=00 (zones on), 22=1C (programming), 36=64 (full brightness), 38=02, 30=R, 31=G, 32=B, 22=13 (steady)
+//   next colours : 30=R, 31=G, 32=B, 22=13. The colour latches on the steady-mode write; R/G/B alone is ignored, and
+//                  the programming step darkens the LEDs for a moment, so a full sequence per change blinks (viewings
+//                  1 and 2 with Özcan, 11-16). Brightness fades do not read on this card (viewing 3), only colour does.
+//   off          : 2D=03 (both zones off)
 // Every write is checked against an allow-list of (register, value) pairs taken from that capture. The controller's
 // save register is not in the list, and Yol (the bus) refuses it on its own as well: nothing here can change what
 // the card stores. Proven on the card: colour/mode writes are lost at power-off (step 4, 11:10 -> 11:54); the zone
@@ -46,10 +49,6 @@ public sealed class MsiGpuV2 : IRgbCihaz
     /// <summary>MSI waited ~30 ms between writes.</summary>
     public int YazmaArasiMs { get; set; } = 30;
 
-    /// <summary>After one full sequence, change only R/G/B (3 writes instead of 8). Off until a run on the card shows
-    /// that the controller takes it (docs/GPU_ISIK_PLANI.md, run 2).</summary>
-    public bool YalnizRenk { get; set; }
-
     /// <summary>Shortest spacing between two colour updates; frames in between are skipped (the next carries the colour).</summary>
     public int EnKisaAralikMs { get; set; } = 0;
 
@@ -71,12 +70,15 @@ public sealed class MsiGpuV2 : IRgbCihaz
         (RegR, c.R), (RegG, c.G), (RegB, c.B), (RegMod, ModSabit),
     };
 
+    /// <summary>A colour change once the card is lit: colour, then steady (no programming step, no blink).</summary>
+    public static (byte kayit, byte deger)[] DegisimSirasi(Rgb c) => new[] { (RegR, c.R), (RegG, c.G), (RegB, c.B), (RegMod, ModSabit) };
+
     public static (byte kayit, byte deger)[] KapatSirasi() => new[] { (RegBolge, BolgelerKapali) };
 
     readonly object kilit = new();
     readonly IGpuYolu yol;
     Rgb son;
-    bool sabitKurulu;      // a full sequence went out since the last open/off: R/G/B alone may follow (YalnizRenk)
+    bool sabitKurulu;      // a full sequence went out since the last open/off: colour + steady may follow
     bool sonVar;
     long sonTick;
 
@@ -128,7 +130,7 @@ public sealed class MsiGpuV2 : IRgbCihaz
             if (sonVar && EnKisaAralikMs > 0 && simdi - sonTick < EnKisaAralikMs) return true;
             try
             {
-                if (YalnizRenk && sabitKurulu) Gonder(new[] { (RegR, c.R), (RegG, c.G), (RegB, c.B) });
+                if (sabitKurulu) Gonder(DegisimSirasi(c));
                 else { Gonder(RenkSirasi(c)); sabitKurulu = true; }
                 son = c; sonVar = true; sonTick = simdi;
                 return true;

@@ -44,10 +44,10 @@ sealed class Servis : IDisposable
     {
         public double? C;
         public bool? YapayZeka, Islemci;
-        public int? YzEfekt, IslemciEfekt, GpuYzEfekt;
+        public int? YzEfekt, IslemciEfekt;
         public bool? Uyari;
         public JarvisDurum? Jarvis;
-        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null && YzEfekt == null && IslemciEfekt == null && GpuYzEfekt == null && Uyari == null;
+        public bool Bos => C == null && YapayZeka == null && Islemci == null && Jarvis == null && YzEfekt == null && IslemciEfekt == null && Uyari == null;
     }
     readonly YerelModel _model = new();
     readonly Afterburner _ab = new();
@@ -224,7 +224,6 @@ sealed class Servis : IDisposable
                 z.Uyari = Json.B(d, "uyari");
                 if (d.TryGetValue("yzEfekt", out var ye) && ye != null) z.YzEfekt = Convert.ToInt32(ye);
                 if (d.TryGetValue("islemciEfekt", out var ie) && ie != null) z.IslemciEfekt = Convert.ToInt32(ie);
-                if (d.TryGetValue("gpuYzEfekt", out var ge) && ge != null) z.GpuYzEfekt = Convert.ToInt32(ge);
                 var jv = Json.S(d, "jarvis");
                 if (jv != null && Enum.TryParse<JarvisDurum>(jv, true, out var jd)) z.Jarvis = jd;
                 _zorla = z;
@@ -533,7 +532,7 @@ sealed class Servis : IDisposable
                     {
                         CpuC = z.C ?? gi.CpuC, GpuC = z.C ?? gi.GpuC, CpuYuk = gi.CpuYuk, GpuYuk = gi.GpuYuk,
                         YapayZeka = z.YapayZeka ?? gi.YapayZeka, Islemci = z.Islemci ?? gi.Islemci, Jarvis = z.Jarvis ?? gi.Jarvis,
-                        YzEfekt = z.YzEfekt, IslemciEfekt = z.IslemciEfekt, GpuYzEfekt = z.GpuYzEfekt, Uyari = z.Uyari,
+                        YzEfekt = z.YzEfekt, IslemciEfekt = z.IslemciEfekt, Uyari = z.Uyari,
                     };
                 _motor.Hesapla(gi, t, dt);
                 if (!_uyku) WriteDevices();
@@ -675,14 +674,13 @@ sealed class Servis : IDisposable
 
     System.Threading.Timer _wakeTimer;
 
-    /// <summary>The card shows its stored white whenever it gets power: take it over with a soft fade to dark, or to
-    /// the temperature colour if the lights are on (volatile writes only).</summary>
+    /// <summary>The card shows its stored white whenever it gets power: darken it (volatile zones-off) unless the
+    /// lights are on, in which case the next frame paints the temperature colour.</summary>
     void GpuKarart(string neden)
     {
-        double sn = _ayar.GpuBaslangicSn;
-        if (sn <= 0) return;
+        if (!_ayar.GpuAcilistaKarart) return;
         foreach (var w in _yazicilar)
-            if (w.Cihaz.Kimlik == "gpu") { w.BeyazdanBasla(sn); Program.Log("ekran kartı: beyazdan geçiş (" + neden + ")"); }
+            if (w.Cihaz.Kimlik == "gpu") { w.KaranligaZorla(); Program.Log("ekran kartı ışığı karartılıyor (" + neden + ")"); }
     }
 
     public void OnResume()

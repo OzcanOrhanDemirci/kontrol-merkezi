@@ -14,19 +14,6 @@ public struct Rgb
     public bool Equals(Rgb o) => R == o.R && G == o.G && B == o.B;
     public override string ToString() => $"{R:X2}{G:X2}{B:X2}";
 
-    /// <summary>Blend a -> b at s (0..1) evenly to the eye: the device values are linear light, so the mix is made in
-    /// gamma 2.2 and eased at both ends.</summary>
-    public static Rgb Gecis(Rgb a, Rgb b, double s)
-    {
-        s = Math.Max(0, Math.Min(1, s));
-        s = s * s * (3 - 2 * s);
-        byte M(byte x, byte y)
-        {
-            double px = Math.Pow(x / 255.0, 1 / 2.2), py = Math.Pow(y / 255.0, 1 / 2.2);
-            return (byte)Math.Round(Math.Pow(px + (py - px) * s, 2.2) * 255);
-        }
-        return new Rgb(M(a.R, b.R), M(a.G, b.G), M(a.B, b.B));
-    }
 }
 
 public interface IRgbCihaz : IDisposable
