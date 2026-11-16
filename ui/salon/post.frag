@@ -57,7 +57,9 @@ void main() {
 uniform sampler2D uSrc;
 uniform float uLod;
 void main() {
-    vec2 ts = 1.0 / vec2(textureSize(uSrc, int(uLod)));
+    // the source level is the texture's base level here (salon.js mipChain), and textureSize's level counts from the
+    // base: 0 is the level read (int(uLod) gave level 2 l - 2, a footprint 2^(l-1) too wide from level 2 on)
+    vec2 ts = 1.0 / vec2(textureSize(uSrc, 0));
     #define T(x, y) textureLod(uSrc, vUv + ts * vec2(x, y), uLod).rgb
     vec3 a = T(-2, -2), b = T(0, -2), c = T(2, -2), d = T(-2, 0), e = T(0, 0), f = T(2, 0);
     vec3 g = T(-2, 2), h = T(0, 2), i = T(2, 2), j = T(-1, -1), k = T(1, -1), l = T(-1, 1), m = T(1, 1);
@@ -71,7 +73,7 @@ void main() {
 uniform sampler2D uSrc;
 uniform float uLod;
 void main() {
-    vec2 ts = 1.0 / vec2(textureSize(uSrc, int(uLod)));
+    vec2 ts = 1.0 / vec2(textureSize(uSrc, 0));
     #define U(x, y) textureLod(uSrc, vUv + ts * vec2(x, y), uLod).rgb
     vec3 s = U(-1, -1) + 2.0 * U(0, -1) + U(1, -1) + 2.0 * U(-1, 0) + 4.0 * U(0, 0) + 2.0 * U(1, 0) + U(-1, 1) +
              2.0 * U(0, 1) + U(1, 1);
