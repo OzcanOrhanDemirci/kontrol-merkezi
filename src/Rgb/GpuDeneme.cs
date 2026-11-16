@@ -89,7 +89,6 @@ static class GpuDeneme
                     // A/B of the same transition on the card alone: the engine's values as now (linear light), then the
                     // same values sRGB-encoded (in case the card's chip applies its own curve and the dark end steps).
                     var ayar = Ayarlar.Yukle();
-                    ayar.EfektlerKapali = true;
                     kart.YazmaArasiMs = 25;
                     Zamanlayici.Iste();
                     try
@@ -165,7 +164,6 @@ static class GpuDeneme
     static int GecisDokumu()
     {
         var ayar = Ayarlar.Yukle();
-        ayar.EfektlerKapali = true;
         foreach (double hiz in new[] { 30.0, 9.6 })
         {
             var m = new RenkMotoru(ayar) { Acik = true };

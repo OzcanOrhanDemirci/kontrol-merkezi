@@ -18,7 +18,6 @@ window.KM_BENZETIM = function (deliver) {
     bagli: 'bagli',
     cpu: 47.5, gpu: 36.0, yumusak: 41.8,
     sweep: false, sweepT: 0, hold: null,
-    yz: false, cpu: false, jarvis: 'hazir',
     rgb: true,
     kasa: { hedef: 'bios', durum: 'bios', t: 0, n: 0 },
     gpuF: { hedef: 'oto', durum: 'oto', t: 0, n: 0, baska: false },
@@ -26,7 +25,6 @@ window.KM_BENZETIM = function (deliver) {
     cikis: [0, 0, 0], t: 0, onizleme: [0, 0, 0],
     lastDurum: '', lastSent: 0,
   };
-  const JARVIS = ['hazir', 'dusunuyor', 'bekliyor', 'kapali', 'yeniden', 'yok'];
 
   // same engine as the service: OKLCh palette at full brightness, overrides as their own colours, sent as sRGB
   const K = window.KM_RENK;
@@ -45,7 +43,7 @@ window.KM_BENZETIM = function (deliver) {
       isi: {
         cpu: S.yonetici ? +S.cpu.toFixed(1) : null, gpu: +S.gpu.toFixed(1),
         ort: S.yonetici ? +((S.cpu + S.gpu) / 2).toFixed(1) : +S.gpu.toFixed(1),
-        yumusak: +S.yumusak.toFixed(1), cpuYuk: S.cpu ? 100 : 6, gpuYuk: S.yz ? 96 : 2,
+        yumusak: +S.yumusak.toFixed(1), cpuYuk: 6, gpuYuk: 2,
       },
       fan: {
         kasa: {
@@ -65,13 +63,13 @@ window.KM_BENZETIM = function (deliver) {
         },
       },
       rgb: {
-        acik: S.rgb, efektler: { yapayzeka: S.yz, islemci: S.cpu }, jarvis: S.jarvis,
+        acik: S.rgb,
         cihazlar: [
           { kimlik: 'aio', ad: 'Cooler Master Halo 360', bagli: true, hata: null },
           { kimlik: 'klavye', ad: 'SteelSeries Apex 3', bagli: true, hata: null },
           { kimlik: 'gpu', ad: 'MSI RTX 4080 Gaming X Trio', bagli: true, hata: null },
         ],
-        duraklar: DURAKLAR, uyariDerece: 90,
+        duraklar: DURAKLAR,
       },
     };
   }
@@ -95,24 +93,11 @@ window.KM_BENZETIM = function (deliver) {
     const halka = [], klavye = [];
     let on = S.rgb ? 1 : 0;
     for (let i = 0; i < 84; i++) {
-      let k = 1;
-      if (S.jarvis === 'bekliyor') k = 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(S.t * Math.PI * 2 / 3.2));
-      let c = base.map(v => v * k);
-      if (S.jarvis === 'dusunuyor') {
-        const ph = ((i / 84 - S.t * 0.45) % 1 + 1) % 1;
-        const w = Math.exp(-Math.pow(Math.min(ph, 1 - ph) / 0.07, 2));
-        c = c.map(v => v * (0.55 + 0.45 * w) + 255 * 0.35 * w);
-      }
+      const c = base;
       halka.push(c.map(v => Math.round(clamp(v * on, 0, 255))));
     }
     for (let i = 0; i < 10; i++) {
-      let c = base.slice();
-      if (S.jarvis === 'bekliyor') c = c.map(v => v * (0.55 + 0.45 * (0.5 + 0.5 * Math.cos(S.t * Math.PI * 2 / 3.2))));
-      if (S.jarvis === 'dusunuyor') {
-        const ph = ((i / 10 - S.t * 0.45) % 1 + 1) % 1;
-        const w = Math.exp(-Math.pow(Math.min(ph, 1 - ph) / 0.12, 2));
-        c = c.map(v => v * (0.55 + 0.45 * w) + 255 * 0.35 * w);
-      }
+      const c = base;
       klavye.push(c.map(v => Math.round(clamp(v * on, 0, 255))));
     }
     const avg = [0, 1, 2].map(j => Math.round(halka.reduce((s, c) => s + c[j], 0) / 84));
@@ -181,8 +166,6 @@ window.KM_BENZETIM = function (deliver) {
     set(k, v) { S[k] = v; pushDurum(true); },
     temp(c) { S.hold = c; S.sweep = false; S.yumusak = c; pushDurum(true); },
     release() { S.hold = null; },
-    jarvis(j) { S.jarvis = j; pushDurum(true); },
-    efekt(k) { S[k] = !S[k]; pushDurum(true); },
     link(d) { S.bagli = d; send({ tip: 'baglanti', durum: d }); if (d === 'bagli') pushDurum(true); },
     vis(v, f = true) { send({ tip: 'gorunur', visible: v, focused: f }); },
     key(e) {
@@ -190,9 +173,6 @@ window.KM_BENZETIM = function (deliver) {
       const map = {
         r: () => command({ komut: 'rgb', acik: !S.rgb }),
         t: () => { S.sweep = !S.sweep; S.hold = null; },
-        y: () => sim.efekt('yz'),
-        i: () => sim.efekt('cpu'),
-        j: () => sim.jarvis(JARVIS[(JARVIS.indexOf(S.jarvis) + 1) % JARVIS.length]),
         k: () => command({ komut: 'fan-kasa' }),
         g: () => command({ komut: 'fan-gpu' }),
         b: () => { S.gpuF.baska = !S.gpuF.baska; pushDurum(true); },
@@ -207,7 +187,6 @@ window.KM_BENZETIM = function (deliver) {
     },
     help: [
       ['R', 'ışıklar aç / kapat'], ['T', 'sıcaklık taraması'], ['1–6', 'durak sıcaklığına sabitle'], ['0', 'sabitlemeyi bırak'],
-      ['Y', 'yerel model yazıyor'], ['I', 'işlemci yoğun yükte'], ['J', 'Jarvis durumu'],
       ['K', 'kasa fanları'], ['G', 'ekran kartı fanları'], ['B', 'GPU fanları başka programda'], ['A', 'Afterburner fan kontrolü'],
       ['E', 'yönetici izni'], ['D', 'servis bağlantısı'], ['F1', 'bu liste'],
     ],

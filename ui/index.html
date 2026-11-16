@@ -115,10 +115,6 @@ button { font: inherit; color: inherit; background: none; border: 0; outline: no
 .col .sub { margin-top: .6em; letter-spacing: .06em; color: rgb(var(--fg) / .5); line-height: 1.6; white-space: nowrap; }
 .col .sub b { font-weight: 500; color: rgb(var(--fg) / .82); font-variant-numeric: tabular-nums; }
 .col .gap { height: 2.6em; }
-.col .jv { display: flex; align-items: center; gap: .8em; letter-spacing: .1em; color: rgb(var(--fg) / .8); white-space: nowrap; }
-.col .jv i { width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--jc, 140 150 160)); box-shadow: 0 0 12px rgb(var(--jc, 140 150 160) / .8); }
-.col .jv.breathe i { animation: pulse 3.2s ease-in-out infinite; }
-.col .jv.think i { animation: pulse .9s ease-in-out infinite; }
 #devs { text-align: right; }
 #devs .d { display: flex; justify-content: flex-end; align-items: baseline; gap: 1.2em; margin-bottom: .95em; white-space: nowrap; }
 #devs .d .a { letter-spacing: .08em; color: rgb(var(--fg) / .8); }
@@ -192,9 +188,6 @@ body.nogl #fallback { display: grid; }
       <div class="h" id="hMode"></div>
       <div class="line" id="mode"></div>
       <div class="sub" id="modeSub"></div>
-      <div class="gap"></div>
-      <div class="h" id="hJarvis"></div>
-      <div class="jv" id="jarvis"><i></i><span></span></div>
     </div>
     <div class="col" id="devs"><div class="h" id="hDevs"></div><div id="devList"></div></div>
   </section>

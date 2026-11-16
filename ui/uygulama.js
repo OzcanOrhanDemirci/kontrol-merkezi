@@ -244,8 +244,7 @@ function updateLights(dt) {
     L.stopsT = st.map(s => s.c);
     const key = JSON.stringify(st.map(s => [s.c, s.renk]));
     if (key !== L.lutKey) { L.lutKey = key; L.lut = null; }
-    const uy = (D.durum.rgb.uyariDerece || 90) + 2;   // keep the warning limit on the scale
-    scaleMin = Math.floor((st[0].c - 10) / 2) * 2; scaleMax = Math.ceil(Math.max(st[st.length - 1].c + 6, uy) / 2) * 2;
+    scaleMin = Math.floor((st[0].c - 10) / 2) * 2; scaleMax = Math.ceil((st[st.length - 1].c + 6) / 2) * 2;
   } else if (!L.stopsLin.length) {
     L.stopsLin = [[255, 255, 255], [20, 50, 255], [255, 210, 0], [255, 110, 0], [255, 0, 0]].map(linRgb);
   }
@@ -498,7 +497,6 @@ $('#brandSub').textContent = T.brandSub;
 $('#tabFan').textContent = up(T.fan);
 $('#tabRgb').textContent = up(T.rgb);
 $('#hMode').textContent = up('Işığın kaynağı');
-$('#hJarvis').textContent = up('Jarvis');
 $('#hDevs').textContent = up('Aygıtlar');
 $('#nowL').textContent = up('Ortalama');
 
@@ -557,10 +555,6 @@ function renderMod(el, v, focus) {
     (v.note ? `<div class="note">${v.note}</div>` : '');
 }
 
-const JV = {
-  yok: ['Bilgi yok', '120 124 130', ''], dusunuyor: ['Düşünüyor', '150 200 255', 'think'], bekliyor: ['Yanıtını bekliyor', '255 214 150', 'breathe'],
-  hazir: ['Boşta', '150 230 190', ''], kapali: ['Kapalı', '110 110 115', ''], yeniden: ['Yeniden başlıyor', '255 190 120', 'think'],
-};
 function renderRgb() {
   const d = D.durum, linked = D.link === 'bagli';
   const rgb = d && d.rgb, isi = (d && d.isi) || {};
@@ -579,18 +573,9 @@ function renderRgb() {
     modeSub = `işlemci <b>${isi.cpu != null ? fmt1(isi.cpu) + '°' : '—'}</b> · ekran kartı <b>${isi.gpu != null ? fmt1(isi.gpu) + '°' : '—'}</b><br>ortalaması yumuşatılarak renge döner`;
     if (!on) modeSub = 'ışıklar kapalıyken de hesaplanıyor';
     else if (rgb.beklemede) modeSub = `${rgb.beklemeDakika || 15} dakikadır klavye ve fare kullanılmadı;<br>ışıklar yumuşakça söndü`;
-    // the two load effects ride on the temperature colour; the window names them, the colour stays the temperature's
-    const ef = rgb.efektler || {};
-    const efl = [ef.uyari && 'sıcaklık uyarısı', ef.yapayzeka && 'yerel model yanıt yazıyor', ef.islemci && 'işlemci yoğun yükte'].filter(Boolean);
-    if (efl.length && on && !rgb.beklemede) modeSub += '<br>şu an: <b>' + efl.join('</b> · <b>') + '</b>';
   }
   $('#mode').innerHTML = mode;
   $('#modeSub').innerHTML = modeSub;
-  const j = JV[(rgb && rgb.jarvis) || 'yok'] || JV.yok;
-  const jv = $('#jarvis');
-  jv.className = 'jv ' + j[2];
-  jv.style.setProperty('--jc', j[1]);
-  jv.querySelector('span').textContent = up(j[0]);
   const devs = (rgb && rgb.cihazlar) || [];
   $('#devList').innerHTML = devs.map(c => {
     let cls = 'bad', s = 'bağlı değil';
@@ -607,8 +592,7 @@ function renderRgb() {
 // stops along the arc (HTML ticks), rebuilt when the stops change
 let tickKey = '';
 function buildTicks() {
-  const uy = D.durum && D.durum.rgb && D.durum.rgb.uyariDerece;
-  const st = (stops() || L.stopsT.map(c => ({ c }))).filter(s => !s.gizli).concat(uy ? [{ c: uy, ad: 'uyarı: yanıp söner' }] : []);
+  const st = (stops() || L.stopsT.map(c => ({ c }))).filter(s => !s.gizli);
   const key = st.map(s => s.c + (s.ad || '')).join(',');
   if (key === tickKey) return;
   tickKey = key;

@@ -2,7 +2,6 @@
 
     python araclar/gecis.py [from_c] [to_c] [hold_s] [--kart-ara MS]     default 45 -> 64, 40 s at the target
 
---efektler kapali|acik switches all light effects (Jarvis, local model, CPU load) off or on in ayarlar.json first.
 --kart-sabit sets the pause after the card's steady-mode write instead (-1 = the same as --kart-ara).
 --kart-ara sets the pause after each write to the GPU's light controller (ayarlar.json gpuYazmaArasiMs) and reloads
 the settings live first; it stays set afterwards (the stages of Özcan's step-by-step speed-up, 11-16).
@@ -38,10 +37,6 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     ara = None
     efekt = None
-    if "--efektler" in sys.argv:
-        i = sys.argv.index("--efektler")
-        efekt = sys.argv[i + 1] == "kapali"
-        del sys.argv[i:i + 2]
     sabit = None
     if "--kart-sabit" in sys.argv:
         i = sys.argv.index("--kart-sabit")
@@ -63,11 +58,9 @@ def main():
             d["gpuYazmaArasiMs"] = ara
         if sabit is not None:
             d["gpuSabitSonrasiMs"] = sabit
-        if efekt is not None:
-            d.setdefault("efektler", {})["kapali"] = efekt
         json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
         send(f, {"komut": "ayar-yukle"})
-        print(f"kart yazma arası: {d.get('gpuYazmaArasiMs', 30)} ms, sabit sonrası {d.get('gpuSabitSonrasiMs', -1)} ms, efektler {'kapalı' if d.get('efektler', {}).get('kapali') else 'açık'}", flush=True)
+        print(f"kart yazma arası: {d.get('gpuYazmaArasiMs', 30)} ms, sabit sonrası {d.get('gpuSabitSonrasiMs', -1)} ms", flush=True)
     # keep reading: the service drops a client whose messages pile up unread (it broadcasts the lights 30 times a second)
     threading.Thread(target=lambda: [f.read(65536) for _ in iter(int, 1)], daemon=True).start()
     try:

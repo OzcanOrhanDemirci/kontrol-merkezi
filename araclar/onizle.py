@@ -1,6 +1,6 @@
 """Walk the real lights through every colour and state (morning calibration with Özcan watching the case).
 
-    python araclar/onizle.py tur            temperature sweep 44 -> 88 °C, then the two overrides, then the Jarvis states
+    python araclar/onizle.py tur            temperature sweep 44 -> 88 °C
     python araclar/onizle.py sicaklik 64    hold one temperature (Ctrl+C ends; preview is cleared on exit)
     python araclar/onizle.py temizle        clear the preview, back to live values
 
@@ -56,27 +56,6 @@ def main():
             send(f, {"komut": "onizle", "c": c})
             time.sleep(0.6)
         time.sleep(4)
-        for label, extra, secs in [
-            ("ılık (50 °C)", {"c": 50}, 6),
-            ("yerel model yanıt yazıyor, aday 1 (akış)", {"c": 50, "yapayzeka": True, "yzEfekt": 1}, 10),
-            ("yerel model yanıt yazıyor, aday 2 (kıpırtı)", {"c": 50, "yapayzeka": True, "yzEfekt": 2}, 10),
-            ("yerel model yanıt yazıyor, aday 3 (fanlar yanıp söner)", {"c": 50, "yapayzeka": True, "yzEfekt": 3}, 10),
-            ("yerel model yanıt yazıyor, aday 4 (fanlar derin nabız)", {"c": 50, "yapayzeka": True, "yzEfekt": 4}, 10),
-            ("yerel model yanıt yazıyor, aday 5 (klavyede sağdan sola dalga)", {"c": 50, "yapayzeka": True, "yzEfekt": 5}, 10),
-            ("işlemci yoğun yükte, aday 1 (kalp)", {"c": 50, "islemci": True, "islemciEfekt": 1}, 10),
-            ("işlemci yoğun yükte, aday 2 (yük dalgası)", {"c": 50, "islemci": True, "islemciEfekt": 2}, 10),
-            ("geri: yalnız sıcaklık", {"c": 50}, 5),
-            ("sıcaklık uyarısı (90 °C üstü)", {"c": 85, "uyari": True}, 8),
-            ("Jarvis düşünüyor", {"c": 50, "jarvis": "dusunuyor"}, 10),
-            ("Jarvis hazır (bir kez parlar)", {"c": 50, "jarvis": "hazir"}, 5),
-            ("Jarvis yanıtını bekliyor", {"c": 50, "jarvis": "bekliyor"}, 12),
-            ("Jarvis yeniden açılıyor", {"c": 50, "jarvis": "yeniden"}, 8),
-            ("Jarvis kapalı", {"c": 50, "jarvis": "kapali"}, 10),
-            ("Jarvis geri geldi", {"c": 50, "jarvis": "hazir"}, 5),
-        ]:
-            print(label, flush=True)
-            send(f, {"komut": "onizle", **extra})
-            time.sleep(secs)
     except KeyboardInterrupt:
         pass
     finally:

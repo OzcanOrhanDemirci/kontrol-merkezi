@@ -9,13 +9,13 @@ One executable, `KontrolMerkezi.exe` (net48, C#), with modes:
 | Command | Who runs it | What it does |
 |---|---|---|
 | `KontrolMerkezi.exe` | desktop shortcut, unelevated | The window (WebView2 + `ui/index.html`). Holds no hardware. Talks to the service over a named pipe. If the service is not running it starts it through the scheduled task `KontrolMerkezi` (COM, no UAC prompt), like Fan Anahtarı. |
-| `KontrolMerkezi.exe servis` | scheduled task at logon, elevated (Highest) | The background service: owns every device. Fan chip (NCT6687D via PawnIO/LHM), CPU temperature (LHM), GPU temperature/load (NVML), GPU fans (NvAPI cooler control), RGB (USB HID), colour engine, sleep/wake, Jarvis and local-model state. Runs for the whole logon session. Unelevated it still runs, with the admin-only parts reported as unavailable. |
+| `KontrolMerkezi.exe servis` | scheduled task at logon, elevated (Highest) | The background service: owns every device. Fan chip (NCT6687D via PawnIO/LHM), CPU temperature (LHM), GPU temperature/load (NVML), GPU fans (NvAPI cooler control), RGB (USB HID), colour engine, sleep/wake. Runs for the whole logon session. Unelevated it still runs, with the admin-only parts reported as unavailable. |
 | `KontrolMerkezi.exe rgb-dene <cihaz> ...` | developer | Short light tests, one device at a time. |
 | `KontrolMerkezi.exe oku` | developer | Read-only dump of every sensor and device state to `okuma.txt`. |
 
 Only one service instance (mutex `Local\KontrolMerkezi.Servis`), only one window (mutex `Local\KontrolMerkezi.Pencere`).
 
-Data folder: `%LOCALAPPDATA%\KontrolMerkezi\` (log `gunluk.txt`, `durum.json` persisted targets, `isi-gecmisi.csv`, `ayarlar.json` colour calibration, `jarvis.json` written by the hook script). The elevated service runs as the same user, so this is the same folder for both.
+Data folder: `%LOCALAPPDATA%\KontrolMerkezi\` (log `gunluk.txt`, `durum.json` persisted targets, `isi-gecmisi.csv`, `ayarlar.json` colour calibration). The elevated service runs as the same user, so this is the same folder for both.
 
 ## Pipe
 
@@ -39,8 +39,6 @@ Name `\\.\pipe\KontrolMerkezi` (created by the service, DACL: current user + SYS
   },
   "rgb": {
     "acik": false,
-    "efektler": { "yapayzeka": false, "islemci": false },
-    "jarvis": "bekliyor",
     "cihazlar": [
       { "kimlik": "aio", "ad": "Cooler Master Halo 360", "bagli": true, "hata": null },
       { "kimlik": "klavye", "ad": "SteelSeries Apex 3", "bagli": true, "hata": null },
@@ -56,8 +54,6 @@ Values:
 - `fan.kasa.durum`: `max` | `bios` | `geciyor` (switching) | `bilinmiyor`. `fan.gpu.durum`: `max` | `oto` | `geciyor` | `baska` (someone else, e.g. Afterburner, holds manual control) | `bilinmiyor`.
 - `kullanilabilir: false` with a Turkish `neden` (reason) when the button cannot work (no admin, no driver).
 - `rgb.beklemede`: the switch is on but the lights faded out because there was no real mouse/keyboard input for `rgb.beklemeDakika` minutes (injected input does not count); the first input brings them back.
-- `rgb.efektler`: which load effects are playing on the lights: `yapayzeka` (local model generating), `islemci` (CPU under sustained heavy load: 30 s above 80 %). The hue is always the temperature's; these are brightness/motion only.
-- `rgb.jarvis`: `yok` (no info) | `dusunuyor` (thinking) | `bekliyor` (waiting for Özcan's answer) | `hazir` (idle, nothing asked) | `kapali` (closed) | `yeniden` (restarting).
 - `duraklar`: the six temperature colour stops, cold to hot, `c` in °C of the averaged temperature.
 
 ### `isik` (the light the case shows right now, 30 Hz while a window is connected)
@@ -91,7 +87,7 @@ Values:
 { "komut": "rgb", "acik": true }      // all RGB on (temperature colour) / off
 ```
 
-Development only (never sent by the window): `{"komut":"onizle","c":64,"yapayzeka":true,"yzEfekt":1|2,"islemci":true,"islemciEfekt":1|2,"jarvis":"dusunuyor"}` forces values for a preview of the real lights (`{"komut":"onizle"}` clears), `{"komut":"ayar-yukle"}` reloads `ayarlar.json`, `{"komut":"kapat"}` stops the service cleanly (used by the installer).
+Development only (never sent by the window): `{"komut":"onizle","c":64}` holds a temperature for a preview of the real lights (`{"komut":"onizle"}` clears), `{"komut":"ayar-yukle"}` reloads `ayarlar.json`, `{"komut":"kapat"}` stops the service cleanly (used by the installer).
 
 ## Window host <-> page (WebView2, not the service)
 

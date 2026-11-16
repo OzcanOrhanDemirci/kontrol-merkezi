@@ -5,7 +5,7 @@
   python araclar/olc.py durumlar
       the standard set of screenshots of every state
   python araclar/olc.py olc [--sure 30]
-      scripted sequence (tab switch, RGB off/on, fan spin-up, Jarvis effect) with
+      scripted sequence (tab switch, RGB off/on, fan spin-up) with
       GPU time per frame (EXT_disjoint_timer_query_webgl2) and rAF interval distribution,
       plus first-frame time; writes araclar/cikti/olcum.json and prints a summary.
 The page runs its own simulated service outside WebView2; window.__km / __km.sim drive it.
@@ -68,10 +68,7 @@ STATES = [
     ("rgb-koyu-mavi", "__km.sim.temp(54); __km.setTab('rgb', true)", 6),
     ("rgb-sari", "__km.sim.temp(64); __km.setTab('rgb', true)", 6),
     ("rgb-kirmizi", "__km.sim.temp(84); __km.setTab('rgb', true)", 6),
-    ("rgb-pembe-yerel-model", "__km.sim.temp(46); __km.sim.kip('yapayzeka'); __km.setTab('rgb', true)", 6),
     ("rgb-kapali", "__km.sim.temp(46); __km.sim.send({komut:'rgb', acik:false}); __km.setTab('rgb', true)", 6),
-    ("rgb-jarvis-bekliyor", "__km.sim.temp(54); __km.sim.jarvis('bekliyor'); __km.setTab('rgb', true)", 6),
-    ("rgb-jarvis-dusunuyor", "__km.sim.temp(46); __km.sim.jarvis('dusunuyor'); __km.setTab('rgb', true)", 6),
 ]
 
 
@@ -130,12 +127,10 @@ SEQ = """async (sure) => {
   mark('sekme rgb'); k.setTab('rgb', true); await wait(3000);
   mark('rgb kapat'); s.send({komut:'rgb', acik:false}); await wait(2500);
   mark('rgb ac'); s.send({komut:'rgb', acik:true}); await wait(2500);
-  mark('jarvis dusunuyor'); s.jarvis('dusunuyor'); await wait(3000);
-  mark('jarvis bekliyor'); s.jarvis('bekliyor'); await wait(3000);
   mark('sekme fan'); k.setTab('fan', true); await wait(2500);
   mark('fan kasa max'); s.send({komut:'fan-kasa'}); await wait(3000);
   mark('fan gpu max'); s.send({komut:'fan-gpu'}); await wait(3000);
-  mark('sicaklik taramasi'); s.release(); s.S.sweep = true; await wait(Math.max(0, sure * 1000 - 28500));
+  mark('sicaklik taramasi'); s.release(); s.S.sweep = true; await wait(Math.max(0, sure * 1000 - 22500));
   k.onFrame = null;
   return { lt, slow: k.R.slow, iv, marks, gpu: k.R.gpu.slice(g0), first: k.R.firstFrameMs, compile: k.R.compileMs, w: k.R.w, h: k.R.h, spp: k.R.spp, sppDyn: k.R.sppDyn };
 }"""

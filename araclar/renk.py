@@ -2,10 +2,6 @@
 
     python araclar/renk.py goster                       table: each stop, the shared colour and each device's own
     python araclar/renk.py tut 46                       lights on, hold the 46 °C stop
-    python araclar/renk.py efekt yapayzeka 3 [46]       play a load-effect candidate (yapayzeka 1-5, islemci 1|2) over a
-                                                        held temperature (default 46); 'efekt bitir' stops it
-    python araclar/renk.py efekt sec islemci 2          make that candidate the one the app uses
-    python araclar/renk.py efekt uyari [85]             play the over-temperature warning blink (no heat needed)
     python araclar/renk.py kaydir aio 46 -10 0 +20      nudge the AIO's colour for that stop by dR dG dB, apply live
     python araclar/renk.py ayarla aio 46 85 132 255     set it outright, apply live
     python araclar/renk.py sifirla aio 46               back to the shared colour (null)
@@ -115,31 +111,6 @@ def main():
         key = a[1]
         send({"komut": "rgb", "acik": True}, {"komut": "onizle", "c": float(key)})
         print("tutuluyor:", key)
-    elif cmd == "efekt":
-        if a[1] == "bitir":
-            send({"komut": "onizle"})
-            print("efekt önizlemesi bitti")
-        elif a[1] == "uyari":
-            c = float(a[2]) if len(a) > 2 else 85.0
-            send({"komut": "rgb", "acik": True}, {"komut": "onizle", "c": c, "uyari": True})
-            print(f"uyarı oynuyor @ {c} °C (gerçekte ortalama {load().get('uyariDerece', 90)} °C'yi geçince)")
-        elif a[1] == "sec":
-            kind, n = a[2], int(a[3])
-            if not ((kind == "yapayzeka" and 0 <= n <= 5) or (kind == "islemci" and n in (1, 2))):
-                sys.exit("efekt sec yapayzeka 0-5 (0 = yok) | islemci 1|2")
-            d = load()
-            d.setdefault("efektler", {})[kind] = n
-            save(d)
-            print(f"seçildi: {kind} {n}")
-        else:
-            kind, n = a[1], int(a[2])
-            c = float(a[3]) if len(a) > 3 else 46.0
-            if not ((kind == "yapayzeka" and 1 <= n <= 5) or (kind == "islemci" and n in (1, 2))):
-                sys.exit("efekt yapayzeka 1-5 | islemci 1|2 [sıcaklık]")
-            o = {"komut": "onizle", "c": c, "yapayzeka": kind == "yapayzeka", "islemci": kind == "islemci",
-                 "yzEfekt": n if kind == "yapayzeka" else None, "islemciEfekt": n if kind == "islemci" else None}
-            send({"komut": "rgb", "acik": True}, o)
-            print(f"oynuyor: {kind} {n} @ {c} °C (girişi ~3 sn yumuşak)")
     elif cmd == "birak":
         send({"komut": "onizle"})
         print("canlı sıcaklığa dönüldü")

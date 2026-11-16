@@ -9,16 +9,10 @@ Bu bilgisayarın fanlarını ve RGB ışıklarını tek pencereden yöneten masa
 - **RGB:** bütün ışıklar birlikte açılır ya da kapanır. Açıkken renk bilgisayarın sıcaklığını izler (işlemci ve
   ekran kartı sıcaklığının düz ortalaması, yaklaşık 30 saniyeye yayılmış, ani dalgalanmaları izlemez). Boşta ve
   hafif ılınmalarda beyaz (52 °C'ye kadar); ılıyınca koyu mavi (58), arada doğal geçiş olarak açık mavi; sonra sarı
-  (64), turuncu (74), kırmızı (80,5 ve üstü). Geçişler yumuşak, ışık her zaman tam parlaklıkta. Ortalama 90 °C'yi
-  geçerse ışıklar uyarı olarak yanıp söner. Ekran kartının ışığı da bunlara katılır: aynı sıcaklık rengini, öbürleriyle
-  aynı anda gösterir; tek renktir ve kendine ait efekti yoktur.
-  - Renk yalnız sıcaklıktan gelir. Yerel yapay zekâ modeli yanıt yazarken ve işlemci uzun süre (30 sn) yoğun
-    yükteyken renk değişmez; ışığın üstünde sakin birer efekt oynar (parlaklık ve hareket). Hangi efektin
-    oynayacağı `ayarlar.json`'da `efektler` altında seçilir. Yerel model için seçilen "akış": halkalarda ve klavyede
-    yumuşak koyu boşluklar akar.
-  - Jarvis düşünürken her halkada yumuşak bir parıltı döner; senden yanıt beklerken bütün ışıklar yavaşça nefes
-    alır; kapalıyken pompa halkası sönük bir kor gibi durur; yeniden açılırken pompa halkasında beyaz bir nokta döner;
-    geri gelince bir kez parlar.
+  (64), turuncu (74), kırmızı (80,5 ve üstü). Geçişler yumuşak, ışık her zaman tam parlaklıkta. Ekran kartının ışığı da
+  bunlara katılır: aynı sıcaklık rengini öbürleriyle aynı anda gösterir; tek renktir, saniyede ~10 renk adımı alır, o
+  yüzden geçişlerde öbürlerinden biraz daha basamaklı görünebilir.
+  - Efekt yok: ışıklar yalnız sıcaklığın rengini gösterir (16 Kasım'da hepsi gerçek ışıkta denendi ve kaldırıldı).
 - Pencerenin ışığı kasanın ışığıdır: ekrandaki sahne o an kasanın gösterdiği renkle aydınlanır.
 
 Klavye ve fare 15 dakika kullanılmazsa ışıklar yumuşakça söner (arkada çalışan işler sayılmaz); ilk dokunuşta geri

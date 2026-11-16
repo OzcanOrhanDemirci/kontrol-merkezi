@@ -47,19 +47,7 @@ public sealed class Ayarlar
         new Durak { C = 80.5, Renk = new[] { 255, 0, 0 }, Ad = "kırmızı" },
     };
 
-    /// <summary>Average temperature (raw, not the 30 s drift) above which the lights blink as a warning; off 2 °C below.
-    /// Özcan: "Ortalama sıcaklık 90 dereceyi geçerse ışıklar yanıp sönsün, uyarı gibi efekt olarak."</summary>
-    public double UyariDerece = 90;
 
-    /// <summary>Local model generating an answer: rose pink, the one hue family the temperature palette never visits.</summary>
-    /// <summary>Which candidate pattern plays for the two load effects (local model 1-5, CPU 1-2; RenkMotoru.YzFactor/CpuFactor).
-    /// Hue never changes for them: "rengi sadece sıcaklığa bağlayalım" (Özcan 11-16).</summary>
-    // Local model: 1 "akış" on the case and keyboard. Özcan 11-16: first meant for the GPU's own LEDs, but the card
-    // cannot show effects ("efekt değil, sıcaklıkla aynı senkronizede"), so "akış" on the keyboard and fans.
-    public int YapayZekaEfekti = 1, IslemciEfekti = 1;
-
-    /// <summary>All effects off (local model, CPU load, Jarvis): only the temperature colour; the 90 °C warning stays.</summary>
-    public bool EfektlerKapali;
 
     /// <summary>The card lights its stored Steady white whenever it gets power (its on/off switch is never stored, and
     /// Özcan chose 11-16 never to save: "açılışta beyaz olması benim için sorun değil"). At service start and after
@@ -113,14 +101,7 @@ public sealed class Ayarlar
                 if (list.Count >= 2 && list.Zip(list.Skip(1), (p, q) => q.C > p.C).All(v => v)) a.Duraklar = list;
                 else Program.Log("ayarlar: duraklar geçersiz (en az 2, artan sıcaklık), varsayılan kullanılıyor");
             }
-            if (d.TryGetValue("uyariDerece", out var ud)) a.UyariDerece = Convert.ToDouble(ud);
             if (d.TryGetValue("beklemeDakika", out var bd)) a.BeklemeDakika = Math.Max(0, Convert.ToInt32(bd));
-            if (d.TryGetValue("efektler", out var ef) && ef is Dictionary<string, object> efd)
-            {
-                if (efd.TryGetValue("yapayzeka", out var e1)) a.YapayZekaEfekti = Math.Max(0, Math.Min(5, Convert.ToInt32(e1)));
-                if (efd.TryGetValue("islemci", out var e2)) a.IslemciEfekti = Convert.ToInt32(e2) == 2 ? 2 : 1;
-                if (efd.TryGetValue("kapali", out var e4) && e4 is bool e4b) a.EfektlerKapali = e4b;
-            }
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
                 foreach (var kv in kd) a.Kazanc[kv.Key] = Doubles(kv.Value, 3);
             if (d.TryGetValue("cihazRenkleri", out var crs) && crs is Dictionary<string, object> crd)
@@ -162,11 +143,9 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: kapali = true ise hiçbir efekt yok, yalnız sıcaklık rengi (90 °C uyarısı kalır); yerel model (0 = yok, 1-5) ve işlemci yükü (1-2) efektinin adayı. gpuAcilistaKarart: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra onu karartır (RGB açıksa sıcaklık rengine geçirir). gpuYazmaArasiMs: karta her yazmadan sonraki bekleme (ms; 25 = saniyede ~10 renk adımı, kartın aldığı en hızlısı; 20 ve altında renk değişmez); canlı uygulanır. gpuGozeGore: karta göze göre kodlanmış değer gider (geçiş daha az basamaklı). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. Efekt yok: ışıklar yalnız sıcaklığın rengini gösterir. gpuAcilistaKarart: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra onu karartır (RGB açıksa sıcaklık rengine geçirir). gpuYazmaArasiMs: karta her yazmadan sonraki bekleme (ms; 25 = saniyede ~10 renk adımı, kartın aldığı en hızlısı; 20 ve altında renk değişmez); canlı uygulanır. gpuGozeGore: karta göze göre kodlanmış değer gider (geçiş daha az basamaklı). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => { var o = new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }; if (x.Gizli) o["gizli"] = true; return o; }).ToList(),
-                ["uyariDerece"] = UyariDerece,
                 ["beklemeDakika"] = BeklemeDakika,
-                ["efektler"] = new Dictionary<string, object> { ["kapali"] = EfektlerKapali, ["yapayzeka"] = YapayZekaEfekti, ["islemci"] = IslemciEfekti },
                 ["gpuAcilistaKarart"] = GpuAcilistaKarart,
                 ["gpuYazmaArasiMs"] = GpuYazmaArasiMs,
                 ["gpuSabitSonrasiMs"] = GpuSabitSonrasiMs,
