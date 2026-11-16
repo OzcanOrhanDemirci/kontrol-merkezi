@@ -28,20 +28,19 @@ void addVolume(Scene& s, const char* name, float3 lo, float3 hi, float cell) {
     s.vols.push_back(v);
 }
 
-// the journey: a smooth line from fanlar's eye to rgb's eye, rising over the landing's railing first. In the middle of
-// the first half it leaves the aisle through a gap of the inner row (x = 8) into the lane between the rows at x = 8 and
-// 22, runs down the lane and comes back through the next gap but one by the hall's middle: the view opens diagonally
-// across the forest of columns instead of down one corridor (11-16, for grandeur); the second half runs straight down
-// the aisle with the monument centred and growing (from the lane the inner row hid its opening). The inner columns span
-// z +-3.5 m about -60, -80, ...; the crossings of x 6..10 lie inside the gaps (z -83.5..-96.5 and -123.5..-136.5);
-// geo_onizle.py checks clearance.
+// the journey: a smooth line from fanlar's eye to rgb's eye, rising over the landing's railing first. In the first half
+// it leaves the aisle through a gap of the inner row (x = 8) into the lane between the rows at x = 8 and 22 and runs
+// down it through the middle of the hall: the rows open up diagonally and the hall's width is felt (11-16, for grandeur:
+// back in the aisle the view read as a corridor again). By the column line z = -160 it crosses back through the gap
+// z -163.5..-176.5, where the camera's look (ui/uygulama.js) swings onto the arch, revealed between the columns; the
+// last ~50 m run down the aisle with the monument centred and growing. geo_onizle.py checks clearance.
 std::vector<float3> journey(const View& a, const View& b) {
     const std::vector<float3> ctl = {a.eye,
                                      {0.0f, 5.35f, -4.2f}, {0.0f, 6.05f, -6.0f}, {0.0f, 6.6f, -10.0f}, {0.0f, 7.0f, -25.0f},
                                      {0.0f, 7.2f, -44.0f}, {0.0f, 7.6f, -66.0f}, {2.0f, 8.0f, -82.0f}, {8.0f, 8.4f, -90.0f},
-                                     {14.0f, 8.8f, -98.0f}, {15.0f, 9.0f, -110.0f}, {14.0f, 8.8f, -122.0f},
-                                     {8.0f, 8.4f, -130.0f}, {2.0f, 8.0f, -138.0f}, {0.0f, 7.6f, -150.0f},
-                                     {0.0f, 7.2f, -175.0f}, {0.0f, 5.6f, -200.0f}, {0.0f, 4.0f, -211.0f}, {0.0f, b.eye.y + 0.25f, -217.5f}, b.eye};
+                                     {14.0f, 8.8f, -98.0f}, {15.0f, 9.0f, -112.0f}, {15.0f, 9.2f, -132.0f},
+                                     {15.0f, 9.1f, -150.0f}, {13.6f, 8.6f, -162.0f}, {8.0f, 7.6f, -170.0f},
+                                     {2.6f, 6.7f, -177.0f}, {0.0f, 6.0f, -190.0f}, {0.0f, 4.8f, -205.0f}, {0.0f, 3.6f, -214.5f}, b.eye};
     // Catmull-Rom (centripetal enough at these spacings), sampled finely, then resampled every ~2 m of arc
     std::vector<float3> fine;
     const int n = int(ctl.size());

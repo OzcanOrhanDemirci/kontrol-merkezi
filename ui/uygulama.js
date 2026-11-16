@@ -89,9 +89,9 @@ function buildJourney(views) {
       const eye = at(s);
       const d0 = norm(sub(f0.hedef, eye)), d1 = norm(sub(f1.hedef, eye));
       const ahead = norm(sub(add(at(s + 32), [0, 0.6, 0]), eye));
-      // from the middle on the monument draws the eye: the look settles on the arch while still in the lane (the
-      // columns pass in front of it), not on the path's turn back into the aisle
-      const u = s / total, onArch = smooth((u - 0.46) / 0.18);
+      // through the middle the lane's view across the rows (the hall's width); as the path crosses back through a gap
+      // of the inner row the look swings onto the arch, revealed between the columns, and stays on it, growing
+      const u = s / total, onArch = smooth((u - 0.6) / 0.16);
       const w0 = 1 - smooth(s / 45), w1 = Math.max(onArch, smooth((s - (total - 70)) / 70));
       let dir = add(add(mul(d0, w0 * (1 - w1)), mul(d1, w1)), mul(ahead, Math.max(0, 1 - w0 - w1)));
       if (s >= total - 1e-3) dir = d1;

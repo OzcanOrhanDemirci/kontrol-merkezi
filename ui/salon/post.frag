@@ -140,7 +140,7 @@ vec2 heatShift(vec2 uv, float dist) {
     float rise = uTime * (0.35 + 0.9 * uHeat);
     vec2 w = vec2(sin(p.x * 0.9 + p.y * 1.7 - rise * 2.1) + 0.6 * sin(p.x * 2.3 - p.y * 2.9 - rise * 3.3),
                   sin(p.y * 1.3 - rise * 1.7 + p.x * 0.4) + 0.5 * sin(p.y * 3.1 + p.x * 1.9 - rise * 2.7));
-    float px = (0.4 + 2.6 * uHeat) * uHeat * share;   // display pixels
+    float px = (0.3 + 1.0 * uHeat) * uHeat * share;   // display pixels: at most ~2, heat in the air, not a bent picture
     return w * px / vec2(textureSize(uScene, 0)) * 2.0;   // the scene is supersampled (~2x the display)
 }
 void main() {
