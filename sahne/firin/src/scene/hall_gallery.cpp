@@ -122,13 +122,12 @@ void shaft(Hall& h) {
         const int nMain = 11;
         for (int q = 0; q <= nMain; ++q) {
             const float c = -hi + 2 * hi * q / nMain;
-            h.bar(v3(c, gy + 0.075f, -31 - hi), v3(c, gy + 0.075f, -31 + hi), 0.012f, 0.15f, v3(0, 1, 0), M_PASLI);
-            h.bar(v3(-hi, gy + 0.075f, -31 + c), v3(hi, gy + 0.075f, -31 + c), 0.012f, 0.15f, v3(0, 1, 0), M_PASLI);
+            // heavy box-section bars (200 mm wide, 300 mm deep): about half the opening stays open, so the beam in the
+            // haze and the pool on the floor carry the grid as strong stripes (thin flats edge-on to the light cast
+            // shadows of a few centimetres: the beam came out a uniform slab)
+            h.bar(v3(c, gy + 0.15f, -31 - hi), v3(c, gy + 0.15f, -31 + hi), 0.20f, 0.30f, v3(0, 1, 0), M_PASLI);
+            h.bar(v3(-hi, gy + 0.15f, -31 + c), v3(hi, gy + 0.15f, -31 + c), 0.20f, 0.30f, v3(0, 1, 0), M_PASLI);
             if (q == nMain) break;
-            for (int l = 1; l < 4; ++l) {
-                const float cl = c + 2 * hi / nMain * l / 4;
-                h.bar(v3(-hi, gy + 0.12f, -31 + cl), v3(hi, gy + 0.12f, -31 + cl), 0.006f, 0.06f, v3(0, 1, 0), M_PASLI);
-            }
         }
         h.packCharts(vm, cm, 0.05f);
     }
@@ -146,9 +145,16 @@ void shaft(Hall& h) {
     e.u = v3(5, 0, 0);
     e.v = v3(0, 0, 5);
     e.n = v3(0, -std::cos(tilt), -std::sin(tilt));
-    e.L = kKuyuL;
+    e.L = kKuyuEmitL;
     e.lobe = kKuyuLobe;
     h.s.lights.push_back(e);
+    // and the sky's diffuse light through the same opening (same group): it fills the well and spills wide into the
+    // gallery, so the walls, the fans and their boards are seen in the shaft's light and not only the pool under it
+    Emitter d = e;
+    d.n = v3(0, -1, 0);
+    d.L = kKuyuSkyL;
+    d.lobe = 2.0f;
+    h.s.lights.push_back(d);
 }
 
 void landing(Hall& h) {

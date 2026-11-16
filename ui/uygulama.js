@@ -126,11 +126,14 @@ function drift(pose) {
 function exposureAt(s) {
   if (!journey) return 0;
   const u = s / journey.total;
-  return lerp(0, 0.6, smooth(u / 0.5)) - lerp(0, 1.4, smooth((u - 0.6) / 0.4));
+  return lerp(0, 1.6, smooth(u / 0.45)) - lerp(0, 2.4, smooth((u - 0.55) / 0.45));
 }
 
 // ==================================================================== state -> world
 const NEUTRAL_LAMP = [1.0, 0.78, 0.52];
+// each light group's intensity against its baked white (the bake's units are each group's own); #k0=..&k1=..&k2=..
+// overrides them for tuning
+const GK = [30, 3, 6].map((d, i) => (params.has('k' + i) ? +params.get('k' + i) : d));
 function stops() { return (D.durum && D.durum.rgb && D.durum.rgb.duraklar && D.durum.rgb.duraklar.length >= 2) ? D.durum.rgb.duraklar : null; }
 const linked = () => D.link === 'bagli';
 const rgbOn = () => !!(linked() && D.durum && D.durum.rgb && D.durum.rgb.acik);
@@ -151,9 +154,9 @@ function updateLights(dt) {
   // the shaft and the arch fall to a faint ember of the temperature colour, the service lamps keep the silhouettes
   M.lit = approach(M.lit == null ? 1 : M.lit, rgbOn() || !linked() ? 1 : 0, dt, rgbOn() ? 0.5 : 1.4);
   if (!S) return;
-  S.setGroup(0, M.col.temp, strike * conn * close * lerp(0.07, 1, M.lit));
-  S.setGroup(1, add(M.col.arch, mul(M.col.temp, 0.06)), archIn * conn * close);
-  S.setGroup(2, NEUTRAL_LAMP, smooth((it - 0.1) / 0.5) * close * lerp(0.7, 1, M.lit));
+  S.setGroup(0, M.col.temp, GK[0] * strike * conn * close * lerp(0.07, 1, M.lit));
+  S.setGroup(1, add(M.col.arch, mul(M.col.temp, 0.06)), GK[1] * archIn * conn * close);
+  S.setGroup(2, NEUTRAL_LAMP, GK[2] * smooth((it - 0.1) / 0.5) * close * lerp(0.7, 1, M.lit));
 }
 
 // rotors: the giant fans turn at a share of the real fans' speed, with the inertia of their size
@@ -183,12 +186,15 @@ function stepLevers(dt) {
     kol_gpu: (M.down === 'fan_gpu' ? 0.25 : 0) + (fan && fan.gpu && fan.gpu.durum === 'max' ? 1 : 0),
     kol_rgb: (M.down === 'anahtar_rgb' ? 0.25 : 0) + (rgbOn() ? 1 : 0),
   };
+  const n = Math.max(1, Math.ceil(dt * 240)), h = dt / n;   // explicit steps are unstable above ~1/60 s at this stiffness
   for (const k of Object.keys(want)) {
     const target = clamp(want[k], 0, 1);
     const kk = 160, c = 2 * Math.sqrt(kk) * 0.8;
-    M.leverV[k] += (kk * (target - M.lever[k]) - c * M.leverV[k]) * dt;
-    M.lever[k] += M.leverV[k] * dt;
-    if (S) S.setLever(k, -M.lever[k] * 1.05);
+    for (let i = 0; i < n; i++) {
+      M.leverV[k] += (kk * (target - M.lever[k]) - c * M.leverV[k]) * h;
+      M.lever[k] += M.leverV[k] * h;
+    }
+    if (S) S.setLever(k, M.lever[k] * 1.05);   // positive about the hinge's x: the handle comes out of the wall
   }
 }
 
@@ -203,46 +209,49 @@ function putLevha(name, data, opts) {
   S.setLevha(name, KM_LEVHA.draw(name, data), opts || {});
 }
 const RPM_AD = ad => ad === 'CPU_FAN' ? 'İşlemci' : ad === 'PUMP_FAN' ? 'Pompa' : (/^SYS_FAN(\d+)$/.exec(ad) ? 'Kasa ' + /^SYS_FAN(\d+)$/.exec(ad)[1] : ad);
+// the data shapes are levha.js' (documented at its top); a state the service did not report is never shown
+const BOARD_STATE = { max: 'en_yuksek', bios: 'bios', oto: 'kart', geciyor: 'geciyor', baska: 'baska' };
 function fanBoard(i) {
   const fan = D.durum && D.durum.fan ? (i ? D.durum.fan.gpu : D.durum.fan.kasa) : null;
   const isi = (D.durum && D.durum.isi) || {};
-  const v = { durum: 'yok', satirlar: [], ipucu: '', hover: M.hover === (i ? 'fan_gpu' : 'fan_kasa'), kullanilabilir: true, neden: '' };
-  if (!linked() || !fan) { v.durum = 'yok'; v.kullanilabilir = false; v.neden = D.link === 'baslatiliyor' ? 'SERVİS BAŞLATILIYOR' : 'SERVİSE BAĞLI DEĞİL'; return v; }
-  const busy = fan.durum === 'geciyor' || M.pend[i ? 'gpu' : 'kasa'] > 0;
-  v.durum = busy ? 'geciyor' : fan.durum;           // max | bios | oto | baska | bilinmiyor | geciyor
-  if (!i) {
-    v.satirlar.push(['İşlemci ısısı', isi.cpu != null ? fmt1(isi.cpu) + ' °C' : '—']);
-    (fan.rpm || []).forEach(r => v.satirlar.push([RPM_AD(r.ad), fmtN(r.rpm) + ' dev/dk']));
-  } else {
-    v.satirlar.push(['Kart ısısı', isi.gpu != null ? fmt1(isi.gpu) + ' °C' : '—']);
-    (fan.rpm || []).forEach((r, k) => v.satirlar.push(['Fan ' + (k + 1), r > 0 ? fmtN(r) + ' dev/dk' : 'duruyor']));
-    if (fan.yuzde != null) v.satirlar.push(['Fan gücü', '%' + fmtN(fan.yuzde)]);
+  const v = { durum: 'bilgi_yok', hover: M.hover === (i ? 'fan_gpu' : 'fan_kasa') };
+  if (!linked() || !fan) {
+    v.kullanilabilir = false;
+    v.neden = D.link === 'baslatiliyor' ? 'SERVİS BAŞLATILIYOR' : 'SERVİSE BAĞLI DEĞİL';
+    return v;
   }
-  if (fan.kullanilabilir === false) { v.kullanilabilir = false; v.neden = fan.neden || 'Bu kol şu an çalışamıyor'; }
-  else if (!busy) v.ipucu = fan.durum === 'max' ? (i ? 'KOLU ÇEK · KARTA BIRAK' : "KOLU ÇEK · BIOS'A BIRAK") : 'KOLU ÇEK · EN YÜKSEK HIZA AL';
+  const busy = fan.durum === 'geciyor' || M.pend[i ? 'gpu' : 'kasa'] > 0;
+  v.durum = busy ? 'geciyor' : (BOARD_STATE[fan.durum] || 'bilgi_yok');
+  v.sicaklik = i ? (isi.gpu != null ? isi.gpu : null) : (isi.cpu != null ? isi.cpu : null);
+  if (!i) v.fanlar = (fan.rpm || []).map(r => ({ ad: RPM_AD(r.ad), rpm: r.rpm }));
+  else {
+    v.fanlar = (fan.rpm || []).map((r, k) => ({ ad: 'Fan ' + (k + 1), rpm: r }));
+    v.yuzde = fan.yuzde != null ? fan.yuzde : null;
+  }
+  if (fan.kullanilabilir === false) { v.kullanilabilir = false; v.neden = fan.neden || 'BU KOL ŞU AN ÇALIŞAMIYOR'; }
   return v;
 }
 function warning(i) {
   const d = D.durum;
-  if (!linked()) return { metin: D.link === 'baslatiliyor' ? 'SERVİS BAŞLATILIYOR' : 'SERVİSE BAĞLI DEĞİL', tur: 'uyari' };
-  if (!d || !d.fan) return { metin: '', tur: 'bos' };
+  if (!linked()) return { uyari: 'baglanti' };
+  if (!d || !d.fan) return { uyari: '' };
   const f = i ? d.fan.gpu : d.fan.kasa;
-  if (d.servis && d.servis.yonetici === false && f && f.kullanilabilir === false) return { metin: 'SERVİS YÖNETİCİ İZNİ OLMADAN ÇALIŞIYOR', tur: 'uyari' };
+  if (d.servis && d.servis.yonetici === false && f && f.kullanilabilir === false) return { uyari: 'yetki' };
   if (i && f) {
     const ab = f.afterburner || {};
-    if (ab.fanKontrolu) return { metin: "AFTERBURNER'IN FAN KONTROLÜ AÇIK · BU KOLLA ÇAKIŞIR", tur: 'uyari' };
-    if (f.durum === 'baska') return { metin: 'FANLARI BAŞKA BİR PROGRAM YÖNETİYOR', tur: 'uyari' };
+    if (ab.fanKontrolu) return { uyari: 'afterburner' };
+    if (f.durum === 'baska') return { uyari: 'baska' };
   }
-  return { metin: '', tur: 'bos' };
+  return { uyari: '' };
 }
 function deviceState(c) {
-  if (!c) return { durum: 'yok', metin: 'BAĞLI DEĞİL' };
-  if (c.kilitli) return { durum: 'kilitli', metin: 'KİLİTLİ' };
-  if (c.hata) return { durum: 'hata', metin: c.hata };
-  if (c.bagli) return { durum: 'bagli', metin: 'BAĞLI' };
-  return { durum: 'yok', metin: 'BAĞLI DEĞİL' };
+  if (!c) return { durum: 'bagli_degil' };
+  if (c.kilitli) return { durum: 'kilitli' };
+  if (c.hata) return { durum: 'hata', hata: String(c.hata) };
+  if (c.bagli) return { durum: 'bagli' };
+  return { durum: 'bagli_degil' };
 }
-const toSrgb = c => window.KM_RENK.toSrgb(c);
+const round1 = x => (x == null ? null : Math.round(x * 10) / 10);
 function updateTexts() {
   const d = D.durum, isi = (d && d.isi) || {}, rgb = d && d.rgb;
   putLevha('pano_kasa', fanBoard(0), { emissive: 1 });
@@ -251,19 +260,23 @@ function updateTexts() {
   putLevha('uyari_gpu', warning(1));
   putLevha('boya_kasa', {});
   putLevha('boya_gpu', {});
-  putLevha('tabela_rgb', { hover: M.hover === 'git_rgb' });
-  putLevha('tabela_fanlar', { hover: M.hover === 'git_fanlar' });
-  putLevha('cikis_1', { hover: M.hover === 'cikis_1' }, { emissive: 1 });
-  putLevha('cikis_2', { hover: M.hover === 'cikis_2' }, { emissive: 1 });
+  putLevha('tabela_rgb', {});
+  putLevha('tabela_fanlar', {});
+  putLevha('cikis_1', {}, { emissive: 1 });
+  putLevha('cikis_2', {}, { emissive: 1 });
   const on = rgbOn(), idle = !!(rgb && rgb.beklemede && on);
+  // the colour is passed rounded (a redraw costs 15-35 ms; the smoothed colour must not redraw every frame)
+  const tc = M.col.temp.map(c => Math.round(c * 64) / 64);
   putLevha('kilit_tasi_ekran', {
-    ort: linked() && (isi.yumusak != null || isi.ort != null) ? Math.round(M.temp * 10) / 10 : null,
-    cpu: isi.cpu != null ? Math.round(isi.cpu * 10) / 10 : null, gpu: isi.gpu != null ? Math.round(isi.gpu * 10) / 10 : null,
-    renk: toSrgb(M.col.temp), kapali: !on,
+    ortalama: linked() && (isi.yumusak != null || isi.ort != null) ? round1(M.temp) : null,
+    cpu: round1(isi.cpu), gpu: round1(isi.gpu), renk: tc, kapali: !on,
   }, { emissive: on ? 1.6 : 0.7 });
-  putLevha('plaka_rgb', { acik: on, beklemede: idle, bagli: linked(), hover: M.hover === 'anahtar_rgb' });
-  const st = stops() || [];
-  st.filter(s => !s.gizli).forEach((s, i) => putLevha('durak_plaka_' + i, { c: s.c, ad: s.ad || '' }));
+  putLevha('plaka_rgb', { acik: linked() && rgb ? on : null, bosta: idle, hover: M.hover === 'anahtar_rgb' });
+  const st = (stops() || []).filter(s => !s.gizli);
+  const cur = st.reduce((k, s, i) => (M.temp >= s.c ? i : k), -1);
+  st.forEach((s, i) => putLevha('durak_plaka_' + i, {
+    derece: s.c, ad: s.ad || '', renk: window.KM_RENK.full(window.KM_RENK.fromSrgb(s.renk)), secili: i === cur,
+  }));
   const devs = (rgb && rgb.cihazlar) || [];
   [['aio', 'cihaz_aio'], ['klavye', 'cihaz_klavye'], ['gpu', 'cihaz_gpu']].forEach(([k, n]) => putLevha(n, deviceState(devs.find(c => c.kimlik === k))));
 }
@@ -385,7 +398,11 @@ window.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   sound.init(); sound.resume();
   const n = hitAt(e.clientX, e.clientY);
-  if (n) { e.preventDefault(); canvas.setPointerCapture(e.pointerId); pressDown(n); return; }
+  if (n) {
+    e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+    if (n === 'fan_kasa') M.focus = 0; else if (n === 'fan_gpu') M.focus = 1; else if (n === 'anahtar_rgb') M.focus = 2;
+    pressDown(n); return;
+  }
   if (e.detail < 2) send('drag');
 });
 window.addEventListener('pointerup', e => {

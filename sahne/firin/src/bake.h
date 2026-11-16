@@ -17,7 +17,7 @@ struct BakeOptions {
     int bounces = 8;
     float clamp = 0.0f;        // the indirect light's firefly clamp (one path's luminance); 0: from the brightest surface
     float texelScale = 1.0f;   // multiplies texelFor (a quick preview bakes coarser)
-    int atlasWidth = 8192;
+    int atlasWidth = 4096;     // pages of 4096 x up to 4096 (one page's file: <= 600 MB raw for 3 groups)
     int pages = 0;             // 0: as many as needed
     bool filter = true;        // the edge-keeping filter inside each chart
     bool compress = true;      // the pack's binaries as zlib streams (<name>.bin.z), docs/SALON.md "The pack"

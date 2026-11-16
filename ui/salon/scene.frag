@@ -89,8 +89,9 @@ void main() {
     if (A.z >= 0.0) s.rough = A.z;
     if (A.w >= 0.0) s.metal = A.w;
     vec3 emit = vec3(0.0);
-    if (uDraw.x > 0.5) {           // the live texture: uv0 runs 0..1 over the face, v up; the canvas' top row is v = 1
-        vec4 ink = texture(uLevha, vec2(vUv.x, 1.0 - vUv.y));
+    if (uDraw.x > 0.5) {           // the live texture: uv0 runs 0..1 over the face, u right, v down (canvas order, as the
+                                   // builder writes it; the canvas is uploaded unflipped, its top row at v = 0)
+        vec4 ink = texture(uLevha, vUv);
         if (uDraw.y > 0.0) emit += ink.rgb * ink.a * uDraw.y;
         else {
             s.albedo = mix(s.albedo, ink.rgb, ink.a);

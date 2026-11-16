@@ -48,6 +48,9 @@ void floorPlane(Hall& h) {
         }
     for (int s : {-1, 1})   // the strips between the channels and the walls
         h.patch(v3(s * kChanOut, 0, kZ0), v3(s * kW, 0, kZ0), v3(s * kChanOut, 0, kZ1), v3(s * kW, 0, kZ1), v3(0, 1, 0), M_ZEMIN, 6.0f);
+    // one chart needs one coordinate system: every patch's uv ran from its own corner, so 31 patches shared the same
+    // light map texels (review 1, B3); world planar metres instead (the texture is continuous across patches too)
+    for (size_t i = vm; i < h.s.mesh.v.size(); ++i) h.s.mesh.v[i].uv = make_float2(h.s.mesh.v[i].p.x, -h.s.mesh.v[i].p.z);
     h.oneChart(vm, cm);
 }
 
@@ -284,6 +287,30 @@ void doorsAndLamps(Hall& h) {
         h.box(v3(x - 0.125f, 1.05f, zd), v3(0.025f, 1.05f, 0.5f), 0.008f, M_PASLI, 0.5f);
         h.rod(v3(x - 0.17f, 0.95f, zd - 0.38f), v3(x - 0.17f, 1.15f, zd - 0.38f), 0.016f, M_KOYU);
         h.cagedLamp(v3(x, 4.6f, zd), v3(-1, 0, 0), kBulbBoard);
+    }
+    // uplights at the foot of every inner-row column, on the aisle side (group 2, warm, dim): G-Cans' pillars are lit
+    // from their bases, so down the hall each column stands in its own pool of light with the haze between them, the
+    // columns fading one by one into the distance
+    for (float x : kRowX) {
+        if (std::fabs(x) > 10.0f) continue;
+        const float sx = x > 0 ? -1.0f : 1.0f;           // towards the aisle
+        const float tilt = 12.0f * kPi / 180.0f;
+        const float3 n = v3(-sx * std::sin(tilt), std::cos(tilt), 0);   // up, leaning onto the column's face
+        for (float z = kColZ0; z >= kColZ1 - 1e-3f; z -= kColStep) {
+            const float3 base = v3(x + sx * 1.9f, 0.0f, z);
+            h.box(base + v3(0, 0.07f, 0), v3(0.24f, 0.07f, 0.34f), 0.012f, M_KOYU, 0.5f);
+            h.at(axes(base + v3(0, 0.141f, 0), v3(0, 0, 1), v3(1, 0, 0), v3(0, 1, 0)), M_CAM_LAMBA, 1.0f).quad(0.5f, 0.3f);
+            Emitter e;
+            e.type = Emitter::RECT;
+            e.group = GROUP_LAMBA;
+            e.c = base + v3(0, 0.143f, 0);
+            e.u = v3(0, 0, 0.25f);
+            e.v = v3(0.15f, 0, 0);
+            e.n = n;
+            e.L = kColUpL;
+            e.lobe = 14.0f;
+            h.s.lights.push_back(e);
+        }
     }
     // the sparse row along both walls, every 40 m, mid-bay (dim: smaller bulbs)
     for (int s : {-1, 1})

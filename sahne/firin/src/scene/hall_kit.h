@@ -26,9 +26,18 @@ constexpr float kPi = 3.14159265358979f;
 // ---- the emitters' radiance (white, in each group's own units; the window scales every group live). Tune here.
 // One value per emissive material, so a surface seen directly glows exactly as bright as the emitter that lights.
 constexpr float kKuyuL = 1.0f;       // group 0: the shaft's daylight at the well's top
-constexpr float kKuyuLobe = 6.0f;    //   its collimation (cos^lobe about the slanted normal)
+constexpr float kKuyuLobe = 8000.0f; //   its collimation (cos^lobe about the slanted normal): half intensity at ~0.75 deg,
+                                     //   so the grate's bars (0.89 m) stay crisp beams down to the floor 21 m below
+// the emitter's radiance so its total light equals a lobe-6 emitter of radiance kKuyuL (the intensity integral is 2pi/(lobe+1))
+constexpr float kKuyuEmitL = kKuyuL * (kKuyuLobe + 1.0f) / 7.0f;
+// the diffuse sky through the same opening (lobe 2): twice the beam's flux, kKuyuL * 2 * (2 + 1) / 7
+constexpr float kKuyuSkyL = kKuyuL * 6.0f / 7.0f;
 constexpr float kKuyuTilt = 10.0f;   //   the beam's slant towards -z (degrees)
 constexpr float kKemerL = 2.0f;      // group 1: the arch's light chamber and the strips in its reveal
+constexpr float kKemerFloodL = 2600.0f; // group 1: each plinth floodlight's radiance (lobe 24, a 0.9 x 0.36 m slot):
+                                        //   four of them together about 40 % of the chamber's flux, washing the face
+constexpr float kFanFloodL = 300.0f;  // group 2: each fan floodlight (a 0.5 x 0.36 m glass, lobe 10)
+constexpr float kColUpL = 120.0f;    // group 2: each column uplight (a 0.5 x 0.3 m glass, lobe 14), dimmer than the fans'
 constexpr float kLambaL = 8.0f;      // group 2: the caged service lamps' bulbs and the lit door frame
 constexpr float kBulbBoard = 0.085f; //   bulb radius by the boards, the console, the doors (m)
 constexpr float kBulbHall = 0.055f;  //   bulb radius of the sparse row along the hall's walls: dimmer by the area

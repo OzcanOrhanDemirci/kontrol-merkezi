@@ -148,6 +148,11 @@ Atlas buildAtlas(Scene& s, const BakeOptions& o, std::vector<int>& chartPage) {
         shelf = std::max(shelf, c.h);
     }
     a.pages = order.empty() ? 0 : page + 1;
+    // pages as tall as their tallest use (a texture array's layers share one size): an atlas that fills a fraction of a
+    // page must not be stored, decompressed and uploaded as a whole page (8192 x 8192 x 3 groups was 2.4 GB)
+    int usedH = 0;
+    for (int i : order) usedH = std::max(usedH, a.charts[i].y + a.charts[i].h);
+    a.height = std::max(4, (usedH + 3) / 4 * 4);
     if (o.pages > 0 && a.pages > o.pages)
         throw std::runtime_error("atlas: " + std::to_string(a.pages) + " pages, more than the " + std::to_string(o.pages) + " allowed");
 
@@ -163,6 +168,8 @@ Atlas buildAtlas(Scene& s, const BakeOptions& o, std::vector<int>& chartPage) {
 
 Raster rasterise(const Scene& s, const Atlas& a, const std::vector<int>& chartPage, int page) {
     Raster r;
+    size_t overlaps = 0;
+    uint32_t firstOverlap = 0;
     const Mesh& m = s.mesh;
     r.index.assign(size_t(a.width) * a.height, -1);
     std::vector<float> slack(r.index.size(), FLT_MAX);   // how far outside its triangle a texel's centre was
@@ -212,11 +219,20 @@ Raster rasterise(const Scene& s, const Atlas& a, const std::vector<int>& chartPa
                     r.index[ai] = int32_t(r.texels.size());
                     r.texels.push_back(t);
                 } else {
+                    // two triangles of one chart both holding a texel's centre at different places in the world: the
+                    // chart's coordinates overlap (one texel cannot hold two lights; review 1, B3, the floor)
+                    const Texel& o = r.texels[size_t(r.index[ai])];
+                    if (out <= 0.0f && slack[ai] <= 0.0f && o.chart == t.chart && length(o.p - t.p) > 4.0f * std::max(footprint, 1e-4f)) {
+                        if (!overlaps++) firstOverlap = t.chart;
+                    }
                     r.texels[size_t(r.index[ai])] = t;
                 }
                 slack[ai] = out;
             }
     }
+    if (overlaps)
+        std::fprintf(stderr, "atlas: WARNING page %d: %zu texels claimed by two places of one chart (first: chart %u); its "
+                             "coordinates overlap\n", page, overlaps, firstOverlap);
     return r;
 }
 

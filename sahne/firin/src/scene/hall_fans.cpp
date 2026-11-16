@@ -362,6 +362,27 @@ void fan(Hall& h, const FanSpec& f) {
             1.0f, M_BOYA);
 
     // the click box: the fan, its board and lever
+    // two floor floodlights before the recess (group 2, the fixed warm light): they light the fan from below, so the
+    // machine reads in the dark gallery and its blades catch a warm light against the shaft's temperature colour
+    for (int q = -1; q <= 1; q += 2) {
+        const float3 base = P(q * 4.6f, -8.5f, 2.2f);
+        const float3 aim = normalize(P(q * 1.2f, 0.5f, 0.4f) - base);
+        const Xform L = facing(base + v3(0, 0.45f, 0), aim);
+        h.box(base + v3(0, 0.05f, 0), v3(0.32f, 0.05f, 0.32f), 0.01f, M_KOYU, 0.5f);           // the foot
+        h.rod(base + v3(0, 0.1f, 0), base + v3(0, 0.36f, 0), 0.035f, M_KOYU);                  // the post
+        h.at(L * Xform::at(v3(0, 0, -0.14f)), M_KOYU, 0.5f).roundedBox(v3(0.3f, 0.22f, 0.13f), 0.02f);   // the housing
+        h.at(L * Xform::at(v3(0, 0, 0.001f)), M_CAM_LAMBA, 1.0f).quad(0.5f, 0.36f);           // its glass
+        Emitter e;
+        e.type = Emitter::RECT;
+        e.group = GROUP_LAMBA;
+        e.c = L.point(v3(0, 0, 0.002f));
+        e.u = L.x * 0.25f;
+        e.v = L.y * 0.18f;
+        e.n = L.z;
+        e.L = kFanFloodL;
+        e.lobe = 10.0f;
+        h.s.lights.push_back(e);
+    }
     h.anchorBox(std::string("fan_") + f.tag, "tik", v3(std::min(side * 14.6f, side * 7.9f), 0.0f, -38.0f),
                 v3(std::max(side * 14.6f, side * 7.9f), 15.7f, -16.8f));
 }

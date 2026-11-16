@@ -30,26 +30,33 @@ def main():
     ap.add_argument('--out', default=os.path.join(ROOT, '.tmp', 'kareler'))
     ap.add_argument('--u', default='0,0.5,1')
     ap.add_argument('--olcek', default='2')
-    ap.add_argument('--paket', default='/sahne/paket/')
+    ap.add_argument('--paket', default='sahne/paket')
     ap.add_argument('--w', type=int, default=2560)
     ap.add_argument('--h', type=int, default=1440)
     ap.add_argument('--ek', default='', help='extra hash parameters, e.g. ev=0.5')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    handler = functools.partial(Quiet, directory=ROOT)
-    httpd = socketserver.ThreadingTCPServer(('127.0.0.1', 0), handler)
-    port = httpd.server_address[1]
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, os.path.join(ROOT, 'sahne', 'araclar'))
+    import salon_test                      # its server maps /sahne/ to the pack, as the window host does
+    httpd, port = salon_test.serve(Path(ROOT, a.paket.strip('/')).resolve())
     with sync_playwright() as p:
         b = p.chromium.launch(channel='msedge', headless=True,
                               args=['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-webgpu'])
         pg = b.new_page(viewport={'width': a.w, 'height': a.h}, device_scale_factor=1)
         logs = []
-        pg.on('console', lambda m: logs.append(m.type + ': ' + m.text))
+        pg.on('console', lambda m: print('  [sayfa] ' + m.type + ': ' + m.text[:300], flush=True))
+        pg.on('response', lambda r: r.status >= 400 and print('  [404] ' + r.url, flush=True))
+        pg.on('requestfailed', lambda r: print('  [istek basarisiz] ' + r.url + ' ' + str(r.failure), flush=True))
+        pg.on('pageerror', lambda e: print('  [sayfa hatasi] ' + str(e)[:300], flush=True))
         for u in a.u.split(','):
-            url = f'http://127.0.0.1:{port}/ui/index.html#paket={a.paket}&olcek={a.olcek}&still={u}' + ('&' + a.ek if a.ek else '')
+            url = f'http://127.0.0.1:{port}/ui/index.html#paket=/sahne/&olcek={a.olcek}&still={u}' + ('&' + a.ek if a.ek else '')
             pg.goto(url)
-            pg.wait_for_function('window.__km && window.__km.S && window.__km.S.ready', timeout=600000)
+            pg.wait_for_function("window.__km && ((window.__km.S && window.__km.S.ready) || document.body.classList.contains('nogl'))", timeout=600000)
+            if pg.evaluate("document.body.classList.contains('nogl')"):
+                print('yuklenemedi:', pg.evaluate("document.getElementById('fallback').textContent"))
+                break
             stats = pg.evaluate(f'(async () => {{ const s = await window.__km.still({u}); await new Promise(r => requestAnimationFrame(r));'
                                 f' const t = await window.__km.still({u}); return t || s; }})()')
             name = os.path.join(a.out, f'kare_u{u}')
@@ -57,8 +64,6 @@ def main():
             im = Image.open(name + '.png').convert('RGB')
             im.resize((1600, round(1600 * im.height / im.width)), Image.LANCZOS).save(name + '.jpg', quality=92)
             print(u, json.dumps(stats))
-        for l in logs[-30:]:
-            print(l)
         b.close()
     httpd.shutdown()
 

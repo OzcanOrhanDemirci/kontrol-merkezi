@@ -275,7 +275,8 @@ and checks the journey's clearance. It is the builder's check, not the product.
 ### What the renderer assumes of the pack
 
 - uv0 is GL-style, v up (the renderer does not flip images; the normal map's green follows +v). A levha face's uv0
-  runs 0..1 with v = 1 at its top edge, u to the right as seen from the front.
+  runs 0..1 in canvas order: u to the right as seen from the front, v = 0 at its top edge (the builder's convention,
+  `hall_kit.h`; the live canvas is uploaded unflipped).
 - A levha-flagged material may be shared by many faces: the renderer gives each triangle to the smallest `levha` or
   `nokta` anchor box holding its centre. So every sign, board, display and lamp lens needs an anchor box around its
   face (lamp lenses: a `nokta` anchor named as `setLamp` will call it), and boxes of different faces must not overlap.

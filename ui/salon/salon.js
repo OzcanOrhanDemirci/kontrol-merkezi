@@ -473,7 +473,7 @@ async function create(canvas, options = {}) {
   mats.forEach((m, i) => {
     const k = texKey(m);
     matUBO.set([m.uvOlcek || 1, k ? layerOf.get(k) : -1, m.puruz != null ? m.puruz : -1, m.metal != null ? m.metal : -1], i * 4);
-    matUBO.set([...(m.renk || [1, 1, 1]), m.emitScale || 0], 256 + i * 4);
+    matUBO.set([...(m.renk || [1, 1, 1]), m.isima != null ? m.isima : (m.emitScale || 0)], 256 + i * 4);   // sahne.json: isima = emitScale
     const fl = (flagOf(m, 'wet') ? 1 : 0) | (flagOf(m, 'levha') ? 2 : 0);
     const eg = flagOf(m, 'emissive') && m.grup != null ? m.grup : -1;
     matUBO.set([eg, fl, 0, 0], 512 + i * 4);

@@ -303,6 +303,26 @@ void console(Hall& h) {
     }
 }
 
+// floodlights sunk in the plinth before the face (group 1): they wash the monument upwards in the temperature colour,
+// so arriving the arch itself is lit, not only its opening; a housing of dark steel, a glass slot that glows
+void floods(Hall& h) {
+    const float z = kFace + 5.0f, tilt = 14.0f * kPi / 180.0f;
+    for (float x : {-11.0f, -5.2f, 5.2f, 11.0f}) {
+        h.box(v3(x, kBase + 0.06f, z), v3(0.55f, 0.06f, 0.28f), 0.012f, M_KOYU, 0.5f);
+        h.at(axes(v3(x, kBase + 0.121f, z), v3(1, 0, 0), v3(0, 0, -1), v3(0, 1, 0)), M_KEMER_ISIK, 1.0f).quad(0.9f, 0.36f);
+        Emitter e;
+        e.type = Emitter::RECT;
+        e.group = GROUP_KEMER;
+        e.c = v3(x, kBase + 0.122f, z);
+        e.u = v3(0.45f, 0, 0);
+        e.v = v3(0, 0, 0.18f);
+        e.n = v3(0, std::cos(tilt), -std::sin(tilt));
+        e.L = kKemerFloodL;
+        e.lobe = 24.0f;
+        h.s.lights.push_back(e);
+    }
+}
+
 void doors(Hall& h) {
     // service doors in both pylons; the exit sign over the right one, a lamp over the left one
     for (int s = -1; s <= 1; s += 2) {
@@ -327,6 +347,7 @@ void buildArch(Hall& h) {
     chamber(h);
     displayAndStops(h);
     console(h);
+    floods(h);
     doors(h);
 }
 
