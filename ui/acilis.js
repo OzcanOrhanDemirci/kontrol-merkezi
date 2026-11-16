@@ -47,8 +47,8 @@ window.KM_ACILIS = Object.freeze({
   },
   end() {
     if (over) return;
+    raise();                                      // before over: a picture still decoding must not keep the canvas hidden
     over = true;
-    raise();
     setSlit(1, 0.2);
     el.classList.add('bitti');
     const done = () => { if (el.isConnected) { el.remove(); if (host) host.postMessage('acilis-bitti'); } };
