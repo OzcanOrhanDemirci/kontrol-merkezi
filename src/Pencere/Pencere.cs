@@ -76,8 +76,9 @@ static class PencereUygulamasi
         // the first frame. A normal (not maximized) borderless window exactly the monitor's size: Windows then treats
         // it as a fullscreen app and the taskbar steps back while it is in front. Double-click toggles to the window
         // (80 % of the work area, resizable, draggable) and back; Win+Up from either is Windows' maximize.
-        bool _full, _switching;
-        Rectangle _windowed;
+        bool _full, _switching, _restoring;
+        Rectangle _windowed, _normalBounds;  // the window, and the last normal (not minimized or maximized) bounds
+        FormWindowState _lastState = FormWindowState.Normal;
         Bitmap _opening;                    // the loading screen's picture, painted before the page and served to it
 
         public PencereForm()
@@ -93,22 +94,42 @@ static class PencereUygulamasi
             _windowed = new Rectangle(wa.Left + (wa.Width - w) / 2, wa.Top + (wa.Height - h) / 2, w, h);
             MinimumSize = new Size(Math.Min(900, w), Math.Min(560, h));
             _full = true;
-            Bounds = screen.Bounds;
+            Bounds = _normalBounds = screen.Bounds;
             _opening = Acilis.Resim(screen.Bounds.Width, screen.Bounds.Height);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             Load += OnLoadAsync;
             Activated += (_, _) => PostVis();
             Deactivate += (_, _) => PostVis();
             Resize += (_, _) => { FollowState(); PostVis(); };
+            Move += (_, _) => FollowState();
         }
 
         /// <summary>Keeps the fullscreen flag, the resize margin and the corners true to what Windows did (minimize,
         /// Win+Up, a snap).</summary>
         void FollowState()
         {
-            if (_switching || !IsHandleCreated) return;
-            if (_full && WindowState == FormWindowState.Maximized) _full = false;
-            if (_full && WindowState == FormWindowState.Normal && Bounds != Screen.FromHandle(Handle).Bounds) _full = false;
+            if (_switching || _restoring || !IsHandleCreated) return;
+            var st = WindowState;
+            if (st == FormWindowState.Normal && _lastState == FormWindowState.Minimized)
+            {
+                // Restored from the taskbar, WinForms puts a frameless WS_THICKFRAME window back 7 px larger on every
+                // side (11-17: 2574 x 1454 instead of the monitor's 2560 x 1440): back to exactly what it was
+                _lastState = st;
+                _restoring = true;
+                var b = _normalBounds;
+                BeginInvoke((Action)(() =>
+                {
+                    _switching = true;
+                    try { if (WindowState == FormWindowState.Normal) Bounds = b; }
+                    finally { _switching = false; _restoring = false; }
+                    ApplyChrome();
+                }));
+                return;
+            }
+            _lastState = st;
+            if (_full && st == FormWindowState.Maximized) _full = false;
+            if (_full && st == FormWindowState.Normal && Bounds != Screen.FromHandle(Handle).Bounds) _full = false;
+            if (st == FormWindowState.Normal) _normalBounds = Bounds;
             ApplyChrome();
         }
 
@@ -151,6 +172,8 @@ static class PencereUygulamasi
                 }
             }
             finally { _switching = false; }
+            _lastState = WindowState;
+            _normalBounds = Bounds;
         }
 
         protected override void OnPaintBackground(PaintEventArgs e) => PaintOpening(e.Graphics, ClientRectangle, Point.Empty);
@@ -233,6 +256,8 @@ static class PencereUygulamasi
             base.OnHandleCreated(e);
             int on = 1;
             DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
+            // no zoom-in animation on opening: during it the windows behind showed at the picture's edges (11-17)
+            DwmSetWindowAttribute(Handle, 3, ref on, sizeof(int));     // DWMWA_TRANSITIONS_FORCEDISABLED
             ApplyChrome();
         }
 
