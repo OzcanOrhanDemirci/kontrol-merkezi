@@ -18,7 +18,7 @@ digital display in the arch). Two places, the camera travels between them:
   temperature colour, a silhouette through the haze.
 - **RGB** (arrival): clicking the RGB sign flies the camera ~250 m through the hall: from the dim entrance into the
   darker middle (dark from distance, never pitch black), the light growing as we approach. Arriving, the arch is centred
-  and fills the screen, bright; the temperature reads on a digital display in its keystone.
+  and fills the screen, bright; the temperature reads on a digital display in its lintel.
 
 The scene is still. Only the camera moves (slow steady drift at rest, the journey between the places), the fan rotors
 turn by their real state, the haze moves with the fans' strength, and light colours follow the temperature.
@@ -44,7 +44,7 @@ Layout (first version; the builder owns the exact numbers and writes them into t
 | Gallery portal | the gallery's far end z = -44 opens into the hall through a portal 24 m wide, 20 m tall with a two-step frame standing out of the hall's front wall (the gallery is a frame within the frame). |
 | Hall | x ∈ [-30, 30], y ∈ [0, 26], z ∈ [-275, -44]. Drainage channels along both walls (\|x\| 27.6..28.2), pilasters (1.6 × 1 m) at the column lines carrying the beams, a catwalk on the left wall at y = 12 with a caged ladder at its start, a door with a lit frame off the catwalk at z = -150, pipe runs. |
 | Columns | 2 m (x) × 7 m (z) × floor to ceiling, a flared foot (3.1 × 8.1 m at the floor) and a haunch at the top, rows at x = ±8 and ±22, every 20 m from z = -60 to -220 (36 columns), ending ~35 m before the arch to leave it a plaza. The aisle x ∈ [-7, 7] is free: the camera flies through it. Cross beams (1.2 × 2 m) over the column lines z = -60 .. -240, lighter beams (1 × 1.2 m) along the rows. |
-| Arch | monument: face z = -256 on a plinth (top y = 1.2, steps), 26 m wide, 24 m tall (to y = 25.2), 10.6 m deep; opening 14 m wide, 18 m tall (half-round, springing y = 12.2, crown 19.2), the reveal 4.3 m deep; the light chamber behind it (x ±8.6, to y = 20.6, back wall z = -266); keystone display (4.0 × 1.6 m) at y = 22.65. End wall z = -275. |
+| Arch | a hydraulic monument in raw cast concrete (`hall_arch.cpp`, its massing in constants at the top): two piers x ±7..±20, front z = -255, floor to ceiling (y = 32), in pours of 3.2 m from the sill (a construction joint each); the plinth (top y = 1.2, two steps from z = -247). The opening x ±7, y 1.2..20.4, 8 m deep (to z = -263), closed by a riveted steel sluice gate (skin at z = -260.4, girders every 2.2 m towards +z, end posts, side rollers on rails on the jambs, 0.27 m light gaps at its sides) raised to 40 % (lower edge y = 8.88, top 28.7). Above: the lintel (y 20.4..25.2, face z = -256) with the display (8 × 2 m at y = 22.7) in a recessed housing; the hoist bay (y 25.2..32, back wall z = -261.6) with the gate's top, two girders and two winches, a railing on the lintel. The stop lamps in a row on the piers at y = 23.6 (x ±9.8, ±13.2, ±16.6), their plates (2 × 1 m) below; service doors at x ±17; the console before the steps (front z = -240.6, plates 2 × 0.5 m at y ≈ 1.8). Behind the gate the chamber (`chamberInterior`): x ±12, y 1.2..26, back wall z = -293, four receding concrete frames, the heat core at z = -288 (rings r 3.95 round a glowing heart 3.4 m square, y 2.6..16.4, on a concrete drum, a steel portal with a winch). End wall z = -275, open over the chamber (x ±12, y 0..26). |
 
 Views (the builder writes them; the renderer interpolates):
 - `fanlar`: eye (0, 4.65, -3.0), looking at (0, 7.5, -60), vertical FOV 50°.
@@ -59,7 +59,7 @@ Light is baked per group, in white. Live colour of group g is `C_g · k_g` (line
 | id | name | sources | live colour |
 |---|---|---|---|
 | 0 | `kuyu` | the ceiling shaft's emitter (a horizontal rectangle at the well's top whose normal slants 10° towards -z, lobe 6) | the temperature colour (`isik.onizleme`, the colour the case shows or would show), always; intensity animates in the opening |
-| 1 | `kemer` | the arch: the light chamber behind its opening, emissive strips in the arch | the temperature colour when RGB is on (`isik.cikis`); when off, a faint ember of the temperature colour (the arch is the RGB) |
+| 1 | `kemer` | the arch: the heat core's heart behind the gate (`cekirdek_isik`, four RECT emitters on its faces), the one light of the place; four dim floodlights in the plinth fill the piers' faces | the temperature colour when RGB is on (`isik.cikis`); when off, a faint ember of the temperature colour (the arch is the RGB) |
 | 2 | `lamba` | small fixed service lamps (caged wall lamps, the board lamps) | fixed warm white, constant |
 
 **RGB off** (Özcan, 11-16: "silüet karanlığı yani zifiri değil estetik karanlık [...] kapalı olmasının getirdiği bir
@@ -252,7 +252,7 @@ helpers (`scene/hall_kit.h`: formwork faces with seams and tie holes, lofted con
 links, caged lamps, levha faces, anchors). One file per place: `hall_gallery.cpp`, `hall_fans.cpp`, `hall_nave.cpp`,
 `hall_arch.cpp`, `hall_signs.cpp`; `hall.cpp` adds the views, the journey and the volumes. The emitters' radiance is one
 table at the top of `hall_kit.h`, one value per emissive material so a surface seen directly glows as bright as the
-emitter that lights (`kuyu_isik` 1.0, `kemer_isik` 2.0, `cam_lamba` 8.0; the dim lamps along the hall's walls have smaller
+emitter that lights (`kuyu_isik` 1.0, `cekirdek_isik` 8.0, `kemer_isik` 2.0 (the floods' glass), `cam_lamba` 8.0; the dim lamps along the hall's walls have smaller
 bulbs).
 
 Formwork seams (12 mm deep rounded grooves on 1.2 × 2.4 m panels) are geometry on the gallery's walls, ceiling and well,
@@ -260,11 +260,11 @@ and on the inner rows' aisle faces within ~60 m of the gallery, where the tie ho
 panel) are geometry too; everywhere else they are the textures' matter (small regular grooves far away would shimmer).
 
 What is built: 2.46 M static triangles in 5.5 k light map charts. The gallery 0.13 M, the fans 0.38 M (bell-mouths,
-grilles, motors), the hall 1.56 M (the six tie-hole faces 0.8 M of it), the arch 0.22 M, the hanging signs 0.17 M (their
-chains); the rotors 37 k and 43 k triangles, the levers 3 k each. Anchors (40): `fan_kasa`, `fan_gpu`, `git_rgb`,
-`git_fanlar`, `cikis_1`, `cikis_2`, `anahtar_rgb` (tik); `boya_*`, `pano_*`, `uyari_*`, `tabela_rgb`, `tabela_fanlar`,
+grilles, motors), the hall 1.56 M (the six tie-hole faces 0.8 M of it), the arch 0.53 M (the chamber and core 0.19 M of it), the hanging signs 0.17 M (their
+chains); the rotors 37 k and 43 k triangles, the levers 3 k each. Anchors (42): `fan_kasa`, `fan_gpu`, `git_rgb`,
+`git_fanlar`, `cikis_1`, `cikis_2_tik`, `anahtar_rgb` (tik); `boya_*`, `pano_*`, `uyari_*`, `tabela_rgb`, `tabela_fanlar`,
 `cikis_1`, `cikis_2`, `kilit_tasi_ekran`, `durak_plaka_0..5`, `plaka_rgb`, `cihaz_aio|klavye|gpu` (levha); `kol_kasa`,
-`kol_gpu`, `kol_rgb`, `durak_0..5` (cold to hot from lower left to lower right), `lamba_aio|klavye|gpu` (nokta).
+`kol_gpu`, `kol_rgb`, `durak_0..5` (cold to hot from left to right), `cekirdek` (the heart), `kemer_agiz` (the opening's air), `lamba_aio|klavye|gpu` (nokta).
 Volumes: `salon` 0.5 m (122 × 69 × 563 cells), `kuyu` 0.15 m (70 × 224 × 117; 0.1 m was 6.1 M cells, ~290 MB), `fan_kasa`, `fan_gpu` 0.2 m
 (63 × 66 × 70 each), `kemer` 0.25 m (120 × 104 × 92).
 
@@ -333,8 +333,8 @@ The texts the app shows today all exist in the world:
   (İŞLEMCİ · KASA, EKRAN KARTI);
 - the warnings: no admin (a plate with an amber lamp by the boards), Afterburner's fan control (a plate on the GPU board);
   service not connected (the boards' lamps out, a plate "SERVİSE BAĞLI DEĞİL");
-- RGB at the arch: the keystone display (average temperature), the stops of the colour scale as lamps around the arch's
-  inner rim with their degrees, the on/off control (a great switch at the arch's base with its plate), the three devices'
+- RGB at the arch: the lintel's display (average temperature), the stops of the colour scale as a row of lamps across the piers
+  with their degrees, the on/off control (a great lever on the console before the arch, with its plate), the three devices'
   indicator lamps with their names;
 - navigation: a hanging steel sign at the gallery's portal "RGB" pointing into the hall; at the arch a sign back
   "FANLAR"; an illuminated exit sign that closes the window; the window drag zone is the top strip (invisible).
