@@ -399,6 +399,10 @@ against geo.bin's triangles (all but `noOcclude`; rotors as solid discs) in a un
 (~0.5 s, ~87 MB) 8 s after the scene is ready: a vertical capsule r 0.3 m from 0.42 to 1.95 m over the feet, the ground
 found by a sphere (r 0.28) cast down, steps up to 0.42 m (the plinth's are 0.4), eye 1.7 m, falls to 50 m/s. Hooks for
 the void: `shift(dx, dy, dz)`, `onStep`, `setFloor`, `onFall`. Check: `araclar/salon_yuruyus.py`.
+The walker's eye adapts to the frame's own log-average luminance L (`s.meter()`, every 4th frame): EV = exposureAt(s) +
+clamp(0.4 · (REF(s) − log2 L), −2.5, +1), clamped to [−3.5, 2.2], s the nearest journey point, REF the journey frame's
+own log2 L (a table in `ui/yuruyus.js`, re-measured with `salon_yuruyus.py --yalniz olcum` after a bake); towards
+light in 0.3 s, towards the dark in 1.2 s; it starts from the journey's exposure and blends back to it on leaving.
 
 The texts the app shows today all exist in the world:
 - each fan: the panel of its desk on the landing, in three ranks: the state first, a window lit in its colour

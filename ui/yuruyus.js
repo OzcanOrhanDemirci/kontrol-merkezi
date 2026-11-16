@@ -39,6 +39,20 @@ const C = {
   PREFETCH_S: 8,     // the collision loads this long after the scene is ready (or at the first Y)
   CELL: 1.0,         // grid cell (m)
 };
+// The eye (walk mode's exposure). The renderer measures each frame's log-average luminance before exposure, L (the
+// whole screen). The reference is the journey: REF is log2 L of the journey's own frame at u = i / (n - 1) (measured
+// by araclar/salon_yuruyus.py olcum; re-measure after a bake). At the walker's nearest journey point s the eye wants
+//   EV = exposureAt(s) + clamp(K * (REF(s) - log2 L), -DOWN, +UP),   then clamped to [MIN, MAX],
+// so where the journey's frame is, walking looks as the journey does, and a frame brighter or darker than that one is
+// made up by K of the difference (partial adaptation: dark places stay dark, the core does not go white), towards
+// light in UP_TAU, towards the dark in DOWN_TAU. A single global fit EV = A - K log2 L missed the journey's own
+// exposure by 0.6 EV rms (1.1 EV at the arch, which the journey holds darker than its brightness asks).
+const EYE = {
+  K: 0.4, UP: 1.0, DOWN: 2.5, MIN: -3.5, MAX: 2.2, UP_TAU: 0.3, DOWN_TAU: 1.2,
+  REF: [-5.96, -4.85, -4.55, -4.46, -4.19, -3.91, -5.18, -7.01, -7.41, -6.67, -7.64, -7.76, -6.94, -7.00, -7.75, -7.49,
+        -6.34, -7.25, -7.55, -6.95, -6.12, -6.93, -7.10, -6.16, -6.26, -6.95, -6.89, -5.85, -6.52, -6.76, -6.36, -5.65,
+        -6.48, -6.54, -5.76, -5.82, -6.14, -5.70, -4.50, -5.34, -5.31],
+};
 
 // ==================================================================== the collision build (Worker or main thread)
 // Self-contained (it is stringified into the Worker): geo.bin -> positions, indices, a uniform grid of triangle ids.
@@ -560,11 +574,39 @@ function create(o) {
     return Math.min(J.total, bi * jStep);
   }
   let walkS = 0;
+  // ---------------------------------------------------------------- the eye
+  let ev = null, evJ = 0, evFrom = 0, metered = null;
+  const meterOn = on => { if (S() && S().setMeter) S().setMeter(on); };   // measured only while walking
+  function refAt(s) {                      // log2 L of the journey's frame at arc length s (linear between samples)
+    const R = EYE.REF, f = Math.max(0, Math.min(1, s / o.journey().total)) * (R.length - 1), i = Math.min(R.length - 2, Math.floor(f));
+    return R[i] + (R[i + 1] - R[i]) * (f - i);
+  }
+  function eyeTarget(L) {
+    const d = EYE.K * (refAt(walkS) - Math.log2(Math.max(1e-6, L)));
+    const t = o.exposureAt(walkS) + Math.max(-EYE.DOWN, Math.min(EYE.UP, d));
+    return Math.max(EYE.MIN, Math.min(EYE.MAX, t));
+  }
+  function adapt(dt) {
+    const m = S() && S().meter ? S().meter() : null;
+    if (m && m.logAvg > 0) metered = m;
+    if (!metered || ev === null) return;
+    const t = eyeTarget(metered.logAvg);
+    // towards light (a lower EV) fast, towards the dark slowly
+    ev += (t - ev) * (1 - Math.exp(-dt / (t < ev ? EYE.UP_TAU : EYE.DOWN_TAU)));
+  }
+  function exposure(j) {
+    evJ = j;
+    if (active) { if (ev === null) ev = j; return ev; }
+    if (exitT >= 0 && ev !== null) return evFrom + (j - evFrom) * smooth(exitT / C.EXIT_S);
+    if (ev !== null) { ev = null; metered = null; meterOn(false); }
+    return j;
+  }
 
   // ---------------------------------------------------------------- enter, leave
   function enter(cur, opts = {}) {
     if (active) return;
     active = true; paused = false; exitT = -1;
+    meterOn(true);
     camEye[0] = cur.eye[0]; camEye[1] = cur.eye[1]; camEye[2] = cur.eye[2];
     const d = cur.dir, dl = Math.hypot(d[0], d[1], d[2]) || 1;
     B.yaw = Math.atan2(d[0] / dl, -d[2] / dl); B.pitch = Math.asin(Math.max(-1, Math.min(1, d[1] / dl)));
@@ -582,6 +624,7 @@ function create(o) {
     exitFrom.eye[0] = pose.eye[0]; exitFrom.eye[1] = pose.eye[1]; exitFrom.eye[2] = pose.eye[2];
     exitFrom.dir[0] = pose.dir[0]; exitFrom.dir[1] = pose.dir[1]; exitFrom.dir[2] = pose.dir[2]; exitFrom.fov = pose.fov;
     exitT = 0; escGrace = performance.now() + 500;
+    evFrom = ev === null ? evJ : ev;
     keys.w = keys.a = keys.s = keys.d = keys.shift = 0;
     if (downName) { o.pressUp(downName, false); downName = null; }
     setHover(null);
@@ -624,6 +667,7 @@ function create(o) {
     }
     const t0 = performance.now();
     if (G && !paused && !pendingPlace) physics(Math.min(dt, 0.1));
+    adapt(Math.min(dt, 0.1));
     const cp = Math.cos(B.pitch);
     pose.dir[0] = Math.sin(B.yaw) * cp; pose.dir[1] = Math.sin(B.pitch); pose.dir[2] = -Math.cos(B.yaw) * cp;
     if (pendingPlace) { pose.eye[0] = camEye[0]; pose.eye[1] = camEye[1]; pose.eye[2] = camEye[2]; }
@@ -716,6 +760,8 @@ function create(o) {
     get ready() { return !!G; },
     camera,
     s: fallback => (active ? walkS : fallback),
+    exposure,
+    eye: () => ({ ev, metered, target: metered ? eyeTarget(metered.logAvg) : null, config: EYE }),
     enter: (opts) => enter(last, opts),
     leave,
     load,
@@ -740,6 +786,8 @@ function create(o) {
       look(yaw, pitch) { B.yaw = yaw; B.pitch = pitch; },
       put(x, foot, z, vy = 0) { B.x = x; B.foot = foot; B.baseF = foot; B.z = z; B.vx = B.vz = 0; B.vy = vy; B.grounded = false; B.eyeLag = 0; enterOff.fill(0); },
       groundAt: (x, z, top = 100, bot = -100) => groundCast(x, z, top, bot),
+      journeyEv: u => o.exposureAt(u * o.journey().total),
+      setEye(e) { Object.assign(EYE, e); },
       resetTiming() { timingN = 0; contactsMax = 0; timeSum = 0; },
     },
   };

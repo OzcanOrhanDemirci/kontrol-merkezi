@@ -29,6 +29,9 @@ s.setHover(tikName | null)      // lifts the levha/lamp faces whose anchors sit 
 s.render(dt, shutterSeconds)    // one frame; dt advances the haze's clock
 s.pick(xCss, yCss)              // name of the nearest "tik" box under the point, or null
 s.project(p)                    // world -> CSS pixels {x, y, z}
+s.setMeter(on, every = 4)       // the frame's brightness for eye adaptation: bloom level 0 (scene + haze, before exposure)
+                                // halved by linear blits to <= 64 texels wide, read through a ring of 3 PBOs + fences
+s.meter()                       // { logAvg, mean, max, frame, readMs } a frame or two late, or null
 s.resize()                      // after the canvas' CSS size changes (render() also checks)
 s.stats()                       // { gpuMs (last measured frame), passes (median of 30 frames), volumesMs, cpuMs,
                                 //   memoryMB, textures, triangles, compileMs, size, scene, quality }
