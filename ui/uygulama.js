@@ -182,8 +182,8 @@ function stepRotors(dt) {
 function stepLevers(dt) {
   const fan = D.durum && D.durum.fan;
   const want = {
-    kol_kasa: (M.down === 'fan_kasa' ? 0.25 : 0) + (fan && fan.kasa && fan.kasa.durum === 'max' ? 1 : 0),
-    kol_gpu: (M.down === 'fan_gpu' ? 0.25 : 0) + (fan && fan.gpu && fan.gpu.durum === 'max' ? 1 : 0),
+    kol_kasa: (M.down === 'fan_kasa' || M.down === 'masa_kasa' ? 0.25 : 0) + (fan && fan.kasa && fan.kasa.durum === 'max' ? 1 : 0),
+    kol_gpu: (M.down === 'fan_gpu' || M.down === 'masa_gpu' ? 0.25 : 0) + (fan && fan.gpu && fan.gpu.durum === 'max' ? 1 : 0),
     kol_rgb: (M.down === 'anahtar_rgb' ? 0.25 : 0) + (rgbOn() ? 1 : 0),
   };
   const n = Math.max(1, Math.ceil(dt * 240)), h = dt / n;   // explicit steps are unstable above ~1/60 s at this stiffness
@@ -214,7 +214,7 @@ const BOARD_STATE = { max: 'en_yuksek', bios: 'bios', oto: 'kart', geciyor: 'gec
 function fanBoard(i) {
   const fan = D.durum && D.durum.fan ? (i ? D.durum.fan.gpu : D.durum.fan.kasa) : null;
   const isi = (D.durum && D.durum.isi) || {};
-  const v = { durum: 'bilgi_yok', hover: M.hover === (i ? 'fan_gpu' : 'fan_kasa') };
+  const v = { durum: 'bilgi_yok', hover: i ? (M.hover === 'fan_gpu' || M.hover === 'masa_gpu') : (M.hover === 'fan_kasa' || M.hover === 'masa_kasa') };
   if (!linked() || !fan) {
     v.kullanilabilir = false;
     v.neden = D.link === 'baslatiliyor' ? 'SERVİS BAŞLATILIYOR' : 'SERVİSE BAĞLI DEĞİL';
@@ -343,6 +343,9 @@ function onMessage(m) {
 const ACTIONS = {
   fan_kasa: { at: 'fanlar', press: () => { M.pend.kasa = M.t; send({ komut: 'fan-kasa' }); }, can: () => canFan(0) },
   fan_gpu: { at: 'fanlar', press: () => { M.pend.gpu = M.t; send({ komut: 'fan-gpu' }); }, can: () => canFan(1) },
+  // the desks on the landing carry the same levers
+  masa_kasa: { at: 'fanlar', press: () => { M.pend.kasa = M.t; send({ komut: 'fan-kasa' }); }, can: () => canFan(0) },
+  masa_gpu: { at: 'fanlar', press: () => { M.pend.gpu = M.t; send({ komut: 'fan-gpu' }); }, can: () => canFan(1) },
   anahtar_rgb: { at: 'rgb', press: () => { M.pend.rgb = M.t; send({ komut: 'rgb', acik: !rgbOn() }); }, can: () => linked() && !!D.durum },
   git_rgb: { at: 'any', press: () => go('rgb'), can: () => true, quiet: true },
   git_fanlar: { at: 'any', press: () => go('fanlar'), can: () => true, quiet: true },
@@ -400,7 +403,7 @@ window.addEventListener('pointerdown', e => {
   const n = hitAt(e.clientX, e.clientY);
   if (n) {
     e.preventDefault(); canvas.setPointerCapture(e.pointerId);
-    if (n === 'fan_kasa') M.focus = 0; else if (n === 'fan_gpu') M.focus = 1; else if (n === 'anahtar_rgb') M.focus = 2;
+    if (n === 'fan_kasa' || n === 'masa_kasa') M.focus = 0; else if (n === 'fan_gpu' || n === 'masa_gpu') M.focus = 1; else if (n === 'anahtar_rgb') M.focus = 2;
     pressDown(n); return;
   }
   if (e.detail < 2) send('drag');

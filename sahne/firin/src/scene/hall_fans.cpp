@@ -282,19 +282,19 @@ void fan(Hall& h, const FanSpec& f) {
     }
 
 
-    // ---- the board: a steel cabinet on brackets, turned 35 degrees towards the landing (at ~33 m it must still carry
-    // readable text: 5.4 x 3.2 m of face)
+    // ---- the board: a steel cabinet on brackets, turned 35 degrees towards the landing; its face square as its texture
+    // (2048 x 2048: a 5.4 x 3.2 m face stretched the letters, review 1, B4); the details are read at the desk
     const float turn = 35.0f * kPi / 180.0f;
     const float3 nb = normalize(v3(-side * std::cos(turn), 0, std::sin(turn)));
     const Xform B0 = facing(v3(0, 0, 0), nb);
     const float3 ein = side > 0 ? -B0.x : B0.x;   // along the board from its wall end to its outer end
-    const float yc = 4.6f, bw = 5.7f, bh = 3.5f, bd = 0.4f;
+    const float yc = 5.3f, bw = 4.4f, bh = 4.4f, bd = 0.4f;
     const float3 E = v3(side * (12.0f - 0.3f), yc, -32.8f);   // the cabinet back's wall end
     const float3 C = E + ein * (0.5f * bw) + nb * (0.5f * bd);
     const Xform Bf = axes(C, B0.x, B0.y, B0.z);
     h.box(Bf, v3(0.5f * bw, 0.5f * bh, 0.5f * bd), 0.03f, f.paint, 1.0f);
     // the face, recessed in a bezel
-    const float fw = 5.4f, fh = 3.2f;
+    const float fw = 4.1f, fh = 4.1f;
     h.levha(std::string("pano_") + f.tag, std::string("pano_") + f.tag, C + nb * (0.5f * bd + 0.003f), nb, fw, fh, M_PANO);
     for (int s = -1; s <= 1; s += 2) {
         h.box(Bf * Xform::at(v3(0, s * (0.5f * fh + 0.075f), 0.5f * bd + 0.02f)), v3(0.5f * bw, 0.075f, 0.02f), 0.01f, f.paint, 1.0f);
@@ -334,26 +334,64 @@ void fan(Hall& h, const FanSpec& f) {
         // insulators: the hinge jaws below, the contact jaws above
         for (float yy : {1.1f, 1.72f})
             h.box(v3(front - side * 0.035f, yy, zl), v3(0.035f, 0.06f, 0.12f), 0.012f, M_KABLO, 0.2f);
-        const float3 pivot = v3(front - side * 0.09f, 1.1f, zl);
-        const float3 axis = v3(0, 0, float(side));   // own frame: x = axis, y = up, z = x × y = out of the wall
-        Dynamic d;
-        d.name = std::string("kol_") + f.tag;
-        d.centre = pivot;
-        d.axis = axis;
-        buildLever(d, f.paint);
-        h.s.dyn.push_back(std::move(d));
-        Anchor an;
-        an.name = std::string("kol_") + f.tag;
-        an.type = "nokta";
-        an.box = {pivot + v3(0, 0.3f, 0) + n * 0.18f, v3(0, 0, 0.16f), v3(0, 0.42f, 0), n * 0.26f};
-        an.pivot = pivot;
-        an.axis = axis;
-        h.s.anchors.push_back(an);
         dz::pipeRun(h.at(Xform(), M_KOYU, 0.5f),
                     {v3(side * 11.97f, 2.05f, zl + 0.25f), v3(side * 11.97f, 2.75f, zl + 0.25f),
                      v3(side * (12.0f - 0.33f), 2.75f, zl + 0.25f), v3(side * (12.0f - 0.33f), yc - 0.5f * bh + 0.1f, zl + 0.25f)},
                     0.028f, 0.1f);
     }
+    // ---- the desk on the landing: the fan's controls in the foreground (review 1, B4 and A3: the boards alone were
+    // read at 33 m). A steel console by the landing's front rail in the fan's paint, its slanted top turned to the eye,
+    // a display with the board's own texture, the knife switch's great lever beside it.
+    {
+        const float3 eye = v3(0, 4.65f, -1.6f);                      // the fanlar view's eye (hall.cpp)
+        const float3 base = v3(side * 2.55f, 3.0f, -5.55f);
+        const float3 t = normalize(v3(eye.x - base.x, 0, eye.z - base.z));   // towards the eye, horizontal
+        const float3 up = v3(0, 1, 0);
+        const float3 r = normalize(cross(up, t));                    // the desk's right
+        const Xform D = axes(base, r, up, t);
+        // the pedestal and the slanted top (40 degrees from level, rising away from the viewer)
+        h.box(D * Xform::at(v3(0, 0.45f, 0)), v3(0.42f, 0.45f, 0.22f), 0.02f, f.paint, 0.5f);
+        h.box(D * Xform::at(v3(0, 0.03f, 0)), v3(0.46f, 0.03f, 0.26f), 0.01f, M_KOYU, 0.5f);
+        const float tilt = 40.0f * kPi / 180.0f;
+        const float3 tn = normalize(up * std::cos(tilt) + t * std::sin(tilt));      // the top's normal
+        const float3 tv = normalize(cross(tn, r));                                    // up the slope
+        const float3 tc = base + up * 0.98f;
+        h.box(axes(tc, r, tv, tn), v3(0.48f, 0.34f, 0.035f), 0.012f, f.paint, 0.5f);
+        h.levha(std::string("masa_") + f.tag, std::string("pano_") + f.tag, tc + tn * 0.038f + tv * 0.02f, tn, 0.56f, 0.56f, M_PANO, tv);
+        // the lever: hinge across the desk at its outer end, the handle rising and pulled towards the viewer
+        const float3 pivot = base + up * 1.02f + r * (float(-side) * 0.6f) - t * 0.05f;   // the inner end: in frame
+        h.box(pivot - up * 0.08f, v3(0.12f, 0.09f, 0.12f), 0.015f, M_KABLO, 0.2f);
+        h.box(axes(base + r * (float(-side) * 0.6f) + up * 0.47f, r, up, t), v3(0.09f, 0.47f, 0.09f), 0.015f, f.paint, 0.5f);
+        Dynamic d;
+        d.name = std::string("kol_") + f.tag;
+        d.centre = pivot;
+        d.axis = r;                       // own frame: x = r, y = up, z = x × y = towards the viewer
+        buildLever(d, f.paint);
+        h.s.dyn.push_back(std::move(d));
+        Anchor an;
+        an.name = std::string("kol_") + f.tag;
+        an.type = "nokta";
+        an.box = {pivot + up * 0.3f + t * 0.18f, r * 0.16f, up * 0.42f, t * 0.26f};
+        an.pivot = pivot;
+        an.axis = r;
+        h.s.anchors.push_back(an);
+        h.anchor(std::string("masa_") + f.tag, "tik", D * Xform::at(v3(float(-side) * 0.1f, 0.8f, 0.0f)), v3(0.8f, 0.85f, 0.45f));
+        // its lamp: a small hooded light on a stalk over the display (group 2)
+        const float3 lp = tc + tv * 0.45f + tn * 0.3f;
+        h.rod(tc + tv * 0.32f - tn * 0.02f, lp, 0.012f, M_KOYU);
+        h.at(facing(lp, normalize(tc - lp)) * Xform::at(v3(0, 0, -0.04f)), M_KOYU, 0.1f).roundedCylinder(0.07f, -0.05f, 0.0f, 0.01f);
+        Emitter e;
+        e.type = Emitter::DISC;
+        e.group = GROUP_LAMBA;
+        e.c = lp + normalize(tc - lp) * 0.002f;
+        e.u = normalize(cross(normalize(tc - lp), r)) * 0.055f;
+        e.n = normalize(tc - lp);
+        e.L = kDeskLampL;
+        e.lobe = 3.0f;
+        h.s.lights.push_back(e);
+        h.at(facing(lp + normalize(tc - lp) * 0.001f, normalize(tc - lp)), M_CAM_LAMBA, 0.05f).ring(0.0f, 0.055f, 0.0f, true);
+    }
+
     // the lamp above the board's wall end
     h.cagedLamp(v3(side * 12.0f, 7.3f, E.z + 0.6f), n, kBulbBoard);
     // the stencilled identity on the wall over its board, beside the fan (the wall above the fan lies at the fanlar

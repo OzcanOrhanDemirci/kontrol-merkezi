@@ -91,7 +91,7 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
 
         // the views: on the landing at eye height (1.65 m over the deck) looking down the gallery into the hall; at the
         // plaza, low (5.5 m), the arch centred and filling the 16:9 frame at 50 degrees
-        s.fanlar = {make_float3(0, 4.65f, -3.0f), make_float3(0, 7.5f, -60.0f), 50.0f};
+        s.fanlar = {make_float3(0, 4.65f, -1.6f), make_float3(0, 7.5f, -60.0f), 50.0f};   // back on the landing: the desks by its rail in frame
         s.rgb = {make_float3(0, 5.5f, -227.5f), make_float3(0, 13.4f, -258.0f), 50.0f};
         s.path = journey(s.fanlar, s.rgb);
 
