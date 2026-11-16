@@ -58,10 +58,16 @@ public sealed class Ayarlar
     // cannot show effects ("efekt değil, sıcaklıkla aynı senkronizede"), so "akış" on the keyboard and fans.
     public int YapayZekaEfekti = 1, IslemciEfekti = 1;
 
+    /// <summary>All effects off (local model, CPU load, Jarvis): only the temperature colour; the 90 °C warning stays.</summary>
+    public bool EfektlerKapali;
+
     /// <summary>The card lights its stored Steady white whenever it gets power (its on/off switch is never stored, and
     /// Özcan chose 11-16 never to save: "açılışta beyaz olması benim için sorun değil"). At service start and after
     /// sleep the service takes that white over: dark, or the temperature colour if RGB is on.</summary>
     public bool GpuAcilistaKarart = true;
+
+    /// <summary>Pause after each write to the card's light controller, ms (MSI's pace 30 = ~8 colour changes/s).</summary>
+    public int GpuYazmaArasiMs = 30;
 
 
     /// <summary>Lights fade out after this many minutes without real mouse/keyboard input (0 = never). Özcan 11-16:
@@ -106,6 +112,7 @@ public sealed class Ayarlar
             {
                 if (efd.TryGetValue("yapayzeka", out var e1)) a.YapayZekaEfekti = Math.Max(0, Math.Min(5, Convert.ToInt32(e1)));
                 if (efd.TryGetValue("islemci", out var e2)) a.IslemciEfekti = Convert.ToInt32(e2) == 2 ? 2 : 1;
+                if (efd.TryGetValue("kapali", out var e4) && e4 is bool e4b) a.EfektlerKapali = e4b;
             }
             if (d.TryGetValue("kazanc", out var kz) && kz is Dictionary<string, object> kd)
                 foreach (var kv in kd) a.Kazanc[kv.Key] = Doubles(kv.Value, 3);
@@ -126,6 +133,7 @@ public sealed class Ayarlar
             }
             if (d.TryGetValue("pompaHalkasi", out var ph)) a.PompaHalkasi = Convert.ToInt32(ph);
             if (d.TryGetValue("gpuAcilistaKarart", out var gk) && gk is bool gkb) a.GpuAcilistaKarart = gkb;
+            if (d.TryGetValue("gpuYazmaArasiMs", out var gm)) a.GpuYazmaArasiMs = Math.Max(0, Math.Min(50, Convert.ToInt32(gm)));
             var all = a.Duraklar.Select(x => x.Renk)
                 .Concat(a.CihazRenkleri.Values.SelectMany(c => c.Duraklar ?? new int[0][]))
                 .Where(x => x != null);
@@ -145,12 +153,13 @@ public sealed class Ayarlar
         {
             var d = new Dictionary<string, object>
             {
-                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: yerel model (0 = yok, 1-5) ve işlemci yükü (1-2) efektinin adayı. gpuAcilistaKarart: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra onu karartır (RGB açıksa sıcaklık rengine geçirir). beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
+                ["aciklama"] = "Kontrol Merkezi ışık ayarları. duraklar: soğuktan sıcağa, c = CPU ve GPU ortalaması (°C), renk = sRGB. kazanc: cihaz başına R,G,B çarpanı. cihazRenkleri: cihaz başına her durağın karşılığı (null = ortak renk); klavye referanstır. efektler: kapali = true ise hiçbir efekt yok, yalnız sıcaklık rengi (90 °C uyarısı kalır); yerel model (0 = yok, 1-5) ve işlemci yükü (1-2) efektinin adayı. gpuAcilistaKarart: kart her güç alışında kendi kayıtlı beyazını yakar; servis açılışta ve uykudan sonra onu karartır (RGB açıksa sıcaklık rengine geçirir). gpuYazmaArasiMs: karta her yazmadan sonraki bekleme (ms; MSI'ınki 30, saniyede ~8 renk adımı); canlı uygulanır. beklemeDakika: klavye ve fare bu kadar dakika kullanılmazsa ışıklar yumuşakça söner (0 = hiç). Canlı uygulamak: python araclar/onizle.py yukle.",
                 ["duraklar"] = Duraklar.Select(x => { var o = new Dictionary<string, object> { ["c"] = x.C, ["renk"] = x.Renk, ["ad"] = x.Ad }; if (x.Gizli) o["gizli"] = true; return o; }).ToList(),
                 ["uyariDerece"] = UyariDerece,
                 ["beklemeDakika"] = BeklemeDakika,
-                ["efektler"] = new Dictionary<string, object> { ["yapayzeka"] = YapayZekaEfekti, ["islemci"] = IslemciEfekti },
+                ["efektler"] = new Dictionary<string, object> { ["kapali"] = EfektlerKapali, ["yapayzeka"] = YapayZekaEfekti, ["islemci"] = IslemciEfekti },
                 ["gpuAcilistaKarart"] = GpuAcilistaKarart,
+                ["gpuYazmaArasiMs"] = GpuYazmaArasiMs,
                 ["kazanc"] = Kazanc,
                 ["cihazRenkleri"] = CihazRenkleri.ToDictionary(kv => kv.Key, kv => (object)new Dictionary<string, object>
                 {

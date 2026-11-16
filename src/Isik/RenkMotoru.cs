@@ -172,6 +172,10 @@ public sealed class RenkMotoru
 
     public void Hesapla(Girdi g, double t, double dt)
     {
+        // All effects off (ayarlar.json efektler.kapali; Özcan 11-16: "efektleri de kapat, efektler anlaşılmasını
+        // azaltıyor"): only the temperature colour. The 90 °C warning stays, it is a warning, not an effect.
+        if (_a.EfektlerKapali)
+            g = new Girdi { CpuC = g.CpuC, GpuC = g.GpuC, CpuYuk = g.CpuYuk, GpuYuk = g.GpuYuk, Uyari = g.Uyari, Jarvis = JarvisDurum.Yok };
         // ---- temperature: the only source of hue
         double? avg = g.CpuC.HasValue && g.GpuC.HasValue ? (g.CpuC + g.GpuC) / 2 : g.CpuC ?? g.GpuC;
         Ortalama = avg;

@@ -46,8 +46,15 @@ public sealed class MsiGpuV2 : IRgbCihaz
     const byte RegBolge = 0x2D, RegMod = 0x22, RegParlaklik = 0x36, RegHiz = 0x38, RegR = 0x30, RegG = 0x31, RegB = 0x32;
     const byte BolgelerAcik = 0x00, BolgelerKapali = 0x03, ModProgram = 0x1C, ModSabit = 0x13, TamParlaklik = 0x64, Hiz = 0x02;
 
-    /// <summary>MSI waited ~30 ms between writes.</summary>
-    public int YazmaArasiMs { get; set; } = 30;
+    /// <summary>Pause after each write. MSI waited ~30 ms (about 8 colour changes a second). Settable while running
+    /// (ayarlar.json gpuYazmaArasiMs, live reload): Özcan 11-16 wants it raised in stages, like an overclock, and kept
+    /// a step below the first stage that misbehaves.</summary>
+    public int YazmaArasiMs { get => yazmaArasi; set => yazmaArasi = Math.Max(0, Math.Min(50, value)); }
+    volatile int yazmaArasi = 30;
+
+    /// <summary>Colour changes sent since start (the service logs the rate while the card is lit).</summary>
+    public int Guncellemeler => guncellemeler;
+    int guncellemeler;
 
     /// <summary>Shortest spacing between two colour updates; frames in between are skipped (the next carries the colour).</summary>
     public int EnKisaAralikMs { get; set; } = 0;
@@ -133,6 +140,7 @@ public sealed class MsiGpuV2 : IRgbCihaz
                 if (sabitKurulu) Gonder(DegisimSirasi(c));
                 else { Gonder(RenkSirasi(c)); sabitKurulu = true; }
                 son = c; sonVar = true; sonTick = simdi;
+                Interlocked.Increment(ref guncellemeler);
                 return true;
             }
             catch (Exception ex)

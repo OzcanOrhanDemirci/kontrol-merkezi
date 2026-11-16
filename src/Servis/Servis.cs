@@ -239,7 +239,8 @@ sealed class Servis : IDisposable
                 m.DevamEt(_motor);
                 _ayar = a;
                 _motor = m;
-                Program.Log("ayarlar yeniden yüklendi");
+                foreach (var g in _rgb.OfType<MsiGpuV2>()) g.YazmaArasiMs = a.GpuYazmaArasiMs;
+                Program.Log("ayarlar yeniden yüklendi | ekran kartı yazma arası " + a.GpuYazmaArasiMs + " ms");
                 Publish();
                 break;
             }
@@ -467,6 +468,13 @@ sealed class Servis : IDisposable
             if (_gpuFan != null) { try { var s = _gpuFan.Oku(); lock (_lock) _gpuSnap = s; } catch (Exception ex) { Program.Log("ekran kartı fan okuması: " + ex.Message); } }
         }
         if (tick % 10 == 0) { _ab.Yenile(); Takili(); }
+        if (tick % 20 == 0)
+            foreach (var gk in _rgb.OfType<MsiGpuV2>())
+            {
+                int n = gk.Guncellemeler, d = n - _gpuSay;
+                _gpuSay = n;
+                if (d > 0) Program.Log($"ekran kartı: 10 sn'de {d} renk değişimi, ortalama {d / 10.0:0.#}/sn (yazma arası {gk.YazmaArasiMs} ms)");
+            }
 
         if (DateTime.UtcNow - _lastHistory > TimeSpan.FromSeconds(60))
         {
@@ -477,6 +485,7 @@ sealed class Servis : IDisposable
     }
 
     readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _takili = new();
+    int _gpuSay;
 
     /// <summary>Which devices are plugged in: USB enumeration only (no handle opened, nothing sent to a device).</summary>
     void Takili()
