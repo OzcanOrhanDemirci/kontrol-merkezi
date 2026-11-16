@@ -90,7 +90,7 @@ void main(){ vec4 w = model*vec4(p,1); wp = w.xyz; wn = mat3(model)*n; vuv = uv;
 FS = '''
 #version 330
 uniform vec3 eye; uniform int mode; uniform vec4 clipPlane;
-uniform vec3 albedo[24]; uniform int flags[24]; uniform int group[24]; uniform float emission[24];
+uniform vec3 albedo[64]; uniform int flags[64]; uniform int group[64]; uniform float emission[64];
 uniform vec3 gcol[3];
 uniform int nl; uniform float lL[48]; uniform vec4 lc[48]; uniform vec4 lu[48]; uniform vec4 lv[48]; uniform vec4 ln[48];
 in vec3 wp; in vec3 wn; in vec2 vuv; flat in int vmat;
@@ -257,11 +257,11 @@ def main():
         meshes.append((vao_for(dv, di), dyn_model(d['centre'], d['axis'])))
 
     mats = D['materials']
-    alb = [tuple(m['colour']) for m in mats] + [(0, 0, 0)] * (24 - len(mats))
+    alb = [tuple(m['colour']) for m in mats] + [(0, 0, 0)] * (64 - len(mats))
     prog['albedo'].value = alb
-    prog['flags'].value = [m['flags'] for m in mats] + [0] * (24 - len(mats))
-    prog['group'].value = [max(0, m['group']) for m in mats] + [0] * (24 - len(mats))
-    prog['emission'].value = [m['emission'] for m in mats] + [0.0] * (24 - len(mats))
+    prog['flags'].value = [m['flags'] for m in mats] + [0] * (64 - len(mats))
+    prog['group'].value = [max(0, m['group']) for m in mats] + [0] * (64 - len(mats))
+    prog['emission'].value = [m['emission'] for m in mats] + [0.0] * (64 - len(mats))
     prog['gcol'].value = [GROUP_COLOUR[0], GROUP_COLOUR[1], GROUP_COLOUR[2]]
     L = D['lights'][:48]
     pad = 48 - len(L)

@@ -250,7 +250,10 @@ speed). Single scattering only live; the baked M, F already contain the light th
 The hall is built in code at real measures with the geometry kit (`kit/geom.h`, every edge rounded) and the hall's own
 helpers (`scene/hall_kit.h`: formwork faces with seams and tie holes, lofted concrete outlines, railings, chains of real
 links, caged lamps, levha faces, anchors). One file per place: `hall_gallery.cpp`, `hall_fans.cpp`, `hall_nave.cpp`,
-`hall_arch.cpp`, `hall_signs.cpp`; `hall.cpp` adds the views, the journey and the volumes. The emitters' radiance is one
+`hall_arch.cpp`, `hall_signs.cpp`; `hall_props.cpp` dresses them with Poly Haven models (flanged drain lines, hung
+air ducts, bins, a ladder; `importModel` places a kit's pieces by node name, one light map chart per placement, and the
+models' materials follow the hall's own 20, sharing one row per material); `hall.cpp` adds the views, the journey and
+the volumes. The emitters' radiance is one
 table at the top of `hall_kit.h`, one value per emissive material so a surface seen directly glows as bright as the
 emitter that lights (`kuyu_isik` 1.0, `kemer_isik` 2.0, `cam_lamba` 8.0; the dim lamps along the hall's walls have smaller
 bulbs).
