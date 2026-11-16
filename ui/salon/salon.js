@@ -265,13 +265,40 @@ async function create(canvas, options = {}) {
   }
   for (const b of images) b.close();
 
-  // light map: two arrays, layer = page * 3 + group (plane A RGBA16F, plane B RGBA8)
+  // light map: layer = page * 3 + group. L0 as RGB9_E5 (4 bytes instead of RGBA16F's 8: a shared exponent keeps
+  // 9 bits of every channel relative to the brightest, ~0.2 %, far under one output level), its direction plane B
+  // RGBA8, and the openness (the same in every group) once per page as R8: 25 instead of 36 bytes a texel
   const lmW = lmDef.genislik, lmH = lmDef.yukseklik, pages = lmDef.sayfa;
   if (lmW > maxTex || lmH > maxTex || pages * 3 > maxLayers) throw fail('Işık haritası bu kartın doku sınırını aşıyor (' + lmW + ' × ' + lmH + ' × ' + pages * 3 + ')');
-  const lmA = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * 8 * pages * 3 });
-  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA16F, lmW, lmH, pages * 3);
+  const lmA = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * 4 * pages * 3 });
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGB9_E5, lmW, lmH, pages * 3);
   const lmB = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * 4 * pages * 3 });
   gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, lmW, lmH, pages * 3);
+  const lmO = tex(gl.TEXTURE_2D_ARRAY, { bytes: lmW * lmH * pages });
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R8, lmW, lmH, pages);
+  const halfToFloat = (() => {               // every half float's value, once
+    const t = new Float32Array(65536);
+    for (let h = 0; h < 65536; h++) {
+      const e = (h >> 10) & 31, m = h & 1023, sg = h & 0x8000 ? -1 : 1;
+      t[h] = sg * (e === 0 ? m * Math.pow(2, -24) : e === 31 ? (m ? NaN : Infinity) : (1 + m / 1024) * Math.pow(2, e - 15));
+    }
+    return t;
+  })();
+  const rgb9e5 = new Uint32Array(lmW * lmH), openness = new Uint8Array(lmW * lmH);
+  const toRgb9e5 = (src, withOpen) => {   // src: RGBA half floats of one layer
+    for (let i = 0, q = 0; i < rgb9e5.length; i++, q += 4) {
+      let r = halfToFloat[src[q]], g = halfToFloat[src[q + 1]], b = halfToFloat[src[q + 2]];
+      if (withOpen) { const a = halfToFloat[src[q + 3]]; openness[i] = a > 0 ? (a >= 1 ? 255 : Math.round(a * 255)) : 0; }
+      r = r > 0 ? Math.min(r, 65408) : 0; g = g > 0 ? Math.min(g, 65408) : 0; b = b > 0 ? Math.min(b, 65408) : 0;
+      const mx = Math.max(r, g, b);
+      if (mx < 1.53e-10) { rgb9e5[i] = 0; continue; }
+      let e = Math.max(-16, Math.floor(Math.log2(mx))) + 1;                  // shared exponent, bias 15, 9-bit mantissa
+      let sc = Math.pow(2, e - 9);
+      if (Math.round(mx / sc) === 512) { e++; sc *= 2; }
+      const R = Math.round(r / sc), G = Math.round(g / sc), B = Math.round(b / sc);
+      rgb9e5[i] = (((e + 15) & 31) << 27 | (B & 511) << 18 | (G & 511) << 9 | (R & 511)) >>> 0;
+    }
+  };
   for (let p = 0; p < pages; p++) {
     const file = lmDef.dosya[p], buf = bin[file], dv = new DataView(buf), n = lmW * lmH * 4;
     if (buf.byteLength < 16 || dv.getUint32(0, true) !== 0x314c4d4b) throw fail(file + ': KML1 başlığı yok');
@@ -279,8 +306,13 @@ async function create(canvas, options = {}) {
       throw fail(file + ': boyutu sahne.json ile uyuşmuyor');
     let off = 16;
     for (let g = 0; g < 3; g++) {
+      toRgb9e5(new Uint16Array(buf, off, n), g === 0); off += n * 2;
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmA);
-      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGBA, gl.HALF_FLOAT, new Uint16Array(buf, off, n)); off += n * 2;
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGB, gl.UNSIGNED_INT_5_9_9_9_REV, rgb9e5);
+      if (g === 0) {
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmO);
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p, lmW, lmH, 1, gl.RED, gl.UNSIGNED_BYTE, openness);
+      }
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, lmB);
       gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, p * 3 + g, lmW, lmH, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(buf, off, n)); off += n;
     }
@@ -550,7 +582,7 @@ async function create(canvas, options = {}) {
   const compileMs = performance.now() - compileT0;
 
   // texture units: fixed per name, the volumes after them
-  const UNIT = { uAlb: 0, uNrm: 1, uArm: 2, uLmA: 3, uLmB: 4, uLevha: 5, uRefl: 6, uNoise: 7, uTab: 5, uDepth: 1, uHaze: 2,
+  const UNIT = { uAlb: 0, uNrm: 1, uArm: 2, uLmA: 3, uLmB: 4, uLmO: 15, uLevha: 5, uRefl: 6, uNoise: 7, uTab: 5, uDepth: 1, uHaze: 2,
     uScene: 3, uBloom: 4, uSrc: 0, uDither: 6 };
   const VOL_UNIT = 8;
   for (const pr of Object.values(programs)) {
@@ -800,7 +832,7 @@ async function create(canvas, options = {}) {
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
     gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
     bindTex(UNIT.uAlb, gl.TEXTURE_2D_ARRAY, matTex[0]); bindTex(UNIT.uNrm, gl.TEXTURE_2D_ARRAY, matTex[1]); bindTex(UNIT.uArm, gl.TEXTURE_2D_ARRAY, matTex[2]);
-    bindTex(UNIT.uLmA, gl.TEXTURE_2D_ARRAY, lmA); bindTex(UNIT.uLmB, gl.TEXTURE_2D_ARRAY, lmB);
+    bindTex(UNIT.uLmA, gl.TEXTURE_2D_ARRAY, lmA); bindTex(UNIT.uLmB, gl.TEXTURE_2D_ARRAY, lmB); bindTex(UNIT.uLmO, gl.TEXTURE_2D_ARRAY, lmO);
     bindTex(UNIT.uLevha, gl.TEXTURE_2D, blank);
     bindTex(UNIT.uRefl, gl.TEXTURE_2D, mirror || !hasWet ? blank : T.reflMip.t);
     bindTex(UNIT.uNoise, gl.TEXTURE_3D, noise);

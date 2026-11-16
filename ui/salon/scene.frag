@@ -10,7 +10,8 @@ in vec2 vLm;
 layout(location = 0) out vec4 outColor;
 
 uniform sampler2DArray uAlb, uNrm, uArm;   // material textures, one layer per Poly Haven set
-uniform sampler2DArray uLmA, uLmB;         // light map: layer = page * 3 + group
+uniform sampler2DArray uLmA, uLmB;         // light map: layer = page * 3 + group (A: L0 as RGB9_E5)
+uniform sampler2DArray uLmO;               // the openness within 0.5 m, layer = page
 uniform sampler2D uLevha;                  // the live texture of this draw (signs, boards, displays)
 uniform sampler2D uRefl;                   // the floor's reflection (mip chain)
 uniform sampler3D uNoise;                  // smooth tiled noise (the puddles)
@@ -134,7 +135,7 @@ void main() {
             a[g] = lmRead(uLmA, vLm, layer, wc);          // L0 (the light's amount) smooth to the second derivative;
             b[g] = texture(uLmB, vec3(vLm, layer));        // its direction varies slowly: bilinear is enough
         }
-        open = clamp(a[0].a, 0.0, 1.0);
+        open = clamp(texture(uLmO, vec3(vLm, float(uPage))).r, 0.0, 1.0);
         s.so = open * mix(1.0, s.ao, 0.5);
         if (wet) s.so *= 1.0 - 0.9 * puddle;
         for (int g = 0; g < 3; g++) {
