@@ -339,6 +339,41 @@ Its numbers are the `hall::up` constants in `hall_kit.h`.
 views headless (plain shading with back faces in magenta and levha faces as a uv checker, and a direct-light preview)
 and checks the journey's clearance. It is the builder's check, not the product.
 
+### The void (Phase 2 outside: `ui/disari.js`, salon.js "the void", `dis.*`, `fener.*`, `direk.*`)
+
+Özcan (11-16): an endless, foggy, dim void in which identical facilities stand on concrete columns like offshore
+platforms, their columns sinking out of sight; 20-30 visible, the feel of tens of thousands; each one someone's
+computer with one faint steady lamp in its own temperature colour; INSIDE's air. One jumps off the roof, falls ~30 s
+between the columns, lands on a roof, opens its hatch: it is one's own facility. The world wraps.
+
+- **The lattice** (`disari.js`): stacks at x = 230 i (+115 on odd rows), z = 500 j, hashed jitter ±22 m, turn ±0.1 rad
+  and height offset; every stack repeats every D = 860 m in y. Ours is stack (0, 0). Deterministic (hashes of i, j),
+  nothing random at run time. Our whole stack wears our real colours; every other stack a temperature hashed into the
+  palette, fixed.
+- **The wrap.** The fall from our roof lands D below on our own stack's next facility. At mid-fall the walker is moved
+  by +D (`W.shift`): the picture is the same before and after (every facility of our stack looks like ours and its
+  hatch is shut), so the roof one lands on is ours and its hatch leads down the same stair.
+- **The hatch** (`kapak_tik`): opens over 1.5 s (a heavy lid, smootherstep), falls shut with a small thud; its box is a
+  moving solid in walk mode's collision. It shuts by itself when one falls 20 m below the deck.
+- **The fall**: gravity with drag to 30 m/s in the void, a brake over the last 140 m to 6 m/s, and in the open gap under
+  our columns the air carries the body a few m/s across onto the roof below (it never lands off a deck). ~35 s from
+  the edge to landing.
+- **Drawing.** The exterior's `dis_*` ranges instanced per facility, three details by distance (all; no lamp globe
+  and no mast beyond 260 m; walls, columns, deck and roof lamp beyond 700 m), culled by the fog's reach. The fog is in
+  the composite (post.frag, "the void"): homogeneous (σ 0.0028/m: the wrap forbids an absolute height), its light a
+  gradient from below (about a quarter) to above, a little blue; the surfaces are lit by the same light as ambient.
+- **Lamps and masts in display light.** A distant lamp is a pixel or two; anything decided per pixel (the tonemap,
+  a nearest depth test, the halo's cusp) makes its light change with its place between pixels and it twinkles as the
+  view turns. So each lamp is tonemapped once as a whole (fener.vert: its gain from scene light to display light over
+  the sky behind it), its core integrated over each pixel, its halo averaged over the pixel, its cover read over a
+  Gaussian of 8 depth texels, and it is added after the resolve (post.frag, PASS_RESOLVEV): its light on screen is the
+  same at any sub-pixel place. The mast under a far lamp (0.17 m: under a pixel beyond ~260 m) is a line of its true
+  width laid over the frame the same way (direk.vert): each pixel covered by the exact share the line crosses, its
+  colour the steel seen through the fog. Measured on a slow pan (`araclar/salon_disari.py --yalniz pan`, the glow
+  target's float light): the largest frame-to-frame change of any lamp is about 0.06 of its full light; a lamp nine
+  tenths behind a column's edge is the worst case (the depth raster's whole-texel edge).
+- **Exposure outside**: walk mode's eye, its journey reference pinned to s = 0 (`L.EV_U`).
+
 ### What the renderer assumes of the pack
 
 - uv0 is GL-style, v up (the renderer does not flip images; the normal map's green follows +v). A levha face's uv0

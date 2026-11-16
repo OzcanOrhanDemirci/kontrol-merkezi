@@ -36,6 +36,11 @@ s.resize()                      // after the canvas' CSS size changes (render() 
 s.stats()                       // { gpuMs (last measured frame), passes (median of 30 frames), volumesMs, cpuMs,
                                 //   memoryMB, textures, triangles, compileMs, size, scene, quality }
 s.setQuality({...}); s.setTime(seconds); s.dispose()
+// the void (Phase 2 outside, ui/disari.js drives it; docs/SALON.md "The void")
+s.setVoid({ list, lid, kOthers, fog, force })   // facilities [{ o, yaw, col, home }], our lid's angle, fog settings;
+                                // tests: lampsOff, lampsBare (unhidden), mastsOff
+s.voidState()                   // { on, inBlock, noInterior, homeHaze, drawn: [near, mid, far], lamps, fog }
+s.voidGlow(x, y, r)             // tests: the lamps' float display light round a canvas point (smooth window)
 ```
 
 `s.quality` (defaults): `scale` 2, `hazeScale` 0.5 (haze pass resolution, share of the canvas), `hazeStep` 1 (1 = half a
@@ -66,6 +71,12 @@ heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cub
 | bloom | Karis-weighted box of the scene composited with the haze, 13-tap down, tent up | 0.5 x canvas |
 | composite | scene x T + in-scatter (joint-bilateral by depth), bloom 4 %, exposure, AgX (Denizaltı's) | scale x canvas |
 | resolve | separable Lanczos-2 in linear light, sRGB, a fixed 64² blue-noise dither of ±0.5/255 | canvas |
+
+Outside (the void on): the exterior is drawn in the scene pass (instanced `dis_*` ranges, `dis.vert`/`dis.frag`), the
+fog in the composite and the bloom's first level; a `lamps` pass after the haze draws the far masts (`direk.*`, laid
+over) and the lamps (`fener.*`, added) into a canvas-size target in display light, which the resolve lays over the
+frame after its Lanczos (so a lamp a pixel wide keeps its light at any sub-pixel place: no twinkle). The hall's passes
+are skipped outside unless the open hatch is in view; the reflection is skipped outside.
 
 No TAA, no FXAA, no random numbers at run time.
 
