@@ -36,19 +36,21 @@ Layout (first version; the builder owns the exact numbers and writes them into t
 
 | Part | Extent |
 |---|---|
-| Entrance gallery | x ∈ [-12, 12], y ∈ [0, 20], z ∈ [-44, 0]. Back wall z = 0 with the tunnel mouth we came out of. |
-| Landing | steel platform, deck at y = 3.0, z ∈ [-6, 0], x ∈ [-5, 5], railing, stair down towards -z. |
-| Fans | one per side wall, axis along ±x, centre (±12, 8.5, -24), Ø 10 m, in a recess 2.5 m deep. Left = CPU + case, right = GPU. |
-| Ceiling shaft | opening in the gallery ceiling, x ∈ [-5, 5], z ∈ [-36, -26], a concrete well 12 m tall above it, a steel grate in the opening. Light enters at the well's top, falls slightly slanted towards -z. |
-| Gallery portal | the gallery's far end z = -44 opens into the hall through a portal 24 m wide, 20 m tall (the gallery is a frame within the frame). |
-| Hall | x ∈ [-30, 30], y ∈ [0, 26], z ∈ [-275, -44]. |
-| Columns | 2 m (x) × 7 m (z) × floor to ceiling, rows at x = ±8 and ±22, every 20 m from z = -60 to -240 (40 columns). The aisle x ∈ [-7, 7] is free: the camera flies through it. |
-| Arch | monument at z ≈ -258, opening ~14 m wide, ~18 m tall, overall ~26 × 24 m; the light chamber behind its opening; keystone display at the top of the opening. End wall z = -275. |
+| Entrance gallery | x ∈ [-12, 12], y ∈ [0, 20], z ∈ [-44, 0]. Back wall z = 0 with the tunnel mouth we came out of (5.2 × 4.4 m from the deck, 5 m deep, closed by a bulkhead with a door). |
+| Landing | steel platform, deck at y = 3.0, z ∈ [-6, 0], x ∈ [-5, 5], railing, stair (16 risers of 187.5 mm, 270 mm goings, 2.4 m wide) down towards -z to z = -10.3. |
+| Fans | one per side wall, axis along ±x, centre (±12, 8.5, -24), Ø 10 m, in a square recess (14.4 m, on the formwork grid) 2.5 m deep, the barrel continuing 2 m into the duct. Left = CPU + case, right = GPU. |
+| Fan boards | beside each fan on the portal side (the wall between the landing and the fans is outside the fanlar frame): a 5.7 × 3.5 m cabinet (face 5.4 × 3.2 m) on brackets, its wall end at z = -32.8, turned 35° towards the landing; the warning plate under it, the lever box on the wall below its wall end, the stencilled identity on the wall above it. |
+| Ceiling shaft | opening in the gallery ceiling, x ∈ [-5, 5], z ∈ [-36, -26], a concrete well up to y = 33.5 above it, a steel grate in the opening (resting at y = 20.3). Light enters at the well's top, falls slanted 10° towards -z. |
+| Gallery portal | the gallery's far end z = -44 opens into the hall through a portal 24 m wide, 20 m tall with a two-step frame standing out of the hall's front wall (the gallery is a frame within the frame). |
+| Hall | x ∈ [-30, 30], y ∈ [0, 26], z ∈ [-275, -44]. Drainage channels along both walls (\|x\| 27.6..28.2), pilasters (1.6 × 1 m) at the column lines carrying the beams, a catwalk on the left wall at y = 12 with a caged ladder at its start, a door with a lit frame off the catwalk at z = -150, pipe runs. |
+| Columns | 2 m (x) × 7 m (z) × floor to ceiling, a flared foot (3.1 × 8.1 m at the floor) and a haunch at the top, rows at x = ±8 and ±22, every 20 m from z = -60 to -220 (36 columns), ending ~35 m before the arch to leave it a plaza. The aisle x ∈ [-7, 7] is free: the camera flies through it. Cross beams (1.2 × 2 m) over the column lines z = -60 .. -240, lighter beams (1 × 1.2 m) along the rows. |
+| Arch | monument: face z = -256 on a plinth (top y = 1.2, steps), 26 m wide, 24 m tall (to y = 25.2), 10.6 m deep; opening 14 m wide, 18 m tall (half-round, springing y = 12.2, crown 19.2), the reveal 4.3 m deep; the light chamber behind it (x ±8.6, to y = 20.6, back wall z = -266); keystone display (4.0 × 1.6 m) at y = 22.65. End wall z = -275. |
 
 Views (the builder writes them; the renderer interpolates):
 - `fanlar`: eye (0, 4.65, -3.0), looking at (0, 7.5, -60), vertical FOV 50°.
-- `rgb`: eye (0, ~6, ~-232), looking at the arch's centre so it fills the frame; FOV 50°.
-- `yol`: the journey's centre line, a polyline of points between them (in the aisle, height 4-8 m).
+- `rgb`: eye (0, 5.5, -227.5), looking at (0, 13.4, -258): the arch centred, filling the frame's height; FOV 50°.
+- `yol`: the journey's centre line, a polyline of points between them every ~2 m (in the aisle, height 4.6-7.5 m),
+  rising first over the landing's railing; at least 1.5 m from any geometry (checked by `sahne/araclar/geo_onizle.py`).
 
 ## Light groups
 
@@ -56,7 +58,7 @@ Light is baked per group, in white. Live colour of group g is `C_g · k_g` (line
 
 | id | name | sources | live colour |
 |---|---|---|---|
-| 0 | `kuyu` | the ceiling shaft's emitter | the temperature colour (`isik.onizleme`, the colour the case shows or would show), always; intensity animates in the opening |
+| 0 | `kuyu` | the ceiling shaft's emitter (a horizontal rectangle at the well's top whose normal slants 10° towards -z, lobe 6) | the temperature colour (`isik.onizleme`, the colour the case shows or would show), always; intensity animates in the opening |
 | 1 | `kemer` | the arch: the light chamber behind its opening, emissive strips in the arch | the temperature colour when RGB is on (`isik.cikis`); when off, a faint ember of the temperature colour (the arch is the RGB) |
 | 2 | `lamba` | small fixed service lamps (caged wall lamps, the board lamps) | fixed warm white, constant |
 
@@ -75,8 +77,10 @@ uv), and flags:
   texels baked at its position.
 - `dynamic`: not in the static mesh (rotors); lit from the volumes.
 - `wet`: the floor; reflections from the planar reflection pass, wetness mask from the texture and a puddle mask.
-- `levha`: a face that carries a live-drawn texture (signs, boards, displays): its uv0 runs 0..1 over the face, and the
-  anchor names the atlas rect.
+- `levha`: a face that carries a live-drawn texture (signs, boards, displays): its uv0 runs 0..1 over the face (u from
+  the face's left to its right, v from its top to its bottom, as a canvas is drawn, seen from the side its normal
+  faces), its uv2 is in metres like every chart's, and the anchor names the atlas rect. Round lenses (`mercek`) map
+  their square.
 
 The albedo the baker bounces with is the material's mean linear albedo (computed from the texture the way the renderer
 decodes it: sRGB → linear, mean over the texture).
@@ -119,12 +123,12 @@ them through `DecompressionStream('gzip')`.
 |---|---|
 | `malzemeler` | materials in id order (the vertex's material id indexes this list) |
 | `geometri` | the static mesh: vertices, indices, and per-material draw ranges (triangles sorted by material) |
-| `dinamik` | moving meshes in their own frame (rotor: centred at origin, axis +x), placed live at `merkez`/`eksen` |
+| `dinamik` | moving meshes in their own frame, placed live at `merkez`/`eksen`: the rotors (centred at the origin, axis +x) and the levers `kol_kasa`, `kol_gpu`, `kol_rgb` (origin at the hinge, x the hinge axis). The own frame maps to the world as x → `eksen`, y → world up made perpendicular to it, z → x × y; a lever's mesh is built at rest (handle up), the window turns it about x |
 | `isikHaritasi` | the light map atlas (pages × width × height texels) and its files, one per page |
 | `hacimler` | baked light in the air: axis-aligned grids (`alt` = lower corner, `hucre` = cell size) |
 | `isiklar` | the emitters (for reference and for live analytic highlights) |
 | `gorunumler` | the two views and the journey's centre line |
-| `capalar` | anchors: things the window needs to find (click boxes, sign faces, displays, fan pivots); `kutu` is an oriented box (centre, three half-axes) |
+| `capalar` | anchors: things the window needs to find (click boxes, sign faces, displays, lamps, lever hinges); `kutu` is an oriented box (centre, three half-axes); a moving part's `nokta` anchor (`kol_*`) also carries its hinge, `mentese` and `eksen` (the scene's `Anchor::pivot`, `axis`) |
 
 ### `geo.bin` and rotor files
 
@@ -188,6 +192,33 @@ samples the finest volume that contains the point (blending across the inner vol
 The baker attenuates every path segment with exp(-σ·d), σ = `ortam_sigma` (homogeneous). The live haze uses the same σ
 times a live density field ρ(x, t) ≥ 0 (1 on average; more near the fans and in their jets, swirled by the rotors'
 speed). Single scattering only live; the baked M, F already contain the light the air receives.
+
+## The scene builder (`sahne/firin/src/scene/hall*.cpp`)
+
+The hall is built in code at real measures with the geometry kit (`kit/geom.h`, every edge rounded) and the hall's own
+helpers (`scene/hall_kit.h`: formwork faces with seams and tie holes, lofted concrete outlines, railings, chains of real
+links, caged lamps, levha faces, anchors). One file per place: `hall_gallery.cpp`, `hall_fans.cpp`, `hall_nave.cpp`,
+`hall_arch.cpp`, `hall_signs.cpp`; `hall.cpp` adds the views, the journey and the volumes. The emitters' radiance is one
+table at the top of `hall_kit.h`, one value per emissive material so a surface seen directly glows as bright as the
+emitter that lights (`kuyu_isik` 1.0, `kemer_isik` 2.0, `cam_lamba` 8.0; the dim lamps along the hall's walls have smaller
+bulbs).
+
+Formwork seams (12 mm deep rounded grooves on 1.2 × 2.4 m panels) are geometry on the gallery's walls, ceiling and well,
+and on the inner rows' aisle faces within ~60 m of the gallery, where the tie holes (3 cm cone recesses, two by four per
+panel) are geometry too; everywhere else they are the textures' matter (small regular grooves far away would shimmer).
+
+What is built: 2.46 M static triangles in 5.5 k light map charts. The gallery 0.13 M, the fans 0.38 M (bell-mouths,
+grilles, motors), the hall 1.56 M (the six tie-hole faces 0.8 M of it), the arch 0.22 M, the hanging signs 0.17 M (their
+chains); the rotors 37 k and 43 k triangles, the levers 3 k each. Anchors (40): `fan_kasa`, `fan_gpu`, `git_rgb`,
+`git_fanlar`, `cikis_1`, `cikis_2`, `anahtar_rgb` (tik); `boya_*`, `pano_*`, `uyari_*`, `tabela_rgb`, `tabela_fanlar`,
+`cikis_1`, `cikis_2`, `kilit_tasi_ekran`, `durak_plaka_0..5`, `plaka_rgb`, `cihaz_aio|klavye|gpu` (levha); `kol_kasa`,
+`kol_gpu`, `kol_rgb`, `durak_0..5` (cold to hot from lower left to lower right), `lamba_aio|klavye|gpu` (nokta).
+Volumes: `salon` 0.5 m (122 × 69 × 563 cells), `kuyu` 0.1 m (104 × 336 × 175), `fan_kasa`, `fan_gpu` 0.2 m
+(63 × 66 × 70 each), `kemer` 0.25 m (120 × 104 × 92).
+
+`salon.exe dump --out DIR` writes the scene as plain binaries + JSON; `python sahne/araclar/geo_onizle.py DIR` renders the
+views headless (plain shading with back faces in magenta and levha faces as a uv checker, and a direct-light preview)
+and checks the journey's clearance. It is the builder's check, not the product.
 
 ## The live renderer (`ui/`, WebGL2)
 

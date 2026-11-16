@@ -1,10 +1,12 @@
 // salon.exe: builds the hall and bakes its light into the window's data pack (docs/SALON.md).
+//   salon.exe dump [--out DIR]                  the scene as plain binaries + JSON (scene/dump.h), for the preview
 //   salon.exe geo  [--out DIR]                  the scene and atlas only, no light (fast; for checking geometry)
 //   salon.exe bake [--out DIR] [--samples N] [--vol-samples N] [--texel-scale X] [--bounces N]
 //   --test 1: the oven's small test room instead of the hall (scene/test_scene.cpp)
 // DIR defaults to sahne/paket. Assets are read from sahne/varlik (sahne/varlik.py fetches them).
 #include "bake.h"
 #include "scene.h"
+#include "scene/dump.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -19,8 +21,8 @@
 #endif
 
 int main(int argc, char** argv) {
-    if (argc < 2 || (std::strcmp(argv[1], "geo") && std::strcmp(argv[1], "bake"))) {
-        std::fprintf(stderr, "usage: salon.exe geo|bake [--out DIR] [--samples N] [--vol-samples N] [--texel-scale X] [--bounces N]\n");
+    if (argc < 2 || (std::strcmp(argv[1], "geo") && std::strcmp(argv[1], "bake") && std::strcmp(argv[1], "dump"))) {
+        std::fprintf(stderr, "usage: salon.exe dump|geo|bake [--out DIR] [--samples N] [--vol-samples N] [--texel-scale X] [--bounces N]\n");
         return 2;
     }
     const bool doBake = !std::strcmp(argv[1], "bake");
@@ -45,6 +47,14 @@ int main(int argc, char** argv) {
     if (!(test ? salon::buildTest(s, err) : salon::build(s, root + "/../varlik", err))) { std::fprintf(stderr, "scene: %s\n", err.c_str()); return 1; }
     std::printf("scene: %zu vertices, %zu triangles, %zu materials, %zu rotors, %zu lights, %zu anchors\n", s.mesh.v.size(),
                 s.mesh.tris(), s.mats.size(), s.dyn.size(), s.lights.size(), s.anchors.size());
+    if (!std::strcmp(argv[1], "dump")) {
+        if (!salon::dumpScene(s, out, err)) {
+            std::fprintf(stderr, "dump: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("dump: %s\n", out.c_str());
+        return 0;
+    }
     std::vector<int> chartPage;
     const salon::Atlas a = salon::buildAtlas(s, o, chartPage);
     std::printf("atlas: %d pages of %dx%d, %zu texels used\n", a.pages, a.width, a.height, a.usedTexels);
