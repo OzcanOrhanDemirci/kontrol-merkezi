@@ -337,6 +337,14 @@ Picking: a ray from the camera through the mouse, tested against the anchors' bo
 object's own lamp or paint catch the light (a small emissive or albedo lift), the cursor turns into the hand. Clicks
 send the same commands as today (`fan-kasa`, `fan-gpu`, `rgb`), and the journey runs between the two views.
 
+Walk mode (`ui/yuruyus.js`, Phase 2): Y toggles it, from the camera's pose; W/A/S/D, mouse look under pointer lock,
+Shift faster (1.6 / 4 m/s), Space jumps, Escape or Y leaves (the camera glides back onto the journey at its nearest point,
+which carries on to the nearer place). A click acts on the `tik` box the screen's centre looks at within 4 m. Collision
+against geo.bin's triangles (all but `noOcclude`; rotors as solid discs) in a uniform 1 m grid built in a Worker
+(~0.5 s, ~87 MB) 8 s after the scene is ready: a vertical capsule r 0.3 m from 0.42 to 1.95 m over the feet, the ground
+found by a sphere (r 0.28) cast down, steps up to 0.42 m (the plinth's are 0.4), eye 1.7 m, falls to 50 m/s. Hooks for
+the void: `shift(dx, dy, dz)`, `onStep`, `setFloor`, `onFall`. Check: `araclar/salon_yuruyus.py`.
+
 The texts the app shows today all exist in the world:
 - each fan: the panel of its desk on the landing, in three ranks: the state first, a window lit in its colour
   (EN YÜKSEK HIZDA / BIOS DENETİMİNDE / KARTIN DENETİMİNDE / GEÇİYOR / BAŞKA PROGRAMDA / BİLGİ YOK); the CPU or GPU
