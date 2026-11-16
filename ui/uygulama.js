@@ -553,8 +553,11 @@ window.__km = {
   M, D, get S() { return S; }, go, step, onMessage, get sim() { return sim; },
   // measurement and stills: put the camera somewhere on the journey (0..1) and draw one frame
   async still(u, opts = {}) {
-    M.s = clamp(u, 0, 1) * journey.total; M.v = 0; M.place = u >= 1 ? 'rgb' : 'fanlar';
+    const pin = () => { M.s = clamp(u, 0, 1) * journey.total; M.v = 0; M.place = u >= 1 ? 'rgb' : 'fanlar'; };
+    pin();
     if (opts.introT != null) M.introT = opts.introT; else M.introT = 99;
+    // let the smoothed colours, rotors and levers settle (seconds of simulated time, the camera held in place)
+    for (let i = 0, n = Math.round((opts.settle || 0) / 0.05); i < n; i++) { step(0.05); pin(); }
     step(opts.dt || 1 / 60);
     S.render(opts.dt || 1 / 60, opts.shutter || 1 / 60);
     return S.stats();

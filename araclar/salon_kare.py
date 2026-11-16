@@ -34,6 +34,7 @@ def main():
     ap.add_argument('--w', type=int, default=2560)
     ap.add_argument('--h', type=int, default=1440)
     ap.add_argument('--ek', default='', help='extra hash parameters, e.g. ev=0.5')
+    ap.add_argument('--sicaklik', type=float, default=None, help='hold the simulated temperature (°C) before the still')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     import sys
@@ -57,9 +58,12 @@ def main():
             if pg.evaluate("document.body.classList.contains('nogl')"):
                 print('yuklenemedi:', pg.evaluate("document.getElementById('fallback').textContent"))
                 break
-            stats = pg.evaluate(f'(async () => {{ const s = await window.__km.still({u}); await new Promise(r => requestAnimationFrame(r));'
+            if a.sicaklik is not None:
+                pg.evaluate(f'window.__km.sim.temp({a.sicaklik})')
+                pg.wait_for_timeout(1500)
+            stats = pg.evaluate(f'(async () => {{ const s = await window.__km.still({u}, {{ settle: 6 }}); await new Promise(r => requestAnimationFrame(r));'
                                 f' const t = await window.__km.still({u}); return t || s; }})()')
-            name = os.path.join(a.out, f'kare_u{u}')
+            name = os.path.join(a.out, f'kare_u{u}' + (f'_{a.sicaklik:g}c' if a.sicaklik is not None else ''))
             pg.screenshot(path=name + '.png')
             im = Image.open(name + '.png').convert('RGB')
             im.resize((1600, round(1600 * im.height / im.width)), Image.LANCZOS).save(name + '.jpg', quality=92)
