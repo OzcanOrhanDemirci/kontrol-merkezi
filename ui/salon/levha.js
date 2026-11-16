@@ -44,7 +44,9 @@
 (function (global) {
   'use strict';
 
-  const FONT_DIR = new URL('../fonts/', document.currentScript.src);
+  // also runs in a Worker (levha-isci.js): no document there, an OffscreenCanvas and the worker's own font set
+  const DOC = typeof document !== 'undefined' ? document : null;
+  const FONT_DIR = new URL('../fonts/', DOC && DOC.currentScript ? DOC.currentScript.src : self.location.href);
   const FACES = [
     ['KMStencil', 'BigShouldersStencil-ExtraBold.woff2'],
     ['KMKond', 'BarlowCondensed-SemiBold.woff2'],
@@ -52,7 +54,7 @@
   ];
   let loaded = false;
   const ready = Promise.all(FACES.map(([family, file]) =>
-    new FontFace(family, `url("${new URL(file, FONT_DIR)}")`).load().then(face => document.fonts.add(face))))
+    new FontFace(family, `url("${new URL(file, FONT_DIR)}")`).load().then(face => (DOC ? DOC.fonts : self.fonts).add(face))))
     .then(() => { loaded = true; });
 
   // ---------------------------------------------------------------- sizes
@@ -70,7 +72,7 @@
 
   // ---------------------------------------------------------------- basics
   const CTX = { willReadFrequently: true };   // CPU raster: identical bytes across context re-creation
-  function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function mk(w, h) { const c = DOC ? DOC.createElement('canvas') : new OffscreenCanvas(w, h); c.width = w; c.height = h; return c; }
   const ctxOf = cv => cv.getContext('2d', CTX);
   const clamp = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
   const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -851,4 +853,4 @@
   }
 
   global.KM_LEVHA = Object.freeze({ ready, sizes, draw });
-})(window);
+})(typeof window !== 'undefined' ? window : self);

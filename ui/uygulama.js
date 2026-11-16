@@ -48,12 +48,32 @@ const M = {
 const sound = window.KM_SES;
 let S = null;                      // the renderer
 let journey = null;                // the camera path (built from the pack's views)
+let W = null;                      // walk mode (ui/yuruyus.js): Y; it takes its own input while active
 
 // ==================================================================== the journey
-// The path is the pack's centre line from the fanlar eye to the rgb eye; the camera's look is a function of where it
-// is (s), so going back is the same picture in reverse: a slow pull back from the monument, the arch receding.
+// The path runs straight down the central aisle (Özcan, 11-17: "Kameranın betonların etrafından dolaşmasına gerek
+// yok, direk dümdüz rgb alana gidebilir"): the pack's own path only for its first stretch off the landing (it clears
+// the desks and the rail), then x = 0 at a gentle rise to ~7.6 m and a glide down onto the rgb eye over the last 70 m
+// (clearance checked against the dump: the aisle leaves >= 6 m to the columns, nothing hangs in it). The look turns
+// from the entrance's view onto the arch over the first ~45 m and stays on it: the monument grows the whole way, and
+// going back is the same picture in reverse.
+function straightPath(views) {
+  const old = (views.yol && views.yol.length >= 2) ? views.yol : [views.fanlar.goz, views.rgb.goz];
+  const head = old.filter(p => p[2] >= -43.3).map(p => [0, p[1], p[2]]);
+  const end = views.rgb.goz;
+  if (head.length < 2 || end[2] > -100) return old;
+  const z0 = head[head.length - 1][2], y0 = head[head.length - 1][1], ymid = 7.6;
+  const pts = head.slice();
+  for (let z = z0 - 2; z > end[2]; z -= 2) {
+    let y = y0 + (ymid - y0) * smooth((z0 - z) / 60);
+    y += (end[1] - y) * smooth((z - (end[2] + 70)) / -70);
+    pts.push([0, y, z]);
+  }
+  pts.push(end.slice());
+  return pts;
+}
 function buildJourney(views) {
-  const P = (views.yol && views.yol.length >= 2) ? views.yol.slice() : [views.fanlar.goz, views.rgb.goz];
+  const P = straightPath(views);
   const pts = [P[0], ...P, P[P.length - 1]];
   const seg = (i, t) => {                       // Catmull-Rom (uniform) between pts[i+1] and pts[i+2]
     const p0 = pts[i], p1 = pts[i + 1], p2 = pts[i + 2], p3 = pts[i + 3];
@@ -64,7 +84,7 @@ function buildJourney(views) {
   let acc = 0, prev = seg(0, 0);
   for (let i = 0; i < P.length - 1; i++) {
     for (let j = 0; j < 24; j++) {
-      const q = seg(i, (j + (i === 0 && j === 0 ? 0 : 0)) / 24);
+      const q = seg(i, j / 24);
       acc += len3(sub(q, prev)); prev = q;
       table.push({ s: acc, p: q });
     }
@@ -88,20 +108,9 @@ function buildJourney(views) {
     pose(s) {
       const eye = at(s);
       const d0 = norm(sub(f0.hedef, eye)), d1 = norm(sub(f1.hedef, eye));
-      const ahead = norm(sub(add(at(s + 32), [0, 0.6, 0]), eye));
-      // through the middle the lane's view across the rows (the hall's width); as the path crosses back through a gap
-      // of the inner row the look swings onto the arch, revealed between the columns, and stays on it, growing
-      const u = s / total, onArch = smooth((u - 0.6) / 0.16);
-      const w0 = 1 - smooth(s / 45), w1 = Math.max(onArch, smooth((s - (total - 70)) / 70));
-      let dir = add(add(mul(d0, w0 * (1 - w1)), mul(d1, w1)), mul(ahead, Math.max(0, 1 - w0 - w1)));
-      if (s >= total - 1e-3) dir = d1;
-      // in the lane between the rows the camera turns across them (up to ~22 degrees towards the aisle), so the view
-      // opens diagonally over the forest of columns instead of down a second corridor; it gives way to the arch
-      const lane = clamp((eye[0] - 6) / 8, 0, 1);
-      const yaw = -0.38 * smooth(lane) * Math.sign(eye[0] || 1) * (1 - onArch);
-      const cy = Math.cos(yaw), sy = Math.sin(yaw), d = norm(dir);
-      dir = [d[0] * cy - d[2] * sy, d[1], d[0] * sy + d[2] * cy];
-      return { eye, dir: norm(dir), fov: lerp(f0.fov || 50, f1.fov || 50, smooth(s / total)) };
+      const w = smooth(s / 45);
+      const dir = s >= total - 1e-3 ? d1 : norm(add(mul(d0, 1 - w), mul(d1, w)));
+      return { eye, dir, fov: lerp(f0.fov || 50, f1.fov || 50, smooth(s / total)) };
     },
   };
 }
@@ -216,14 +225,61 @@ function stepLevers(dt) {
 // ==================================================================== the texts in the world
 // Each texture is redrawn only when what it shows changes (KM_LEVHA.draw is deterministic).
 const levhaKeys = {};
-// a redraw costs 15-35 ms of the main thread and each one cost a frame (the real window, 11-16: 55 ms frames among
-// 30 ms ones): at most one per frame, and none while the camera travels (no text can be read in flight; whatever
-// changed is drawn on arrival)
+// A redraw costs 15-40 ms (the keystone display: 20-25 ms of drawing, 7-22 ms of canvas upload), and on the main
+// thread each one cost frames (his window's log, 11-17: 55-78 ms stalls every few seconds). The first drawing of each
+// texture happens here at start; every redraw after it goes to a worker (levha-isci.js, the same levha.js) and comes
+// back as bytes that the renderer uploads in strips over the next frames. One request per texture in flight; a newer
+// state waiting behind it replaces any older one. Without a worker the old way: one redraw a frame, none in flight.
+// The first set is drawn by the worker too, while the pack loads (11-17: drawn here in the first frame it held the
+// main thread 1.3 s, 18 drawings); each is parked until the renderer exists, then uploaded at once (installLevha),
+// and the first frame waits for the set (the start, at most 3 s; a texture still missing is drawn here as before).
 let levhaBudget = 1;
+let levhaWorker = null;
+try { levhaWorker = new Worker('salon/levha-isci.js'); } catch (e) { levhaWorker = null; }
+const levhaFlight = {}, levhaWaiting = {}, levhaParked = {}, levhaFirst = new Set();
+let levhaId = 0;
+function installLevha(name, p) {
+  S.setLevha(name, new ImageData(new Uint8ClampedArray(p.buf), p.w, p.h), p.opts);
+  levhaKeys[name] = p.key;
+}
+if (levhaWorker) {
+  levhaWorker.onmessage = e => {
+    const m = e.data;
+    const f = levhaFlight[m.name];
+    delete levhaFlight[m.name];
+    if (m.error || !f) { if (f && m.error) console.error('levha: ' + m.error); levhaWorker.fallback = !!m.error; }
+    else if (levhaKeys[m.name] === undefined) {
+      const p = { w: m.w, h: m.h, buf: m.buf, key: f.key, opts: f.opts };
+      if (S && S.ready) installLevha(m.name, p); else levhaParked[m.name] = p;
+    }
+    else if (S && S.setLevhaBytes && S.setLevhaBytes(m.name, m.w, m.h, new Uint8Array(m.buf), f.opts)) levhaKeys[m.name] = f.key;
+    const w = levhaWaiting[m.name];
+    if (w) { delete levhaWaiting[m.name]; askLevha(m.name, w.data, w.key, w.opts); }
+  };
+  levhaWorker.onerror = () => { levhaWorker.fallback = true; };
+}
+function askLevha(name, data, key, opts) {
+  if (levhaFlight[name]) { levhaWaiting[name] = { data, key, opts }; return; }
+  levhaFlight[name] = { key, opts };
+  levhaWorker.postMessage({ id: ++levhaId, name, data });
+}
 function putLevha(name, data, opts) {
-  if (!S || !window.KM_LEVHA || !KM_LEVHA.sizes[name]) return;
+  if (!window.KM_LEVHA || !KM_LEVHA.sizes[name]) return;
   const key = JSON.stringify(data);
   if (levhaKeys[name] === key) return;
+  if (!S || !S.ready) {                          // before the renderer: the first set, to the worker
+    if (!levhaWorker || levhaWorker.fallback) return;
+    if ((levhaParked[name] && levhaParked[name].key === key) || (levhaFlight[name] && levhaFlight[name].key === key) ||
+        (levhaWaiting[name] && levhaWaiting[name].key === key)) return;
+    levhaFirst.add(name);
+    askLevha(name, data, key, opts || {});
+    return;
+  }
+  if (levhaKeys[name] !== undefined && levhaWorker && !levhaWorker.fallback && S.setLevhaBytes) {
+    if ((levhaFlight[name] && levhaFlight[name].key === key) || (levhaWaiting[name] && levhaWaiting[name].key === key)) return;
+    askLevha(name, data, key, opts || {});
+    return;
+  }
   if (levhaKeys[name] !== undefined && (levhaBudget <= 0 || travelling())) return;
   levhaBudget--;
   levhaKeys[name] = key;
@@ -492,10 +548,10 @@ function step(dt) {
   stepLevers(dt);
   updateLights(dt);
   if (!S) return;
-  const pose = drift(journey.pose(M.s));
+  const pose = W ? W.camera(dt, drift(journey.pose(M.s))) : drift(journey.pose(M.s));
   S.setCamera(pose.eye, add(pose.eye, pose.dir), pose.fov);
   // the eye half adapts to the dark when the lights are out
-  S.setExposure(exposureAt(M.s) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
+  S.setExposure((W ? W.exposure(exposureAt(M.s)) : exposureAt(M.s)) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
   for (const n of Object.keys(M.rot)) S.setRotor(n, M.rot[n], M.w[n]);
   updateHaze();
   updateLamps();
@@ -530,24 +586,26 @@ requestAnimationFrame(measureRefresh);
 PACE.lt = { n: 0, max: 0 };
 try { new PerformanceObserver(l => l.getEntries().forEach(e => { PACE.lt.n++; if (e.duration > PACE.lt.max) { PACE.lt.max = e.duration; PACE.lt.at = (e.startTime - bootT) / 1000; } })).observe({ type: 'longtask' }); } catch (e) { /* not supported */ }
 function choosePace() {
-  // never faster than ~30 fps (Özcan, 11-16: "2K da 30 fps yeterli"; there is no free movement): the largest whole
-  // number of refreshes that still gives 30+ (165 Hz: 5 = 33 fps; 60 Hz: 2); the GPU time this frees goes to quality
-  const cap = Math.max(1, Math.floor(1000 / 30 / PACE.refresh + 0.02));
+  // An even cadence of k refreshes, as fast as the GPU allows with margin but never above ~60 fps (11-17: at 165 Hz,
+  // 3 = 55 fps; the 30 fps of the first build stepped visibly at the journey's speed: "takıla takıla akıcı"). The GPU's
+  // work runs beside the next frame's script, so the budget is the whole period less the compositor's share.
+  const kmin = Math.max(1, Math.ceil((1000 / 60 - 0.3) / PACE.refresh));
   const g = GPU.slice(-60);
   if (g.length >= 12) {
     const s2 = g.slice().sort((x, y) => x - y), med = s2[s2.length >> 1];
-    const k = Math.max(cap, clamp(Math.ceil((med * 1.3 + 2.0) / PACE.refresh - 0.02), 1, 8));
+    const need = med * 1.15 + 1.5;
+    const k = Math.max(kmin, clamp(Math.ceil(need / PACE.refresh - 0.02), 1, 8));
     if (!PACE.decided) { PACE.decided = true; PACE.k = k; return; }
     if (k > PACE.k) { PACE.down = 0; if (++PACE.up >= 2) { PACE.k = k; PACE.up = 0; } }
-    else if (k < PACE.k && (med * 1.3 + 2.0) < (PACE.k - 1) * PACE.refresh * 0.85) { PACE.up = 0; if (++PACE.down >= 3) { PACE.k = k; PACE.down = 0; } }
+    else if (k < PACE.k && need < (PACE.k - 1) * PACE.refresh * 0.85) { PACE.up = 0; if (++PACE.down >= 3) { PACE.k = k; PACE.down = 0; } }
     else { PACE.up = 0; PACE.down = 0; }
     return;
   }
-  if (!PACE.decided) { PACE.decided = true; PACE.k = cap; PACE.recent.length = 0; return; }
+  if (!PACE.decided) { PACE.decided = true; PACE.k = Math.max(kmin, 3); PACE.recent.length = 0; return; }
   const iv = PACE.recent.splice(0);
   if (iv.length < 20) return;
   const miss = iv.filter(x => x > (PACE.k + 0.5) * PACE.refresh).length / iv.length;
-  if (miss > 0.04) { if (++PACE.up >= 2) { PACE.k = Math.min(cap + 3, PACE.k + 1); PACE.up = 0; } } else PACE.up = 0;
+  if (miss > 0.04) { if (++PACE.up >= 2) { PACE.k = Math.min(kmin + 4, PACE.k + 1); PACE.up = 0; } } else PACE.up = 0;
 }
 function reportPerf() {
   const a = perfWin.slice().sort((x, y) => x - y);
@@ -560,6 +618,7 @@ function reportPerf() {
        (gm != null ? ` gpu=${gm.toFixed(1)}ms` : '') + ` n=${a.length} k=${PACE.k} yenileme=${PACE.refresh.toFixed(2)} yer=${M.place} s=${M.s.toFixed(0)}` +
        ` uzun-gorev=${PACE.lt.n}${PACE.lt.n ? '/' + PACE.lt.max.toFixed(0) + 'ms@' + PACE.lt.at.toFixed(2) + 's' : ''}`);
   PACE.lt = { n: 0, max: 0 };
+  PACE.missN = 0;
 }
 function frame(now) {
   raf = 0;
@@ -570,13 +629,23 @@ function frame(now) {
     PACE.last = now;
   }
   if (++PACE.n % 60 === 0) choosePace();
-  const dt = lastT ? Math.min(0.1, (now - lastT) / 1000) : 1 / 60;
+  // the world advances by whole refreshes: rAF timestamps jitter by a fraction of a refresh, and a frame shown for k
+  // refreshes must have moved the camera by exactly k refreshes' worth, or even pacing still judders
+  const nRef = lastT ? Math.max(1, Math.round((now - lastT) / PACE.refresh)) : PACE.k;
+  const dt = Math.min(0.1, nRef * PACE.refresh / 1000);
   lastT = now;
   step(dt);
   S.render(dt, Math.min(dt, PACE.k * PACE.refresh / 1000));
   const st = S.stats();
   if (st && st.gpuMs > 0) { GPU.push(st.gpuMs); if (GPU.length > 240) GPU.shift(); }
-  if (lastFrameNow) { const iv = now - lastFrameNow; perfWin.push(iv); PACE.recent.push(iv); }
+  if (lastFrameNow) {
+    const iv = now - lastFrameNow; perfWin.push(iv); PACE.recent.push(iv);
+    // every late frame, with what it did: the witness for the hitches (at most 12 lines per 10 s window)
+    if (host && iv > (PACE.k + 0.5) * PACE.refresh && (PACE.missN = (PACE.missN || 0) + 1) <= 12)
+      send(`perf:gec iv=${iv.toFixed(1)} gpu=${st && st.gpuMs != null ? st.gpuMs.toFixed(1) : '?'} js=${(performance.now() - now).toFixed(1)}` +
+           ` onceki-js=${(PACE.lastJs || 0).toFixed(1)} levha=${Object.keys(levhaFlight).length} s=${M.s.toFixed(0)} v=${M.v.toFixed(1)}`);
+  }
+  PACE.lastJs = performance.now() - now;
   lastFrameNow = now;
   if (host && now - perfAt > 10000) { perfAt = now; reportPerf(); }
   if (window.__km && window.__km.onFrame) window.__km.onFrame(now);
@@ -588,7 +657,7 @@ function kick() { if (!raf && M.visible && S && S.ready && !params.has('still'))
 if (host) host.addEventListener('message', e => onMessage(e.data));
 else sim = window.KM_BENZETIM(onMessage);
 window.__km = {
-  M, D, get S() { return S; }, go, step, onMessage, get sim() { return sim; },
+  M, D, get S() { return S; }, get W() { return W; }, go, step, onMessage, get sim() { return sim; },
   // measurement and stills: put the camera somewhere on the journey (0..1) and draw one frame
   async still(u, opts = {}) {
     const pin = () => { M.s = clamp(u, 0, 1) * journey.total; M.v = 0; M.place = u >= 1 ? 'rgb' : 'fanlar'; };
@@ -602,24 +671,73 @@ window.__km = {
   },
 };
 
+// the opening's stages, logged once as ms from the window process' start (t0 in the hash, epoch ms; without a host
+// from the navigation): where the time to the first frame goes
+const T_START = params.has('t0') ? +params.get('t0') : performance.timeOrigin;
+const sinceStart = t => Math.round(performance.timeOrigin + t - T_START);
+function reportOpening(marks) {
+  const L = S.load, at = v => sinceStart(L.t0 + v);
+  const big = Object.entries(L.files).sort((a, b) => b[1][1] - a[1][1]).slice(0, 8)
+    .map(([f, [t, n]]) => f.replace(/\.bin\.z$|_2k\.png$/, '') + '=' + at(t) + '/' + Math.round(n / 1048576) + 'MB');
+  const tex = Object.entries(L.files).filter(([f]) => /\.png$/.test(f)).map(([, [t]]) => t);
+  send('perf:acilis ' + Object.entries(marks).map(([k, v]) => k + '=' + sinceStart(v)).join(' ') +
+       ' | yukleme ' + Object.entries(L.mark).map(([k, v]) => k + '=' + at(v)).join(' ') +
+       ' | dosyalar ' + big.join(' ') + (tex.length ? ' son-doku=' + at(Math.max(...tex)) : '') +
+       (L.firstMs != null ? ' | ilk-cizim-betik=' + Math.round(L.firstMs) + 'ms' : '') +
+       ' uzun-gorev=' + PACE.lt.n + (PACE.lt.n ? '/' + PACE.lt.max.toFixed(0) + 'ms@' + sinceStart(bootT + PACE.lt.at * 1000) : ''));
+}
+
 (async () => {
-  const base = host ? '/sahne/' : (params.get('paket') || '../sahne/paket/');
+  const base = params.get('paket') || (host ? '/sahne/' : '../sahne/paket/');   // the window: its pack's own host
+  const marks = { betik: bootT };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // connected first: the service's state arrives while the pack loads, so the first set of signs already shows it
+  if (host) send('ready'); else sim.connect();
   try {
     await document.fonts.ready;
     sound.init();
     if (window.KM_LEVHA) await KM_LEVHA.ready;
-    S = await window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2) });
+    marks.yazilar = performance.now();
+    const opening = window.KM_ACILIS;
+    const loading = window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2), packBytes: +params.get('bayt') || 0,
+      onProgress: f => opening && opening.progress(f) });
+    // the first set of signs, drawn in the worker meanwhile: with the service's state if it comes within 0.8 s
+    for (let t = performance.now(); !D.durum && performance.now() - t < 800;) await wait(20);
+    updateTexts();
+    marks.levhaIstendi = performance.now();
+    S = await loading;
     journey = buildJourney(S.views);
+    if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick, exposureAt });
     S.ready = true;
+    marks.hazir = performance.now();
+    for (const n of Object.keys(levhaParked)) { installLevha(n, levhaParked[n]); delete levhaParked[n]; }
+    // no sign pops in during the opening: the first frame waits for the set (any still missing after 3 s is drawn
+    // by the first frame itself)
+    for (let t = performance.now(); [...levhaFirst].some(n => levhaKeys[n] === undefined) && performance.now() - t < 3000;) await wait(10);
+    marks.levha = performance.now();
   } catch (err) {
     console.error(err);
     send('perf:sahne-yuklenemedi ' + (err && err.message));
     document.body.classList.add('nogl');
     const fb = document.getElementById('fallback');
     if (fb) fb.textContent = 'Sahne yüklenemedi: ' + (err && err.message);
+    if (window.KM_ACILIS) KM_ACILIS.skip();
   }
-  if (host) send('ready'); else sim.connect();
   kick();
-  if (params.has('still') && S) window.__km.still(+(params.get('still') || 0));
+  if (params.has('still') && S) { if (window.KM_ACILIS) KM_ACILIS.skip(); window.__km.still(+(params.get('still') || 0)); }
+  else if (S) {
+    // the first frame drawn (this callback runs in the same refresh, right after the frame's), then the next
+    // refresh: it is on the screen
+    const next = () => new Promise(r => requestAnimationFrame(r));
+    marks.basla = performance.now();
+    while (!S.frames) marks.ilkTik = await next();
+    marks.ilkKare = performance.now();
+    await next();
+    marks.gorundu = performance.now();
+    // the loading screen opens onto the scene; the scene's own opening (the shaft's strike) starts with it
+    M.introT = 0;
+    if (window.KM_ACILIS) KM_ACILIS.end();
+    reportOpening(marks);
+  }
 })();
 })();

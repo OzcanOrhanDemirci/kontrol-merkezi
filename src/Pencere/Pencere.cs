@@ -1,4 +1,4 @@
-﻿// The window: borderless WebView2 host for ui/index.html, unelevated, holds no hardware.
+// The window: borderless WebView2 host for ui/index.html, unelevated, holds no hardware.
 // It connects to the service's pipe and forwards messages both ways; if the service is not running it asks the
 // scheduled task to start it (COM, no UAC prompt, the way Fan Anahtarı triggers its task).
 // Window chrome handling (frameless with snap and shadow, drag, resize edges) follows Fan Anahtarı's Ui.cs.
@@ -72,23 +72,134 @@ static class PencereUygulamasi
         readonly object _writeLock = new();
         string _lastConn;
 
+        // Fullscreen (Özcan, 11-17: "Tam ekran başlamıyor"): the whole monitor under the cursor, over the taskbar, from
+        // the first frame. A normal (not maximized) borderless window exactly the monitor's size: Windows then treats
+        // it as a fullscreen app and the taskbar steps back while it is in front. Double-click toggles to the window
+        // (80 % of the work area, resizable, draggable) and back; Win+Up from either is Windows' maximize.
+        bool _full, _switching, _restoring;
+        Rectangle _windowed, _normalBounds;  // the window, and the last normal (not minimized or maximized) bounds
+        FormWindowState _lastState = FormWindowState.Normal;
+        Bitmap _opening;                    // the loading screen's picture, painted before the page and served to it
+
         public PencereForm()
         {
             Text = Title;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
-            BackColor = Color.Black;
-            var wa = Screen.FromPoint(Cursor.Position).WorkingArea;
+            BackColor = Acilis.Zemin;
+            var screen = Screen.FromPoint(Cursor.Position);
+            var wa = screen.WorkingArea;
             int h = (int)(wa.Height * 0.80), w = (int)(h * 1.6);
             if (w > wa.Width * 0.92) { w = (int)(wa.Width * 0.92); h = (int)(w / 1.6); }
-            Bounds = new Rectangle(wa.Left + (wa.Width - w) / 2, wa.Top + (wa.Height - h) / 2, w, h);
+            _windowed = new Rectangle(wa.Left + (wa.Width - w) / 2, wa.Top + (wa.Height - h) / 2, w, h);
             MinimumSize = new Size(Math.Min(900, w), Math.Min(560, h));
-            Padding = new Padding(LogicalToDeviceUnits(5));
+            _full = true;
+            Bounds = _normalBounds = screen.Bounds;
+            _opening = Acilis.Resim(screen.Bounds.Width, screen.Bounds.Height);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             Load += OnLoadAsync;
             Activated += (_, _) => PostVis();
             Deactivate += (_, _) => PostVis();
-            Resize += (_, _) => PostVis();
+            Resize += (_, _) => { FollowState(); PostVis(); };
+            Move += (_, _) => FollowState();
+        }
+
+        /// <summary>Keeps the fullscreen flag, the resize margin and the corners true to what Windows did (minimize,
+        /// Win+Up, a snap).</summary>
+        void FollowState()
+        {
+            if (_switching || _restoring || !IsHandleCreated) return;
+            var st = WindowState;
+            if (st == FormWindowState.Normal && _lastState == FormWindowState.Minimized)
+            {
+                // Restored from the taskbar, WinForms puts a frameless WS_THICKFRAME window back 7 px larger on every
+                // side (11-17: 2574 x 1454 instead of the monitor's 2560 x 1440): back to exactly what it was
+                _lastState = st;
+                _restoring = true;
+                var b = _normalBounds;
+                BeginInvoke((Action)(() =>
+                {
+                    _switching = true;
+                    try { if (WindowState == FormWindowState.Normal) Bounds = b; }
+                    finally { _switching = false; _restoring = false; }
+                    ApplyChrome();
+                }));
+                return;
+            }
+            _lastState = st;
+            if (_full && st == FormWindowState.Maximized) _full = false;
+            if (_full && st == FormWindowState.Normal && Bounds != Screen.FromHandle(Handle).Bounds) _full = false;
+            if (st == FormWindowState.Normal) _normalBounds = Bounds;
+            ApplyChrome();
+        }
+
+        void ApplyChrome()
+        {
+            bool framed = !_full && WindowState == FormWindowState.Normal;
+            var pad = new Padding(framed ? LogicalToDeviceUnits(5) : 0);
+            if (Padding != pad) Padding = pad;
+            int corner = _full ? 1 : 2;     // DWMWCP_DONOTROUND fullscreen, else ROUND
+            DwmSetWindowAttribute(Handle, 33, ref corner, sizeof(int));
+            // no 1 px window border fullscreen (DWMWA_BORDER_COLOR: DWMWA_COLOR_NONE; else the default)
+            int border = _full ? unchecked((int)0xFFFFFFFE) : unchecked((int)0xFFFFFFFF);
+            DwmSetWindowAttribute(Handle, 34, ref border, sizeof(int));
+        }
+
+        void SetFull(bool on)
+        {
+            _switching = true;
+            try
+            {
+                if (on)
+                {
+                    if (WindowState == FormWindowState.Normal) _windowed = Bounds;
+                    var b = Screen.FromHandle(Handle).Bounds;
+                    _full = true;
+                    if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
+                    ApplyChrome();
+                    Bounds = b;
+                }
+                else
+                {
+                    _full = false;
+                    if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
+                    var wa = Screen.FromHandle(Handle).WorkingArea;
+                    // the remembered window on this monitor (it may have been on another one)
+                    var r = _windowed;
+                    if (!wa.IntersectsWith(r)) r = new Rectangle(wa.Left + (wa.Width - r.Width) / 2, wa.Top + (wa.Height - r.Height) / 2, r.Width, r.Height);
+                    ApplyChrome();
+                    Bounds = r;
+                }
+            }
+            finally { _switching = false; }
+            _lastState = WindowState;
+            _normalBounds = Bounds;
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e) => PaintOpening(e.Graphics, ClientRectangle, Point.Empty);
+
+        /// <summary>The loading screen's picture where the page will put the same pixels; the field colour once it is
+        /// gone.</summary>
+        void PaintOpening(Graphics g, Rectangle area, Point offset)
+        {
+            if (_opening == null) { using var b = new SolidBrush(BackColor); g.FillRectangle(b, area); return; }
+            if (ClientSize == _opening.Size) g.DrawImageUnscaled(_opening, -offset.X, -offset.Y);
+            else
+            {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                g.DrawImage(_opening, new Rectangle(-offset.X, -offset.Y, ClientSize.Width, ClientSize.Height));
+            }
+        }
+
+        /// <summary>The WebView2 control paints the same picture under the browser (transparent until the page has
+        /// drawn its loading screen), so nothing but that picture shows between the window and the page.</summary>
+        sealed class Sahne : WebView2
+        {
+            public Action<Graphics, Rectangle, Point> Paint0;
+            protected override void OnPaintBackground(PaintEventArgs e)
+            {
+                if (Paint0 != null) Paint0(e.Graphics, ClientRectangle, Location); else base.OnPaintBackground(e);
+            }
         }
 
         protected override CreateParams CreateParams
@@ -116,7 +227,7 @@ static class PencereUygulamasi
                     }
                     m.Result = IntPtr.Zero;
                     return;
-                case WM_NCHITTEST when WindowState != FormWindowState.Maximized:
+                case WM_NCHITTEST when WindowState != FormWindowState.Maximized && !_full:
                     var ht = HitTest(m.LParam);
                     if (ht != HTCLIENT) { m.Result = (IntPtr)ht; return; }
                     break;
@@ -143,22 +254,28 @@ static class PencereUygulamasi
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            int on = 1, round = 2;
+            int on = 1;
             DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
-            DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int));
+            // no zoom-in animation on opening: during it the windows behind showed at the picture's edges (11-17)
+            DwmSetWindowAttribute(Handle, 3, ref on, sizeof(int));     // DWMWA_TRANSITIONS_FORCEDISABLED
+            ApplyChrome();
         }
 
         async void OnLoadAsync(object sender, EventArgs e)
         {
             try
             {
-                _wv = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
+                // transparent until the page's loading screen is up: under it the control paints the same picture
+                _wv = new Sahne { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Transparent, Paint0 = PaintOpening };
                 Controls.Add(_wv);
-                string uiDir = PrepareUi();
                 var dataDir = Path.Combine(Program.DataDir, "WebView2");
                 var opts = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
-                var env = await CoreWebView2Environment.CreateAsync(null, dataDir, opts);
+                var envTask = CoreWebView2Environment.CreateAsync(null, dataDir, opts);
+                string uiDir = PrepareUi();
+                var env = await envTask;
+                Mark("ortam");
                 await _wv.EnsureCoreWebView2Async(env);
+                Mark("webview");
                 var core = _wv.CoreWebView2;
                 var s = core.Settings;
                 s.AreDefaultContextMenusEnabled = false;
@@ -170,14 +287,16 @@ static class PencereUygulamasi
                 s.AreDefaultScriptDialogsEnabled = false;
                 s.IsSwipeNavigationEnabled = false;
                 s.IsGeneralAutofillEnabled = false;
-                // One handler serves the whole origin: ui\ and, under /sahne/, the hall's data pack (light maps, volumes,
-                // geometry; docs/SALON.md), next to the exe when installed, the repository's sahne/paket in development.
-                // Not SetVirtualHostNameToFolderMapping: requests to a mapped host never reach WebResourceRequested, so
-                // the pack under it failed with "Failed to fetch" (first real-window run, 11-16); a second host would
-                // be cross-origin for fetch and WebGL.
+                // The page's origin (ui\ and the loading screen's picture) is served by the handler. The hall's data
+                // pack (~900 MB: light maps, volumes, geometry; docs/SALON.md), next to the exe when installed, the
+                // repository's sahne/paket in development, is a folder mapped to a host of its own, so Chromium reads
+                // it itself: through the handler's managed stream it was the opening's slowest part (11-17). The
+                // mapped host must not be the handler's (requests to a mapped host never reach WebResourceRequested,
+                // 11-16), and it is cross-origin for the page, so it allows every origin (fetch's CORS check).
                 _uiDir = uiDir;
                 _pack = FindPack();
                 if (_pack == null) Program.Log("pencere: sahne paketi bulunamadı (sahne/sahne.json)");
+                else core.SetVirtualHostNameToFolderMapping(PackHost, _pack, CoreWebView2HostResourceAccessKind.Allow);
                 core.AddWebResourceRequestedFilter("https://" + HostName + "/*", CoreWebView2WebResourceContext.All);
                 core.WebResourceRequested += OnRequest;
                 core.WebMessageReceived += OnWebMessage;
@@ -188,7 +307,12 @@ static class PencereUygulamasi
                     _pageReady = false;
                     try { BeginInvoke((Action)(() => { try { _wv.CoreWebView2.Reload(); } catch { } })); } catch { }
                 };
-                core.Navigate("https://" + HostName + "/index.html");
+                Mark("gezinme");
+                // the pack's size for the loading screen's progress (the mapped host sends no Content-Length)
+                long packBytes = 0;
+                if (_pack != null) foreach (var f in new DirectoryInfo(_pack).EnumerateFiles("*", SearchOption.AllDirectories)) packBytes += f.Length;
+                core.Navigate("https://" + HostName + "/index.html#t0=" + StartEpochMs.ToString(Program.Inv) +
+                    (_pack != null ? "&paket=https://" + PackHost + "/&bayt=" + packBytes.ToString(Program.Inv) : ""));
             }
             catch (Exception ex)
             {
@@ -201,15 +325,31 @@ static class PencereUygulamasi
 
         string _pack, _uiDir;
 
+        // the opening's stages on the host side, ms from the process' start; the page adds its own (same clock, epoch)
+        static readonly long StartEpochMs = new DateTimeOffset(System.Diagnostics.Process.GetCurrentProcess().StartTime).ToUnixTimeMilliseconds();
+        readonly StringBuilder _marks = new();
+        void Mark(string name) => _marks.Append(name).Append('=').Append(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - StartEpochMs).Append(' ');
+
+        protected override void OnShown(EventArgs e) { base.OnShown(e); Mark("pencere"); }
+
         void OnRequest(object sender, CoreWebView2WebResourceRequestedEventArgs e)
         {
             try
             {
                 var env = _wv.CoreWebView2.Environment;
                 var path = Uri.UnescapeDataString(new Uri(e.Request.Uri).AbsolutePath);
-                bool inPack = path.StartsWith("/sahne/", StringComparison.Ordinal);
-                var root = inPack ? _pack : _uiDir;
-                var rel = (inPack ? path.Substring("/sahne/".Length) : path.TrimStart('/')).Replace('/', Path.DirectorySeparatorChar);
+                if (path == "/acilis.bmp")
+                {
+                    // the loading screen's picture, the very pixels the window painted (index.html, #acilis)
+                    var ms = new MemoryStream();
+                    if (_opening != null) _opening.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
+                    ms.Position = 0;
+                    e.Response = ms.Length == 0 ? env.CreateWebResourceResponse(null, 404, "Not Found", "")
+                        : env.CreateWebResourceResponse(ms, 200, "OK", "Content-Type: image/bmp\r\nCache-Control: no-store\r\nContent-Length: " + ms.Length);
+                    return;
+                }
+                var root = _uiDir;
+                var rel = path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
                 var full = root == null ? null : Path.GetFullPath(Path.Combine(root, rel));
                 if (full == null || !full.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
                 {
@@ -293,14 +433,23 @@ static class PencereUygulamasi
                 case "close": Close(); break;
                 case "minimize": WindowState = FormWindowState.Minimized; break;
                 case "maximize":
-                    WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+                    // the page's double-click: fullscreen <-> the window (a maximized window goes fullscreen)
+                    SetFull(!_full);
+                    break;
+                case "acilis-bitti":
+                    // the scene is on the screen: the browser opaque again, the picture no longer needed
+                    try { _wv.DefaultBackgroundColor = BackColor; } catch { }
+                    _opening?.Dispose(); _opening = null;
                     break;
                 case "drag":
+                    if (_full) break;       // a fullscreen window does not move
                     ReleaseCapture();
                     SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)2, IntPtr.Zero);
                     break;
                 default:
-                    if (msg.StartsWith("perf:", StringComparison.Ordinal)) Program.Log("pencere: " + msg.Substring(5));
+                    if (msg.StartsWith("perf:acilis ", StringComparison.Ordinal))
+                        Program.Log("pencere: açılış (ms, süreç başından) " + _marks.ToString().Trim() + " | sayfa " + msg.Substring(12));
+                    else if (msg.StartsWith("perf:", StringComparison.Ordinal)) Program.Log("pencere: " + msg.Substring(5));
                     else if (msg.StartsWith("{", StringComparison.Ordinal)) SendToService(msg);
                     break;
             }

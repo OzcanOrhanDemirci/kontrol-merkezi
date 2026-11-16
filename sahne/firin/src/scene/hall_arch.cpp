@@ -450,8 +450,15 @@ void chamberInterior(Hall& h) {
     h.box(v3(0, 0.5f * kSill, zm), v3(kChamberHW, 0.5f * kSill, dz), 0.03f, M_KOLON, 4.0f);
     for (int s : {-1, 1}) {
         const float3 n = v3(float(-s), 0, 0);
-        liftFace(h, axes(v3(s * kChamberHW, 0, 0), cross(Y, n), Y, n), s > 0 ? kChamberBack : -kRevealEnd, s > 0 ? kRevealEnd : -kChamberBack,
-                 kSill, kTop);
+        // each side wall has a plain door (1 x 2.1 m) between the third and the fourth portal, hidden from the hall
+        // behind them: into the passage to the space behind the chamber and the long stair (hall_stair.cpp). The
+        // wall's u runs along z on the right (s > 0) and along -z on the left
+        const Xform tw = axes(v3(s * kChamberHW, 0, 0), cross(Y, n), Y, n);
+        const float u0 = s > 0 ? kChamberBack : -kRevealEnd, u1 = s > 0 ? kRevealEnd : -kChamberBack;
+        const float da = s > 0 ? up::kDoorZ0 : -up::kDoorZ1, db = s > 0 ? up::kDoorZ1 : -up::kDoorZ0;
+        liftFace(h, tw, u0, da, kSill, kTop);
+        liftFace(h, tw, db, u1, kSill, kTop);
+        liftFace(h, tw, da, db, up::kDoorTop, kTop);
         // the mouth's wall beside the opening and the bay (facing the chamber); over the opening the upstream block's
         // own back face, over that the bay's open back
         h.patch(v3(s * kOpenHW, kSill, kRevealEnd), v3(s * kChamberHW, kSill, kRevealEnd), v3(s * kOpenHW, kTop, kRevealEnd),

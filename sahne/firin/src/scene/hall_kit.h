@@ -48,6 +48,11 @@ constexpr float kDeskLampL = 25.0f;  // group 2: the fan desks' small hooded lam
 constexpr float kLambaL = 8.0f;      // group 2: the caged service lamps' bulbs and the lit door frame
 constexpr float kBulbBoard = 0.085f; //   bulb radius by the fans' stencils, the console, the doors (m)
 constexpr float kBulbHall = 0.055f;  //   bulb radius of the sparse row along the hall's walls: dimmer by the area
+// Phase 2, all group 0 (kuyu): the facility's own light circuit, always in the temperature colour (group 1 is the
+// arch's and falls to an ember with RGB off; group 2 is fixed warm white). The fake daylight's circuit lights the way up
+constexpr float kMerdivenL = 24.0f;  // group 0 (x2 after the 11-17 preview: too faint to pool on the treads): each stair lamp's lens (a 6 cm disc, Lambertian): dim pools on the treads
+constexpr float kCatiL = 0.06f;      // group 0: the roof lamp's roof-side glow under its louvres (6 % of the daylight)
+constexpr float kFenerL = 60.0f;     // group 0: the mast lamp's globe (r 0.1 m): a point seen far through the fog
 
 // ---- materials: the fixed names, in id order (Vtx.mat indexes Scene::mats)
 enum MatId : int {
@@ -72,8 +77,19 @@ enum MatId : int {
     M_TABELA,        // tabela_yuz: hanging signs, plates (levha)
     M_MERCEK,        // mercek: lamp lenses (levha)
     M_CEKIRDEK_ISIK, // cekirdek_isik: the heat core's heart (emissive, group 1)
+    M_MERDIVEN_ISIK, // merdiven_isik: the long stair's small lamps (emissive, group 0)
+    // the exterior (Phase 2): every triangle the window instances as one facility in the void, and only those, has one
+    // of these. They are the hall's own sets under their own names (same textures, own draw ranges): dis_zemin is
+    // beton_zemin's set without the wet flag (the roof is not the reflection pass' y = 0 plane)
+    M_DIS_ZEMIN,     // dis_zemin: the roof deck
+    M_DIS_DUVAR,     // dis_duvar: the block's outer walls and underside
+    M_DIS_KOLON,     // dis_kolon: the columns it stands on
+    M_DIS_KOYU,      // dis_koyu: steel outside (the hatch, its curb, the roof lamp's louvres and frame, the mast)
+    M_DIS_ISIK,      // dis_isik: the roof lamp's faint roof-side glow (emissive, group 0)
+    M_DIS_FENER,     // dis_fener: the mast lamp, the one steady lamp each facility shows (emissive, group 0)
     M_COUNT
 };
+constexpr int M_DIS_FIRST = M_DIS_ZEMIN, M_DIS_END = M_DIS_FENER + 1;   // the exterior's materials: [first, end)
 extern const char* const kMatNames[M_COUNT];
 
 // fills s.mats from sahne/varlik/varlik.json (the asset step's manifest); constants where an entry is missing
@@ -176,5 +192,34 @@ void buildFans(Hall& h);      // the two wall fans, their rotors, boards, levers
 void buildNave(Hall& h);      // the hall: floor, drains, columns, ceiling, walls, catwalk, pipes, lamps
 void buildArch(Hall& h);      // the monument: plinth, arch, light chamber, keystone display, stops, console
 void buildSigns(Hall& h);     // hanging signs and exit signs
+void buildStair(Hall& h);     // Phase 2: the chamber's hidden passages, the space behind it, the long stair, the hatch
+void buildOutside(Hall& h);   // Phase 2: the raised block, its roof deck and lamps, the columns into the fog
+
+// ---- Phase 2: the way up (docs/SALON.md "The way up"). Shared by hall_arch.cpp (the doors in the chamber's side
+// walls) and hall_stair.cpp / hall_outside.cpp
+namespace up {
+constexpr float kFloor = 1.2f;                // the chamber's floor (the arch's sill), the passages', the stair's foot
+constexpr float kDoorZ0 = -280.0f, kDoorZ1 = -279.0f;   // the side doors, between the third and fourth portal
+constexpr float kDoorTop = kFloor + 2.1f;
+constexpr float kChamberHW = 12.0f;           // the chamber's side walls (|x|)
+constexpr float kPassIn = 12.6f, kPassOut = 13.6f;      // a passage between |x| 12.6 and 13.6 (1 m wide)
+constexpr float kPassZ0 = -278.8f;            // its closed end (towards the hall)
+constexpr float kBackZ0 = -293.6f, kBackZ1 = -295.2f;   // the space behind the chamber (its back wall is z = -293)
+constexpr float kCeil = 3.6f;                 // passages and back space: 2.4 m clear
+constexpr float kStairHW = 0.8f;              // the stair's half width (1.6 m clear)
+constexpr int kRisers = 182;                  // from the floor to the roof deck: 182 risers of 0.1857 m, goings 0.28 m
+constexpr float kRoof = 35.0f;                // the roof deck (the hall's ceiling 32, its slab 3 m)
+constexpr float kRise = (kRoof - kFloor) / kRisers, kGoing = 0.28f;
+constexpr float kStairZ0 = kBackZ1;           // the first riser's face
+constexpr float kStairTop = kStairZ0 - (kRisers - 1) * kGoing;   // the last riser's face (the top tread at deck level)
+constexpr float kTopTread = kStairTop - kGoing;                  // the top tread's end: the hatch's far side
+constexpr float kHead = kCeil - kFloor;       // the tunnel's ceiling over the pitch line: 2.4 m over the foot
+constexpr float kSlab = 0.6f;                 // the roof slab over the stair
+// the hatch's opening: from where the tunnel's ceiling meets the slab's underside to the top tread's end
+constexpr float kHatchZ0 = kStairZ0 - (kRoof - kSlab - kCeil) / kRise * kGoing;
+constexpr float kHatchZ1 = kTopTread;
+constexpr float kCurb = 0.25f, kCurbT = 0.2f; // its curb's height over the deck and thickness
+constexpr float kBlockHW = 48.0f, kBlockZ0 = 8.0f, kBlockZ1 = -350.0f, kBlockY0 = -4.0f;   // the raised block
+}   // namespace up
 
 }   // namespace salon::hall

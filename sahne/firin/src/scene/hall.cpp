@@ -90,6 +90,8 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
         stage("arch", [&] { buildArch(h); });
         stage("signs", [&] { buildSigns(h); });
         stage("props", [&] { buildProps(h, assetDir); });
+        stage("stair", [&] { buildStair(h); });
+        stage("outside", [&] { buildOutside(h); });
         for (const Dynamic& d : s.dyn) std::printf("hall dyn %-16s %7zu triangles\n", d.name.c_str(), d.mesh.tris());
 
         // the views: on the landing at eye height (1.65 m over the deck) looking down the gallery into the hall; at the
@@ -107,6 +109,12 @@ bool build(Scene& s, const std::string& assetDir, std::string& err) {
         // the monument: the chamber, the opening, the hoist bay and the air in front where its glow rises, up to the ceiling
         // (0.33 m: 2.1 M cells; 0.3 m was 2.9 M)
         addVolume(s, "kemer", make_float3(-21.0f, 0.0f, -294.0f), make_float3(21.0f, kHallH, -238.0f), 0.33f);
+        // Phase 2 (the walk): the long stair's tunnel, the space behind the chamber (the passages are inside "kemer"),
+        // the roof round the hatch (the hatch is a dinamik part: lit from the volumes). With them the window's limit of
+        // eight volumes is reached
+        addVolume(s, "merdiven", make_float3(-1.2f, up::kFloor - 0.2f, up::kTopTread - 0.6f), make_float3(1.2f, up::kRoof + 1.0f, up::kBackZ1 + 0.3f), 0.3f);
+        addVolume(s, "arka", make_float3(-14.0f, up::kFloor - 0.2f, up::kBackZ1 - 0.3f), make_float3(14.0f, up::kCeil + 0.2f, up::kBackZ0 + 0.2f), 0.3f);
+        addVolume(s, "cati", make_float3(-4.0f, up::kRoof - 0.2f, -350.5f), make_float3(9.0f, up::kRoof + 6.0f, up::kHatchZ0 + 2.5f), 0.3f);
 
         // finishing: displacement normals and tangents; the light map's chart coordinates (levha faces keep the metres
         // their builder put in uv2, their uv0 runs 0..1; models, whose materials follow the hall's own, keep their

@@ -9,6 +9,7 @@
 #include "bake.h"
 #include "scene.h"
 #include "scene/dump.h"
+#include "atlas.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -78,6 +79,23 @@ int main(int argc, char** argv) {
         for (const auto& c : a.charts) rect += size_t(c.w) * c.h;
         std::printf("atlas: %zu charts on %d pages of %dx%d (%.0f%% of the pages in chart rectangles)\n", a.charts.size(), a.pages,
                     a.width, a.height, a.pages ? 100.0 * rect / (double(a.width) * a.height * a.pages) : 0.0);
+        if (!doBake) {   // geo: the texels a bake would light, by density zone (the hall's own, then each Scene::zones entry)
+            std::vector<int> zoneOf(a.charts.size(), -1);
+            for (size_t z = 0; z < s.zones.size(); ++z)
+                for (uint32_t c = s.zones[z].first; c < s.zones[z].end && c < a.charts.size(); ++c) zoneOf[c] = int(z);
+            std::vector<size_t> per(s.zones.size() + 1, 0);
+            size_t all = 0;
+            for (int page = 0; page < a.pages; ++page) {
+                const salon::Raster r = salon::rasterise(s, a, chartPage, page);
+                for (const salon::Texel& t : r.texels) ++per[size_t(zoneOf[t.chart] + 1)];
+                all += r.texels.size();
+            }
+            size_t cells = 0;
+            for (const salon::Volume& v : s.vols) cells += size_t(v.dim[0]) * v.dim[1] * v.dim[2];
+            std::printf("geo: %.2f M texels to bake (hall %.2f M", all * 1e-6, per[0] * 1e-6);
+            for (size_t z = 0; z < s.zones.size(); ++z) std::printf(", zone %zu %.3f M", z, per[z + 1] * 1e-6);
+            std::printf("), %.2f M volume cells\n", cells * 1e-6);
+        }
         salon::Baked baked;
         if (doBake) {
             if (!salon::bake(s, a, chartPage, o, baked, err, [](float f, const std::string& line) {

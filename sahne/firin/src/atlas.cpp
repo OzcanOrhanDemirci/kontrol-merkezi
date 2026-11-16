@@ -90,11 +90,26 @@ Atlas buildAtlas(Scene& s, const BakeOptions& o, std::vector<int>& chartPage) {
     // its smallest distance to the journey (the polyline and the two eyes): per triangle in parallel, then per chart
     const int64_t nt = int64_t(m.tris());
     std::vector<float> triD(static_cast<size_t>(nt));
+    // the density zones (Scene::zones): charts off the journey that take their distance from the walk lines
+    std::vector<int> zoneOf(nc, -1);
+    for (size_t z = 0; z < s.zones.size(); ++z)
+        for (uint32_t c = s.zones[z].first; c < s.zones[z].end && c < nc; ++c) zoneOf[c] = int(z);
 #pragma omp parallel for schedule(dynamic, 4096)
     for (int64_t k = 0; k < nt; ++k) {
         const float3 p0 = m.v[m.idx[3 * k]].p, p1 = m.v[m.idx[3 * k + 1]].p, p2 = m.v[m.idx[3 * k + 2]].p;
-        float d = std::min(pointTriangle(s.fanlar.eye, p0, p1, p2), pointTriangle(s.rgb.eye, p0, p1, p2));
-        for (size_t j = 1; j < s.path.size(); ++j) d = std::min(d, segmentTriangle(s.path[j - 1], s.path[j], p0, p1, p2));
+        const int zi = zoneOf[m.v[m.idx[3 * k]].chart];
+        float d = FLT_MAX;
+        if (zi < 0 || s.zones[size_t(zi)].journey) {
+            d = std::min(pointTriangle(s.fanlar.eye, p0, p1, p2), pointTriangle(s.rgb.eye, p0, p1, p2));
+            for (size_t j = 1; j < s.path.size(); ++j) d = std::min(d, segmentTriangle(s.path[j - 1], s.path[j], p0, p1, p2));
+        }
+        if (zi >= 0) {
+            for (const auto& w : s.walk) {
+                if (w.size() == 1) d = std::min(d, pointTriangle(w[0], p0, p1, p2));
+                for (size_t j = 1; j < w.size(); ++j) d = std::min(d, segmentTriangle(w[j - 1], w[j], p0, p1, p2));
+            }
+            d = std::max(d, s.zones[size_t(zi)].dMin);
+        }
         triD[size_t(k)] = d;
     }
     for (int64_t k = 0; k < nt; ++k) {
@@ -112,6 +127,7 @@ Atlas buildAtlas(Scene& s, const BakeOptions& o, std::vector<int>& chartPage) {
         Atlas::Chart& c = a.charts[i];
         const float sx = b[i].hi.x - b[i].lo.x, sy = b[i].hi.y - b[i].lo.y;
         c.texel = texelFor(s, b[i].d) * o.texelScale;
+        if (zoneOf[i] >= 0) c.texel *= s.zones[size_t(zoneOf[i])].texelMul;
         const float fit = std::max(sx, sy) / float(a.width - 2 * a.pad - 2);
         if (c.texel < fit) {
             c.texel = fit;
@@ -128,24 +144,32 @@ Atlas buildAtlas(Scene& s, const BakeOptions& o, std::vector<int>& chartPage) {
         const Atlas::Chart &p = a.charts[i], &q = a.charts[j];
         return p.h != q.h ? p.h > q.h : p.w != q.w ? p.w > q.w : i < j;
     });
-    int x = 0, y = 0, shelf = 0, page = 0;
+    // first fit: a chart goes on the first shelf (of any page) with room left at its end, else on a new shelf. The
+    // charts come tallest first, so every earlier shelf is tall enough; the small ones fill the shelves' ends (a shelf
+    // opened only when the next chart did not fit left up to a quarter of the pages empty: the walk's surfaces then
+    // overflowed the hall's three pages into a fourth)
+    struct Shelf { int page, y, h, x; };
+    std::vector<Shelf> shelves;
+    int page = 0, top = 0;
     for (int i : order) {
         Atlas::Chart& c = a.charts[i];
-        if (x + c.w > a.width) {
-            y += shelf;
-            x = 0;
-            shelf = 0;
+        Shelf* at = nullptr;
+        for (size_t k = 0; k < shelves.size() && !at; ++k)
+            if (shelves[k].x + c.w <= a.width && shelves[k].h >= c.h) at = &shelves[k];
+        if (!at) {
+            if (top + c.h > a.height) {
+                ++page;
+                top = 0;
+            }
+            shelves.push_back({page, top, c.h, 0});
+            top += c.h;
+            at = &shelves.back();
         }
-        if (y + c.h > a.height) {
-            ++page;
-            x = y = shelf = 0;
-        }
-        c.page = page;
-        c.x = x;
-        c.y = y;
-        chartPage[i] = page;
-        x += c.w;
-        shelf = std::max(shelf, c.h);
+        c.page = at->page;
+        c.x = at->x;
+        c.y = at->y;
+        chartPage[i] = at->page;
+        at->x += c.w;
     }
     a.pages = order.empty() ? 0 : page + 1;
     // pages as tall as their tallest use (a texture array's layers share one size): an atlas that fills a fraction of a

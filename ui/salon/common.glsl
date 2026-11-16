@@ -36,7 +36,7 @@ Air lightAt(vec3 p, int first) {
     Air a = Air(vec3(0.0), vec3(0.0), vec3(0.0), vec3(0.0), 0.0);
     float rem = 1.0;
     for (int i = 0; i < NV; i++) {
-        if (i < first) continue;
+        if (i < first || ((VOL_MASK >> i) & 1) == 0) continue;   // VOL_MASK: the volumes this program declares
         vec3 n = uVolN[i].xyz;
         vec3 q = (p - uVolLo[i].xyz) / uVolLo[i].w;
         vec3 e = min(q, n - q);
