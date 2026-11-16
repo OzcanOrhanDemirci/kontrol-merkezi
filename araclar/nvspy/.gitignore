@@ -1,1 +1,4 @@
 out/
+*.exp
+*.lib
+*.obj
