@@ -704,7 +704,7 @@ function reportOpening(marks) {
     if (window.KM_LEVHA) await KM_LEVHA.ready;
     marks.yazilar = performance.now();
     const opening = window.KM_ACILIS;
-    const loading = window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2), packBytes: +params.get('bayt') || 0,
+    const loading = window.KM_SALON.create(canvas, { base, scale: +(params.get('olcek') || 2.5), packBytes: +params.get('bayt') || 0,
       onProgress: f => opening && opening.progress(f) });
     // the first set of signs, drawn in the worker meanwhile: with the service's state if it comes within 0.8 s
     for (let t = performance.now(); !D.durum && performance.now() - t < 800;) await wait(20);
