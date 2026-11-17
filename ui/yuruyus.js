@@ -25,13 +25,15 @@ const C = {
   STEP: 0.42,        // highest step walked up without a jump (the arch's plinth has 0.4 m steps)
   FOOT_R: 0.28,      // the ground probe's sphere
   SNAP: 0.3,         // how far the feet follow the ground down while walking (stairs down, no hopping)
-  WALK: 1.6, RUN: 4.0,
+  WALK: 2.6, RUN: 6.0,   // m/s (11-17: 1.6 and 4.0 were slow for a tool he uses: "günün sonunda bu uygulama işlevsellik de içeriyor")
   ACCEL_TAU: 0.16, STOP_TAU: 0.11, AIR_TAU: 1.2,   // velocity easing (s)
+  AIR: null,         // the void's fall (disari.js): steering speed across in the air (m/s, Shift x1.6); null: the walk's
+  GLIDE_TAU: 3.0,    // with AIR set and no key held, the body's drift across fades this slowly (s)
   GRAVITY: 9.81,
-  JUMP_H: 0.45,      // jump height (m)
+  JUMP_H: 1.25,      // jump height (m; 0.45 could not climb out of the roof lamp's 1.44 m pit, 11-17)
   TERMINAL: 50,      // terminal fall speed (m/s; quadratic drag)
   WALKABLE: 0.64,    // ground normal's y at least this (about 50 degrees)
-  LOOK: 0.0022,      // rad per mouse count
+  LOOK: 0.0031,      // rad per mouse count (0.0022 turned slowly, 11-17)
   PITCH: 1.45,
   REACH: 4.0,        // the centre click's reach (m)
   EXIT_S: 1.1,       // glide back onto the journey (s)
@@ -403,6 +405,7 @@ function create(o) {
   const B = { x: 0, foot: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: false, yaw: 0, pitch: 0, fov: 50,
               safeX: 0, safeF: 0, safeZ: 0, eyeLag: 0, jumpT: -1, baseF: 0 };
   let active = false, paused = false, pendingPlace = false;
+  let columns = [];          // [{ x, z, r, y0, y1 }] (setColumns)
   let floorY = -40, floorSet = false, fallFn = null, stepFn = null;
   const camEye = new Float64Array(3);
   const enterOff = new Float64Array(3); let enterT = 0, enterDur = 0;
@@ -454,6 +457,17 @@ function create(o) {
       }
       if (!moved) break;
     }
+    // the void's columns where they run on below the mesh (setColumns): vertical cylinders, slid along
+    for (const c of columns) {
+      if (B.foot > c.y1 || B.foot + C.TOP < c.y0) continue;
+      const dx = B.x - c.x, dz = B.z - c.z, d = Math.hypot(dx, dz), m = c.r + R;
+      if (d >= m) continue;
+      const nx = d > 1e-6 ? dx / d : 1, nz = d > 1e-6 ? dz / d : 0;
+      B.x = c.x + nx * m; B.z = c.z + nz * m;
+      const vn = B.vx * nx + B.vz * nz;
+      if (vn < 0) { B.vx -= vn * nx; B.vz -= vn * nz; }
+      deepest = Math.max(deepest, m - d);
+    }
     return deepest;
   }
 
@@ -463,14 +477,15 @@ function create(o) {
     const sy = Math.sin(B.yaw), cy = Math.cos(B.yaw);
     let tx = fwd * sy + side * cy, tz = -fwd * cy + side * sy;
     const tl = Math.hypot(tx, tz);
-    const speed = keys.shift ? C.RUN : C.WALK;
+    const air = !B.grounded && C.AIR != null;
+    const speed = air ? C.AIR * (keys.shift ? 1.6 : 1) : keys.shift ? C.RUN : C.WALK;
     if (tl > 1e-6) { tx = tx / tl * speed; tz = tz / tl * speed; }
     const vh = Math.max(Math.hypot(B.vx, B.vz), speed * Math.min(1, tl));
     const n = Math.min(12, Math.max(Math.ceil(dt * 120), Math.ceil(vh * dt / 0.1)));
     const h = dt / n;
     const kDrag = C.GRAVITY / (C.TERMINAL * C.TERMINAL);
     for (let s = 0; s < n; s++) {
-      const tau = !B.grounded ? C.AIR_TAU : (tx * tx + tz * tz > B.vx * B.vx + B.vz * B.vz ? C.ACCEL_TAU : C.STOP_TAU);
+      const tau = !B.grounded ? (air && tl < 1e-6 ? C.GLIDE_TAU : C.AIR_TAU) : (tx * tx + tz * tz > B.vx * B.vx + B.vz * B.vz ? C.ACCEL_TAU : C.STOP_TAU);
       const k = 1 - Math.exp(-h / tau);
       B.vx += (tx - B.vx) * k; B.vz += (tz - B.vz) * k;
       if (B.jumpT >= 0) {
@@ -780,7 +795,19 @@ function create(o) {
     },
     // a moving solid in the collision (the hatch's lid): Float32Array of triangles (9 floats each), or null to remove
     setSolid(name, tris) { if (tris) solids.set(name, tris instanceof Float32Array ? tris : new Float32Array(tris)); else solids.delete(name); writeSolids(); },
-    // the walker's velocity (the void's fall: its guidance and its brake)
+    // a rigid move of the world (the void re-expresses it in another facility's frame): positions through map, the
+    // velocity and the look turned by th (R(th) v = (cos th x + sin th z, y, -sin th x + cos th z); a heading a -> a - th)
+    remap(map, th) {
+      const b = map([B.x, B.foot, B.z]), sf = map([B.safeX, B.safeF, B.safeZ]), ce = map([camEye[0], camEye[1], camEye[2]]);
+      B.baseF += b[1] - B.foot;
+      B.x = b[0]; B.foot = b[1]; B.z = b[2]; B.safeX = sf[0]; B.safeF = sf[1]; B.safeZ = sf[2];
+      camEye[0] = ce[0]; camEye[1] = ce[1]; camEye[2] = ce[2];
+      const c = Math.cos(th), sn = Math.sin(th), vx = B.vx, vz = B.vz;
+      B.vx = c * vx + sn * vz; B.vz = -sn * vx + c * vz;
+      B.yaw -= th;
+    },
+    setColumns(list) { columns = list || []; },
+    // the walker's velocity (the void's fall: its brake)
     setVelocity(vx, vy, vz) { if (vx != null) B.vx = vx; if (vy != null) B.vy = vy; if (vz != null) B.vz = vz; },
     // hold the journey point the eye's exposure refers to (s in metres, null: the nearest point again)
     pinS(sv) { pinnedS = sv == null ? null : sv; },
@@ -788,6 +815,7 @@ function create(o) {
     onFall(fn) { fallFn = fn || null; },
     onStep(fn) { stepFn = fn || null; },
     state: () => ({ x: B.x, foot: B.foot, z: B.z, vx: B.vx, vy: B.vy, vz: B.vz, grounded: B.grounded, yaw: B.yaw, pitch: B.pitch,
+                    input: !!(keys.w || keys.a || keys.s || keys.d),
                     eye: pose.eye.slice(), hover: M.hover }),
     stats() {
       const a = Array.from(timing.subarray(0, Math.min(timingN, timing.length))).sort((x, y) => x - y);
