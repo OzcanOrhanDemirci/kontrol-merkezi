@@ -394,6 +394,11 @@ between the columns, lands on a roof, opens its hatch: it is one's own facility.
   and no mast beyond 260 m; walls, columns, deck and roof lamp beyond 700 m), culled by the fog's reach. The fog is in
   the composite (post.frag, "the void"): homogeneous (σ 0.0028/m: the wrap forbids an absolute height), its light a
   gradient from below (about a quarter) to above, a little blue; the surfaces are lit by the same light as ambient.
+- **Far concrete is calm.** The legs' board marks (0.4 m light and dark bands) are a few pixels wide at 100-300 m: they
+  read as corrugated sheet, not as concrete, and crawl as the view turns. In dis.frag the exterior's textures give way
+  with distance to their own mean (albedo and ARM to their last mip, the normal to the face's): `VOID.fog.calm` =
+  [20 m, 100 m, 0.9], nothing within 20 m, nine tenths from 100 m. Every mark close by, a face of one tone far off,
+  read by where it looks. Measured on a slow turn towards the neighbours (`araclar/salon_disari.py --yalniz kayma`).
 - **Lamps and masts in display light.** A distant lamp is a pixel or two; anything decided per pixel (the tonemap,
   a nearest depth test, the halo's cusp) makes its light change with its place between pixels and it twinkles as the
   view turns. So each lamp is tonemapped once as a whole (fener.vert: its gain from scene light to display light over

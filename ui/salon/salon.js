@@ -1465,7 +1465,8 @@ async function create(canvas, options = {}) {
     list: [],                                   // [{ o: [x, y, z], yaw, col: [r, g, b] (full colour, 0..1), home }]
     lid: 0,                                     // our hatch's lid, radians about its axis (+: open)
     kOthers: 30,                                // the other facilities' group-0 intensity (their lamps are steady)
-    fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
+    fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90,
+           calm: [20, 100, 0.9] },             // dis.frag uTexCalm: far concrete gives way to its mean, from..to (m), at most
     // the cloud band (band.glsl): its centre y in this frame (disari.js: it moves with the wrap and the home), half
     // thickness, period, extinction at its middle (1/m); its light is the fog's own
     band: { y: -440, hw: 75, D: 860, sigma: 0 },
@@ -1646,6 +1647,7 @@ async function create(canvas, options = {}) {
       gl.uniform1f(u.uVolLit, 0);
       gl.uniform3fv(u.uFogUp, VOID.fog.up); gl.uniform3fv(u.uFogDown, VOID.fog.down);
       gl.uniform1f(u.uAmb, VOID.fog.amb);
+      gl.uniform3fv(u.uTexCalm, VOID.fog.calm);
     }
     gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
     gl.uniform4fv(u.uBand, bandU());
