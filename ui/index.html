@@ -17,37 +17,37 @@ canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 body.nogl { background: #000; }
 body.nogl #fallback { display: grid; }
 
-/* The loading screen (acilis.js): the hall before its lights strike. Under everything the window's own picture (the
-   shaft's thin light through a hatch not yet open, onto a small pool), the same pixels the window painted; over it
-   the beam breathes, a stencilled line says what is happening and a slit of light opens with the load. It ends as
-   the hatch opens: the beam swells and the picture dissolves into the scene's own strike. Only opacity and transform
-   move (the compositor's work: smooth while the load holds the page's thread). */
+/* The loading screen (acilis.js): the hall in the dark, its lighting circuits striking one by one. Under everything
+   the window's own picture (the hall with its lamps at an ember), the same pixels the window painted; over it, in a
+   frame of the pictures' own size (.kare, 2560x1440, scaled to the window's height by acilis.js), each circuit's
+   picture at opacity 0 until it strikes, and a small board of pilot lamps. It ends as a dissolve into the scene,
+   whose first frame is the last picture. Only opacity moves (the compositor's work: smooth while the load holds the
+   page's thread). */
 @font-face { font-family: KMAcilis; src: url(fonts/BigShouldersStencil-ExtraBold.woff2) format("woff2"); font-display: block; }
+@font-face { font-family: KMAcilisMono; font-weight: 500; src: url(fonts/IBMPlexMono-Medium.woff2) format("woff2"); font-display: block; }
 #acilis { position: fixed; inset: 0; overflow: hidden; pointer-events: none; opacity: 0; background: #030303; }
 #acilis.on { opacity: 1; }
-#acilis.bitti { opacity: 0; transition: opacity .55s cubic-bezier(.5, 0, .7, 1) .1s; }
 #acilis > img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#acilis .isik { position: absolute; left: 50%; top: 0; width: 7vh; height: 74vh; margin-left: -3.5vh; opacity: 0;
-  background: linear-gradient(90deg, transparent, rgb(255 246 230 / .055) 35%, rgb(255 248 236 / .09) 50%, rgb(255 246 230 / .055) 65%, transparent);
-  -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent);
-  animation: km-nefes 5.5s ease-in-out infinite alternate; will-change: opacity, transform; }
-@keyframes km-nefes { from { opacity: .15; } to { opacity: 1; } }
-#acilis.bitti .isik { animation: none; opacity: 1; transform: scaleX(5.5); transition: transform .45s cubic-bezier(.3, .7, .4, 1); }
-#acilis .yazi { position: absolute; left: 0; right: 0; top: 81.2vh; text-align: center; white-space: nowrap;
-  font: 2.05vh/1 KMAcilis, sans-serif; letter-spacing: .62em; text-indent: .62em; color: rgb(229 224 207 / .5);
-  opacity: 0; transition: opacity 1.4s ease-out; }
-#acilis .olcu { position: absolute; left: 50%; top: 85.2vh; width: 26vh; margin-left: -13vh; height: max(2px, .19vh);
-  background: rgb(0 0 0 / .55); box-shadow: 0 0 0 1px rgb(255 255 255 / .035); opacity: 0; transition: opacity 1.4s ease-out; }
-#acilis .yarik { position: absolute; inset: 0; transform: scaleX(.015); transition: transform .7s cubic-bezier(.2, .6, .3, 1);
-  background: linear-gradient(90deg, rgb(255 238 210 / .2), rgb(255 244 226 / .85) 50%, rgb(255 238 210 / .2)); will-change: transform; }
-#acilis.yazili .yazi, #acilis.yazili .olcu { opacity: 1; }
-#acilis.bitti .yazi, #acilis.bitti .olcu { opacity: 0; transition: opacity .25s ease-in; }
+#acilis .kare { position: absolute; left: 50%; top: 0; width: 2560px; height: 1440px; transform-origin: 0 0; }
+#acilis .kare img { position: absolute; display: block; opacity: 0; will-change: opacity; }
+#acilis .kare img.taban { opacity: 1; }
+/* the board: quiet, on the dark floor under the view; lengths in the frame's pixels (14.4 px = 1 % of its height) */
+#acilis .pano { position: absolute; left: 0; right: 0; top: 1202px; display: flex; flex-direction: column; align-items: center;
+  color: rgb(229 224 207); opacity: 0; transition: opacity 1.2s ease-out; }
+#acilis.yazili .pano { opacity: 1; }
+#acilis .pano .ad { font: 43px/1 KMAcilis, sans-serif; letter-spacing: .58em; text-indent: .58em; opacity: .62; }
+#acilis .pano .sira { display: flex; gap: 22px; margin-top: 30px; }
+#acilis .pano .l { position: relative; width: 69px; height: 8px; background: rgb(229 224 207 / .13); }
+#acilis .pano .l i { position: absolute; inset: 0; background: #ffc37a; box-shadow: 0 0 16px rgb(255 170 80 / .75); opacity: 0; will-change: opacity; }
+#acilis .pano .l b { position: absolute; left: 0; top: 16px; font: 500 19px/1 KMAcilisMono, monospace; letter-spacing: .08em; opacity: .34; }
+#acilis .pano .alt { margin-top: 56px; font: 500 21px/1 KMAcilisMono, monospace; letter-spacing: .34em; text-indent: .34em; opacity: .42; }
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
-<div id="acilis" aria-hidden="true"><div class="isik"></div><div class="yazi">SALON HAZIRLANIYOR</div><div class="olcu"><div class="yarik"></div></div></div>
+<div id="acilis" aria-hidden="true"><div class="kare"><div class="pano"><div class="ad">KONTROL MERKEZİ</div><div class="sira"></div><div class="alt">AYDINLATMA DEVRELERİ AÇILIYOR</div></div></div></div>
 <div id="fallback">Bu pencere WebGL2 olmadan çizilemiyor.</div>
+<script src="acilis/katman.js"></script>
 <script src="acilis.js"></script>
 <script src="renk.js"></script>
 <script src="ses.js"></script>

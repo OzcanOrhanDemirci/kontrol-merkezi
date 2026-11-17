@@ -321,8 +321,11 @@ static class PencereUygulamasi
                 // the pack's size for the loading screen's progress (the mapped host sends no Content-Length)
                 long packBytes = 0;
                 if (_pack != null) foreach (var f in new DirectoryInfo(_pack).EnumerateFiles("*", SearchOption.AllDirectories)) packBytes += f.Length;
+                // KM_SAYFA: extra switches for the page's hash, for looking at the opening (ui/acilis.js: ilk=1, devir=4)
+                var extra = Environment.GetEnvironmentVariable("KM_SAYFA");
                 core.Navigate("https://" + HostName + "/index.html#t0=" + StartEpochMs.ToString(Program.Inv) +
-                    (_pack != null ? "&paket=https://" + PackHost + "/&bayt=" + packBytes.ToString(Program.Inv) : ""));
+                    (_pack != null ? "&paket=https://" + PackHost + "/&bayt=" + packBytes.ToString(Program.Inv) : "") +
+                    (string.IsNullOrEmpty(extra) ? "" : "&" + extra));
             }
             catch (Exception ex)
             {

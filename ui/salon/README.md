@@ -24,6 +24,8 @@ s.setLevha(atlas, source, { emissive })   // canvas / ImageBitmap for the faces 
                                 // emissive 0: paint (albedo blend by alpha), > 0: a display (linear radiance scale)
 s.setLevhaGlow(atlas, [r, g, b], k)       // a self-lit face whose texture is light only (the console's plates): its
                                 // live colour and strength, multiplied in the shader; no redraw when it changes
+s.setLevhaWake(atlas, k)                  // a self-lit sign's brightness against its own (0: dark glass): the displays
+                                // are dark in the scene's first frame and wake after the loading screen's hand-over
 s.setLamp(anchorName, [r, g, b], k)       // the self-lit lens inside that anchor's box
 s.setHaze({ density, fans: [{ name: 'fan_kasa', strength }] })   // strength 0..1; fan = dinamik name + '_rotor'
 s.setExposure(ev)               // stops
