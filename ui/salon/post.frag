@@ -93,7 +93,9 @@ void main() {
 uniform sampler2D uSrc;
 uniform float uLod;
 void main() {
-    vec2 ts = 1.0 / vec2(textureSize(uSrc, int(uLod)));
+    // the source level is the texture's base level here (salon.js mipChain), and textureSize's level counts from the
+    // base: 0 is the level read (int(uLod) gave level 2 l - 2, a footprint 2^(l-1) too wide from level 2 on)
+    vec2 ts = 1.0 / vec2(textureSize(uSrc, 0));
     #define T(x, y) textureLod(uSrc, vUv + ts * vec2(x, y), uLod).rgb
     vec3 a = T(-2, -2), b = T(0, -2), c = T(2, -2), d = T(-2, 0), e = T(0, 0), f = T(2, 0);
     vec3 g = T(-2, 2), h = T(0, 2), i = T(2, 2), j = T(-1, -1), k = T(1, -1), l = T(-1, 1), m = T(1, 1);
@@ -107,7 +109,7 @@ void main() {
 uniform sampler2D uSrc;
 uniform float uLod;
 void main() {
-    vec2 ts = 1.0 / vec2(textureSize(uSrc, int(uLod)));
+    vec2 ts = 1.0 / vec2(textureSize(uSrc, 0));
     #define U(x, y) textureLod(uSrc, vUv + ts * vec2(x, y), uLod).rgb
     vec3 s = U(-1, -1) + 2.0 * U(0, -1) + U(1, -1) + 2.0 * U(-1, 0) + 4.0 * U(0, 0) + 2.0 * U(1, 0) + U(-1, 1) +
              2.0 * U(0, 1) + U(1, 1);
@@ -176,7 +178,10 @@ vec2 heatShift(vec2 uv, float dist) {
     float rise = uTime * (0.35 + 0.9 * uHeat);
     vec2 w = vec2(sin(p.x * 0.9 + p.y * 1.7 - rise * 2.1) + 0.6 * sin(p.x * 2.3 - p.y * 2.9 - rise * 3.3),
                   sin(p.y * 1.3 - rise * 1.7 + p.x * 0.4) + 0.5 * sin(p.y * 3.1 + p.x * 1.9 - rise * 2.7));
-    float px = (0.3 + 1.0 * uHeat) * uHeat * share;   // display pixels: at most ~2, heat in the air, not a bent picture
+    // display pixels: at most ~0.7. At ~2 (11-16) the core's bars and the lamps seen through the opening visibly swam
+    // (11-17, Özcan: "orada sabit değil de yüzüyor gibi"; a still camera, the clock alone moved them up to 53 levels a
+    // frame): a shimmer in the air, a fraction of a pixel, never a moving picture
+    float px = 0.35 * (0.3 + 1.0 * uHeat) * uHeat * share;
     return w * px / vec2(textureSize(uScene, 0)) * 2.0;   // the scene is supersampled (~2x the display)
 }
 void main() {

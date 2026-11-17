@@ -408,6 +408,14 @@ Frame (2560 × 1440 the reference):
 
 No TAA, no FXAA/SMAA, no random numbers at run time: every pixel the same samples every frame.
 
+Steady in motion (11-17, Özcan watched it move: "zemindeki küçük lambalar yanıp sönüyor", lamps near the arch "yüzüyor
+gibi"): what a sample grid cannot hold is filtered at its cause, before it is sampled. Small emitters (lenses, thin
+light strips) are drawn as their projected outline convolved with a Gaussian of at least ~0.65 canvas px, energy kept,
+their own geometry fading in only once they span a few pixels; specular lobes are widened by the normal's change across
+a canvas pixel (geometric specular antialiasing) and never narrower than alpha 0.02; a puddle's specular is its mirror
+image alone (the direct lobe would count the lights twice); the puddles' outline and the reflection's distortion read
+the floor's maps at a fixed coarse level, so they do not crawl with distance. Measured by `araclar/salon_kipirti.py`.
+
 As built (`ui/salon/README.md` has the API and the measured costs): the volumes are recombined with the groups'
 colours into one texture per volume whenever a colour moves (four reads per haze step instead of six; the per-group
 clamp of Ls becomes one clamp of the sum); the reflection is drawn at half the scene pass' resolution and only below
