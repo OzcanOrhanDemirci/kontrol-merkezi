@@ -96,6 +96,12 @@ Knobs at scale 2: no prepass +0.75 ms (scene 2.26); no B-spline -0.16 ms; haze a
 CPU in render() 0.2 ms. Shader compile 200-360 ms (parallel). Load of the synthetic pack ~1 s.
 Timer queries count other programs' GPU work in between, so single readings on a busy desk run high.
 
+The real pack (2026-11-17, scale 2, same conditions), haze ms with a step of half a cell -> a cell: u 0 6.55 -> 3.37,
+0.05 8.07 -> 4.06, 0.1 9.5 -> 4.42, 0.15 7.86 -> 4.1, 0.3 5.0 -> 2.3, 0.6 5.65 -> 2.56, 0.85 4.6 -> 2.11, 1 6.5 -> 3.07;
+the frame 12.9 -> 9.7 ms at rest, 15.1 -> 10.0 at u 0.1. Stills within a few levels (mean < 0.1/255); pan, dolly and
+the haze's clock frame by frame against the old march: the same second difference (ratio 1.00). The reflection's
+haze at twice its step drew rings round the lamps' glow on the wet floor, so it keeps a cell of the outer volume.
+
 Stability (pc_graphics `tools/kararlilik.py`, 60 frames, live scale 2 against scale 4 with full-resolution haze and half
 steps; luminance 0..1): camera yaw of 0.25 px/frame: excess flicker mean 0.00075, p99 0.0039 (~1/255), 8x8 blocks
 mean 0.00019; static camera with the haze churning at strength 1: mean 0.00035, p99 0.0036, relative 0.36. Static
