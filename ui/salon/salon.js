@@ -936,6 +936,8 @@ async function create(canvas, options = {}) {
       if (budget <= 0) break;
     }
   }
+  const levhaGlow = new Map();                   // atlas name -> [r, g, b] * k: the live colour of a self-lit face
+  const ONE2 = [1, 1], ONE3 = [1, 1, 1];
   const lamps = new Map();                       // anchor name -> [r, g, b] * k
   const hoverAmt = new Map();                    // anchor name -> 0..1 (eased)
   const linked = {};                             // tik anchor name -> the levha/nokta anchors it lifts
@@ -1037,6 +1039,8 @@ async function create(canvas, options = {}) {
       lamp = lamps.get(a.ad);
     }
     if (u.uDraw) gl.uniform4f(u.uDraw, on, em, hv, item.dynamic ? 1 : 0);
+    if (u.uLevhaM) gl.uniform2fv(u.uLevhaM, (a && a.boyut) || ONE2);
+    if (u.uLevhaGlow) gl.uniform3fv(u.uLevhaGlow, (a && levhaGlow.get(a.atlas || a.ad)) || ONE3);
     if (u.uLamp) gl.uniform3fv(u.uLamp, lamp || [0, 0, 0]);
     if (u.uAlpha) gl.uniform1f(u.uAlpha, alpha);
     drawRaw(item);
@@ -2000,6 +2004,8 @@ async function create(canvas, options = {}) {
       else levhaJobs.set(name, { lv, bytes, row: 0, emissive, pending: null });
       return true;
     },
+    // a self-lit face whose texture holds light only (white = full): its colour and strength, live, without a redraw
+    setLevhaGlow(name, c, k) { levhaGlow.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
     setLamp(name, c, k) { lamps.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
     setHaze(h) { haze = { ...haze, ...h }; },
     setExposure(ev) { exposure = Math.pow(2, ev || 0); },

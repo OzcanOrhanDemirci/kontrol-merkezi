@@ -22,6 +22,8 @@ s.setRotor(name, angle, omega)  // rotor angle (rad) and speed (rad/s): the fram
 s.setLever(name, angle)         // any dinamik entry turned about its axis (eksen) at its merkez
 s.setLevha(atlas, source, { emissive })   // canvas / ImageBitmap for the faces of the anchors with that atlas name;
                                 // emissive 0: paint (albedo blend by alpha), > 0: a display (linear radiance scale)
+s.setLevhaGlow(atlas, [r, g, b], k)       // a self-lit face whose texture is light only (the console's plates): its
+                                // live colour and strength, multiplied in the shader; no redraw when it changes
 s.setLamp(anchorName, [r, g, b], k)       // the self-lit lens inside that anchor's box
 s.setHaze({ density, fans: [{ name: 'fan_kasa', strength }] })   // strength 0..1; fan = dinamik name + '_rotor'
 s.setExposure(ev)               // stops

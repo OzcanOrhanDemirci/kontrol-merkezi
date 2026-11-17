@@ -332,17 +332,19 @@ void displayAndStops(Hall& h) {
 }
 
 void console(Hall& h) {
-    // a low steel control cabinet on a concrete pedestal before the steps, its top sloping up towards the monument: it
-    // stays under the arriving eye's line to the gate's sill (2.1 m over its back), so the gap under the gate and the
-    // light's tongue on the plinth stay in view over it; the plates on its upright front, in the frame's lower edge
+    // a low control desk cast in the monument's concrete on a pedestal before the steps, its top sloping up towards the
+    // monument: it stays under the arriving eye's line to the gate's sill (2.1 m over its back), so the gap under the
+    // gate and the light's tongue on the plinth stay in view over it. Its upright front, in the frame's lower edge,
+    // carries the plates: cast panels of the same concrete (konsol_yuz) whose lettering is lit live in the temperature
+    // colour, sized to be read from the rgb eye 20.6 m away (80 px per metre at 2560 x 1440)
     const float zf = kConsoleZ, depth = 1.2f, y0 = 0.55f, hf = 1.3f, hb = 1.45f, x0 = -5.0f, x1 = 5.0f;
     h.box(v3(0, 0.5f * y0, zf - 0.5f * depth), v3(5.2f, 0.5f * y0, 0.5f * depth + 0.15f), 0.03f, M_KOLON, 2.0f);
     const Xform t = axes(v3(x0, y0, zf), v3(0, 0, -1), Y, X);
-    h.at(t, M_KOYU, 2.0f).extrude(Kit::roundOutline({{0, 0}, {depth, 0}, {depth, hb}, {0, hf}}, 0.03f, 3), 0.0f, x1 - x0, true);
+    h.at(t, M_ANIT, 2.0f).extrude(Kit::roundOutline({{0, 0}, {depth, 0}, {depth, hb}, {0, hf}}, 0.03f, 3), 0.0f, x1 - x0, true);
     const float3 nTop = normalize(v3(0, depth, hb - hf));
     auto top = [&](float x, float d) { return v3(x, y0 + hf + (hb - hf) * d / depth, zf - d); };
     // the RGB lever: two cheeks on the top, the arm (Scene::dyn) between them, its plate on the front
-    const float lx = -3.7f;
+    const float lx = -3.8f;
     const float3 pivot = top(lx, 0.55f) + nTop * 0.12f;
     for (int s = -1; s <= 1; s += 2)
         h.box(axes(top(lx + s * 0.14f, 0.55f) + nTop * 0.09f, X, nTop, cross(X, nTop)), v3(0.02f, 0.09f, 0.16f), 0.008f, M_SAC, 0.2f);
@@ -376,21 +378,45 @@ void console(Hall& h) {
         an.axis = X;
         h.s.anchors.push_back(an);
     }
-    h.levha("plaka_rgb", "plaka_rgb", v3(lx, y0 + 0.75f, zf + 0.003f), Z, 1.6f, 0.8f, M_TABELA);
-    h.anchor("anahtar_rgb", "tik", Xform::at(v3(lx, y0 + 1.0f, zf - 0.45f)), v3(0.9f, 1.3f, 0.75f));
-    // the device lamps on the front above their plates (a header strip), the plates in a row
+    // the switch's plate under it, nearly the full height of the front (2.2 x 1.1 m); the click box covers plate and lever
+    h.levha("plaka_rgb", "plaka_rgb", v3(lx, y0 + 0.65f, zf + 0.003f), Z, 2.2f, 1.1f, M_KONSOL);
+    h.anchor("anahtar_rgb", "tik", Xform::at(v3(lx, y0 + 1.0f, zf - 0.45f)), v3(1.1f, 1.3f, 0.75f));
+    // the device lamps on the front above their plates (a header strip), the plates (2.3 x 0.8 m) in a row
     const char* dev[3] = {"aio", "klavye", "gpu"};
     for (int i = 0; i < 3; ++i) {
-        const float x = -1.1f + 2.4f * i;
-        const float3 c = v3(x, y0 + 1.07f, zf);
+        const float x = -1.35f + 2.55f * i;
+        const float3 c = v3(x, y0 + 1.1f, zf);
         const Xform lt = facing(c, Z);
         h.at(lt, M_KOYU, 0.05f).roundedCylinder(0.15f, 0.0f, 0.08f, 0.012f);
         h.at(lt * Xform::at(v3(0, 0, 0.08f)), M_KOYU, 0.05f).torus(0.13f, 0.014f);
         lens(h, c + v3(0, 0, 0.082f), Z, 0.12f);
         h.anchor(std::string("lamba_") + dev[i], "nokta", facing(c + v3(0, 0, 0.09f), Z), v3(0.16f, 0.16f, 0.08f));
-        h.levha(std::string("cihaz_") + dev[i], std::string("cihaz_") + dev[i], v3(x, y0 + 0.6f, zf + 0.003f), Z, 2.0f, 0.5f, M_TABELA);
+        h.levha(std::string("cihaz_") + dev[i], std::string("cihaz_") + dev[i], v3(x, y0 + 0.47f, zf + 0.003f), Z, 2.3f, 0.8f, M_KONSOL);
     }
-    // two lamps on posts at its ends, lighting its plates
+    // the front's own lamp (group 2, as the gauge's plates have): a steel hood on arms 0.45 m out along the top edge, a
+    // light strip under it shining down and back onto the front. Without it the front, turned away from the core, stood
+    // near black against the lit hall whatever it was made of. From the rgb eye the hood lies over the top edge, above
+    // the lamps; the strip is seen only from below
+    {
+        const float out = 0.45f, yh = y0 + hf + 0.01f, hw = 4.98f;
+        for (float x : {-hw + 0.04f, -2.6f, -0.075f, 2.475f, hw - 0.04f})
+            h.bar(v3(x, yh - 0.07f, zf), v3(x, yh, zf + out), 0.035f, 0.035f, Y, M_KOYU);
+        h.box(v3(0, yh + 0.035f, zf + out), v3(hw, 0.025f, 0.08f), 0.01f, M_KOYU, 0.5f);
+        const float3 dn = normalize(v3(0, -1.0f, -0.4f));
+        const float3 c = v3(0, yh + 0.005f, zf + out);
+        h.at(facing(c, dn, v3(-1, 0, 0)), M_CAM_LAMBA, 1.0f).quad(0.05f, 2 * (hw - 0.1f));
+        Emitter e;
+        e.type = Emitter::RECT;
+        e.group = GROUP_LAMBA;
+        e.c = c + dn * 0.002f;
+        e.u = v3(hw - 0.1f, 0, 0);
+        e.v = normalize(cross(dn, X)) * 0.025f;
+        e.n = dn;
+        e.L = kConsoleLampL;
+        e.lobe = 4.0f;
+        h.s.lights.push_back(e);
+    }
+    // two lamps on posts at its ends
     for (int s = -1; s <= 1; s += 2) {
         const float3 b = v3(s * 5.7f, 0.0f, zf - 0.4f);
         h.box(b + v3(0, 0.01f, 0), v3(0.15f, 0.01f, 0.15f), 0.004f, M_KOYU, 0.3f);

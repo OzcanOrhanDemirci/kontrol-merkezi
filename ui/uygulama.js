@@ -335,6 +335,7 @@ function deviceState(c) {
   return { durum: 'bagli_degil' };
 }
 const round1 = x => (x == null ? null : Math.round(x * 10) / 10);
+const CONSOLE_GLOW = { on: 0.9, off: 0.45, minY: 0.25 };   // the console's lettering: linear radiance at full, lights on / off; its least luminance
 function updateTexts() {
   const d = D.durum, isi = (d && d.isi) || {}, rgb = d && d.rgb;
   putLevha('masa_ekran_kasa', { ...fanDesk(0), uyari: warning(0) }, { emissive: 1 });
@@ -352,10 +353,7 @@ function updateTexts() {
     ortalama: linked() && (isi.yumusak != null || isi.ort != null) ? round1(M.temp) : null,
     cpu: linked() ? round1(isi.cpu) : null, gpu: linked() ? round1(isi.gpu) : null, renk: tc, kapali: !on,
   }, { emissive: on ? 1.6 : 0.7 });
-  putLevha('plaka_rgb', {
-    acik: linked() && rgb ? on : null, bosta: idle,
-    beklemeDakika: idle ? (rgb.beklemeDakika ?? 15) : null, hover: M.hover === 'anahtar_rgb',
-  });
+  putLevha('plaka_rgb', { acik: linked() && rgb ? on : null, bosta: idle, beklemeDakika: idle ? (rgb.beklemeDakika ?? 15) : null }, { emissive: 1 });
   const st = (stops() || []).filter(s => !s.gizli).slice(0, STOP_LAMPS);
   const valid = linked() && (isi.yumusak != null || isi.ort != null);
   const cur = valid ? st.reduce((k, s, i) => (M.temp >= s.c ? i : k), -1) : -1;
@@ -367,8 +365,18 @@ function updateTexts() {
   const devs = (rgb && rgb.cihazlar) || [];
   [['aio', 'cihaz_aio'], ['klavye', 'cihaz_klavye'], ['gpu', 'cihaz_gpu']].forEach(([k, n]) => {
     const c = devs.find(c => c.kimlik === k);
-    putLevha(n, { ...deviceState(c), ad: c && c.ad });
+    putLevha(n, deviceState(c), { emissive: 1 });
   });
+  // the console's lettering is lit in the temperature colour (its hue at full brightness, as the keystone display's);
+  // with the lights off it stays lit, dimmer: the switch is how they come back on
+  if (S && S.setLevhaGlow) {
+    const peak = Math.max(...M.col.temp);
+    let hue = peak > 1e-3 ? M.col.temp.map(v => v / peak) : [0.65, 0.75, 1];
+    // deep blue and red carry little light for the eye: a little white keeps the letters as readable as in yellow
+    const y = 0.2126 * hue[0] + 0.7152 * hue[1] + 0.0722 * hue[2], white = Math.max(0, (CONSOLE_GLOW.minY - y) / (1 - y));
+    hue = hue.map(v => v + (1 - v) * white);
+    for (const n of ['plaka_rgb', 'cihaz_aio', 'cihaz_klavye', 'cihaz_gpu']) S.setLevhaGlow(n, hue, on ? CONSOLE_GLOW.on : CONSOLE_GLOW.off);
+  }
 }
 // the small lamps: the colour scale's stops around the arch light up to the temperature; device lamps by state
 const STOP_LAMPS = 5;                 // the gauge over the arch's display: durak_0..4, cold to hot from left to right
