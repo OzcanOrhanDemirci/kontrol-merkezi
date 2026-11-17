@@ -44,6 +44,7 @@ constexpr float kCekirdekL = 8.0f;   // group 1: the heat core's heart behind th
 constexpr float kFanFloodL = 300.0f;  // group 2: each fan floodlight (a 0.5 x 0.36 m glass, lobe 10)
 constexpr float kColUpL = 330.0f;    // group 2: each column uplight (a 0.5 x 0.3 m glass, lobe 14), dimmer than the fans'
 constexpr float kSignLampL = 60.0f;  // group 2: a hanging sign's light strip (0.05 x 4 m, lobe 4) onto its face
+constexpr float kConsoleLampL = 4.0f;  // group 2: the console's hooded strip (0.05 x 9.8 m, lobe 4) down its front
 constexpr float kDeskLampL = 25.0f;  // group 2: the fan desks' small hooded lamps over the levers (a 5.5 cm disc, lobe 6)
 constexpr float kLambaL = 8.0f;      // group 2: the caged service lamps' bulbs and the lit door frame
 constexpr float kBulbBoard = 0.085f; //   bulb radius by the fans' stencils, the console, the doors (m)
@@ -88,6 +89,8 @@ enum MatId : int {
     M_DIS_ISIK,      // dis_isik: the roof lamp's faint roof-side glow (emissive, group 0)
     M_DIS_FENER,     // dis_fener: the mast lamp, the one steady lamp each facility shows (emissive, group 0)
     M_DIS_CAM,       // dis_cam: the dark glazing of the window bands under the trays (no texture set)
+    M_KONSOL,        // konsol_yuz: the console's plates, cast in the monument's concrete (beton_anit's set), their
+                     //   lettering lit live in the temperature colour (levha)
     M_COUNT
 };
 constexpr int M_DIS_FIRST = M_DIS_ZEMIN, M_DIS_END = M_DIS_CAM + 1;   // the exterior's materials: [first, end)
