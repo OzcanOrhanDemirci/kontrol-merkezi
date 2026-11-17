@@ -46,7 +46,7 @@ Layout (first version; the builder owns the exact numbers and writes them into t
 | Columns | 2 m (x) × 7 m (z) × floor to ceiling, a flared foot (3.1 × 8.1 m at the floor) and a haunch at the top, rows at x = ±8 and ±22, every 20 m from z = -60 to -220 (36 columns), ending ~35 m before the arch to leave it a plaza. The aisle x ∈ [-7, 7] is free: the camera flies through it. Cross beams (1.2 × 2 m) over the column lines z = -60 .. -240, lighter beams (1 × 1.2 m) along the rows. |
 | Arch | a hydraulic monument in raw cast concrete (`hall_arch.cpp`, its massing in constants at the top): two piers x ±7..±20, front z = -255, floor to ceiling (y = 32), in pours of 3.2 m from the sill (a construction joint each); the plinth (top y = 1.2, two steps from z = -247). The opening x ±7, y 1.2..20.4, 8 m deep (to z = -263), closed by a riveted steel sluice gate (skin at z = -260.4, girders every 2.2 m towards +z, end posts, side rollers on rails on the jambs, 0.27 m light gaps at its sides) raised to 40 % (lower edge y = 8.88, top 28.7). Above: the lintel (two pours, y 20.4..26.8, face z = -256) with the display (8 × 2 m at y = 22.4) in a recessed housing (x ±4.5, y 20.9..23.9) and over it the gauge: the five stop lamps in one row at y = 25.85 (x 0, ±2.9, ±5.8, cold to hot from left to right) on a steel rail, their plates (2 × 1 m) under them at y = 24.6, lit by a hooded strip (group 2) between lamps and plates; a railing on the lintel. Over it the hoist bay (y 26.8..32) with the gate's top, two girders and two winches, no lamps and no back wall: it opens into the chamber, so the core's glow silhouettes the hoist high up (the monument reads from the hall's middle). No floodlights: the piers stand dark against the glow. Service doors at x ±17; the console before the steps (front z = -240.6, low: top 1.85..2.0, under the arrival eye's line to the gate's sill; plates 2 × 0.5 m at y ≈ 1.15, the RGB plate at 1.3). Behind the gate the chamber (`chamberInterior`): x ±12, y 1.2 to the ceiling (32), back wall z = -293, four receding concrete portals (z -267, -272, -277, -282) all ending at y = 23.6 so the light passes over them into the bay, the heat core at z = -288: a glowing square column 4 m wide, y 2.6..21, with eight glowing fins out to r 3.4 (both sides emit), inside steel rings r 3.6..4.6 every 2.2 m, on a concrete drum r 5.2, a steel portal (x ±6, girder at y 26.5) with a winch. End wall z = -275, open over the chamber (x ±12, floor to ceiling). |
 | The way up (Phase 2) | see "The way up": side doors in the chamber (z -280..-279), passages x ±12.6..13.6 back to a space behind the chamber (z -293.6..-295.2), one straight stair (x ±0.8, 182 risers) from it to a hatch in the roof deck (y = 35) at z ≈ -341.6..-346.2. |
-| Raised block (Phase 2) | the hall is inside a concrete block x ±48, y -4..35, z -350..8 on eight columns Ø 12 m (x ±30, z -21, -121, -221, -321) down to y = -604; its roof a bare deck, the shaft's lamp in it, a mast with the facility's one lamp behind the hatch. |
+| Raised block (Phase 2) | the hall is inside a concrete block x ±48, y -4..35, z -350..8, wrapped in brutalist trays (the deck's out to x ±58, z 18..-360) and held by eight cores 22 × 26 m (x ±56.5, z -21, -121, -221, -321) down to y = -604, the end four rising to y 50; its roof a bare deck, the shaft's lamp in it, a mast with the facility's one lamp behind the hatch. |
 
 Views (the builder writes them; the renderer interpolates):
 - `fanlar`: eye (0, 4.65, -3.0), looking at (0, 7.5, -60), vertical FOV 50°.
@@ -321,19 +321,29 @@ Its numbers are the `hall::up` constants in `hall_kit.h`.
   the climber's way. `gecirgenlik` 1: the bake does not see it (the roof's light is that of an open hatch; it is lit
   live from `cati`). Anchors: `kapak` (nokta, the lid's box), `kapak_tik` (tik: reachable from the top treads and from
   the deck), `merdiven` (nokta, the stair's box).
-- **The block.** The hall is not underground: it is inside a concrete block (x ±48, y -4..35, z -350..8, walls cast
-  in 3.25 m lifts) on eight round columns Ø 12 m flaring into 17 m capitals (x ±30; z -21, -121, -221, -321) down to
-  y = -604, open at their feet. The roof is a bare deck (`dis_zemin`, 12 m tiles), no parapet: only a 6 cm steel drip
-  edge round it. Behind the hatch a mast (18 m, three guys) with the facility's one steady lamp (`dis_fener`, a 0.1 m
-  globe at y 53.2, group 0, sphere emitter L 60).
+- **The block.** The hall is not underground: it is inside a concrete block (x ±48, y -4..35, z -350..8). Its outside
+  (11-17, after Özcan's walk: "dikdörtgen çok düz") is brutalist massing read by silhouette and by where each face looks
+  in the fog's light (brighter from above), not by detail: stacked trays round the block, the higher the further out
+  (the deck's tray out 10 m, fascia y 28..35, chamfered underside to y 24; a second out 6 m, y 10..19), a band of dark
+  glazing (`dis_cam`) in the shadow under each, the plain wall below, a base (ledge out 4 m, fascia to y -12, a long
+  chamfer in to an underside at y -24, chamfered girders under it between the legs and two along). Nothing under the
+  deck's edge reaches past it: one jumping off falls clear; the trays' tops are flat ledges under its reach. Every
+  vertical face is cast in 3.25 m lifts from y -4 (one joint line round the whole building). The legs are eight cores
+  of one chamfered section 22 × 26 m (x ±45.5..67.5, z ±13 about -21, -121, -221, -321), constant from y = -604 (the
+  window stretches that ring on down; uv runs round the section and up world y) to their tops; standing 9.5 m proud of
+  the deck's fascia they run up through every tray, the four at the ends rising to y 50 as towers, the four in the
+  middle ending flush with the deck, which runs out over them. Anchors `dis_kolon_0..7` (nokta, the section's box). The
+  roof is a bare deck (`dis_zemin`, 12 m tiles), no parapet: only a 6 cm steel drip edge round it (broken by the cores).
+  Behind the hatch a mast (18 m, three guys) with the facility's one steady lamp (`dis_fener`, a 0.1 m globe at y
+  53.2, group 0, sphere emitter L 60).
 - **The fake daylight.** The shaft's emitter (`hall_gallery.cpp`, the 10 × 10 m rectangle at y 33.5 and its two
   group-0 emitters) is unchanged, so is the hall's light. Over it, in the deck, the lamp's roof side: a 1.5 m pit as
   large as the well's top, lined in steel, its floor the faint roof-side glow (`dis_isik`, group 0, 6 % of the
   daylight's radiance, with a Lambertian emitter so the deck round it is lit in the bake), steel louvres every 0.75 m
   (0.25 m deep, slanted 10° like the beam) and three dividers over it, a rim and two control boxes. From the roof it
   reads as the light, and as it heats it turns colour with the hall's.
-- **The exterior for the window.** Everything seen from outside, and only that, uses the six `dis_*` materials
-  (`dis_zemin`, `dis_duvar`, `dis_kolon`, `dis_koyu`, `dis_isik`, `dis_fener`: the hall's own texture sets under
+- **The exterior for the window.** Everything seen from outside, and only that, uses the seven `dis_*` materials
+  (`dis_zemin`, `dis_duvar`, `dis_kolon`, `dis_koyu`, `dis_isik`, `dis_fener`, and `dis_cam` (constants only): the hall's own texture sets under
   their own names, so the window shares their texture layers); the draw ranges (`geometri.araliklar`) whose material
   name starts with `dis_` are the exterior, the rest is the interior. The hatch's lid is `dinamik` `kapak` (`dis_koyu`).
   The exterior is built and baked once, at the origin: an instance is the same ranges under another transform. Anchors:
