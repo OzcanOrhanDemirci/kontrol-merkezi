@@ -386,6 +386,24 @@ between the columns, lands on a roof, opens its hatch: it is one's own facility.
 - **The wrap.** The fall from our roof lands D below on our own stack's next facility. At mid-fall the walker is moved
   by +D (`W.shift`): the picture is the same before and after (every facility of our stack looks like ours and its
   hatch is shut), so the roof one lands on is ours and its hatch leads down the same stair.
+- **The beams** (`disari.js` `KIRIS`; Özcan, 11-17: "kolonların bittiği son noktalar diğer tesislere bağlansın",
+  the "kirişli ağ"). The columns used to run on into the cloud band and end inside it; from above, the band has no
+  surface (its density rises softly, its light is the fog's), so a column faded out over 20-30 m into an even grey
+  and read as ending in the air. Now every column ends in a node on one level for the whole world, 70 m over the
+  band's middle (y -370 under our deck; clear of the band's top at -385, 10 m of shaft under the lowest facility):
+  a block round its foot, the column's section grown 3 m each side, 18 m deep, its top flush with the beams'. From the
+  nodes run horizontal beams 10 × 14 m in the columns' concrete, from node centre to node centre: across to the next
+  stack in the row (each foot pair with a chance of 0.45) and along to the two stacks of the next row (the front
+  feet to their back feet, 0.6 each; with the staggered rows these run nearly straight on along the column lines);
+  a foot left with neither gets a beam to the next foot on its own side. Deterministic from the stacks' hashes: a web
+  that differs under every stack, with no two beams crossing and none near a facility's body (all of it is under
+  every facility of the period and over the band). Built at run time (no pack change): each stack's beams in its own
+  frame (`beamsOf`), the renderer instances a unit box per node and beam (dis.vert `uKiris`, dis.frag `uBare`: no
+  light map, the fog's light alone) and stretches the columns' shafts into the nodes (dis.vert `uKolonFoot`).
+  They are solid: walk mode stands on their tops and slides along their sides (`W.setBeams`, the stacks round the
+  home); a fall over a beam brakes as over a roof and lands on it (`lastFall.on = 'kiris'`); walking off it the fall
+  goes on (band, wrap, recovery, landing on a roof as before). A beam is never the home: while one walks the beams,
+  the nearest stack becomes the home (an unseen rigid move) so that its columns collide.
 - **The hatch** (`kapak_tik`): opens over 1.5 s (a heavy lid, smootherstep), falls shut with a small thud; its box is a
   moving solid in walk mode's collision. It shuts by itself when one falls 20 m below the deck.
 - **The fall**: gravity with drag to 30 m/s in the void, a brake over the last 140 m to 6 m/s, and in the open gap under
