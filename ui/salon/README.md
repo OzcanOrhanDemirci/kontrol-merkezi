@@ -43,7 +43,7 @@ s.voidState()                   // { on, inBlock, noInterior, homeHaze, drawn: [
 s.voidGlow(x, y, r)             // tests: the lamps' float display light round a canvas point (smooth window)
 ```
 
-`s.quality` (defaults): `scale` 2, `hazeScale` 0.5 (haze pass resolution, share of the canvas), `hazeStep` 1 (1 = half a
+`s.quality` (defaults): `scale` 2, `hazeScale` 0.5 (haze pass resolution, share of the canvas), `hazeStep` 1 (1 = a
 cell; 0.5 = twice the steps), `reflScale` 0.5 (of the scene pass), `prepass` true, `bands` 6 (most flushed bands per
 heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cubic` true, `rotor` 'auto'.
 
@@ -65,9 +65,9 @@ heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cub
 |---|---|---|
 | volumes | groups' colours into the volumes (only when a colour changes) | the volumes |
 | reflection | the scene mirrored in y = 0 (depth prepass, discard below the floor), only the rows below the horizon | 0.5 x scene pass |
-| reflectionHaze | haze of the mirrored rays from the floor on (outer volume, double steps), composite, 13-tap mip chain | half of that |
+| reflectionHaze | haze of the mirrored rays from the floor on (outer volume, a cell per step), composite, 13-tap mip chain | half of that |
 | scene | depth prepass, then forward shading (light map + B-spline close up, GGX, wet floor, levha, lamps, rotor discs) | scale x canvas |
-| haze | the march: fixed steps in metres, half a cell of the finest volume at each point, ending on boundaries | 0.5 x canvas |
+| haze | the march: fixed steps in metres, a cell of the finest volume at each point, ending on boundaries | 0.5 x canvas |
 | bloom | Karis-weighted box of the scene composited with the haze, 13-tap down, tent up | 0.5 x canvas |
 | composite | scene x T + in-scatter (joint-bilateral by depth), bloom 4 %, exposure, AgX (Denizaltı's) | scale x canvas |
 | resolve | separable Lanczos-2 in linear light, sRGB, a fixed 64² blue-noise dither of ±0.5/255 | canvas |
@@ -95,6 +95,12 @@ Knobs at scale 2: no prepass +0.75 ms (scene 2.26); no B-spline -0.16 ms; haze a
 7.9 ms; haze steps halved 4.5 ms; volumes recombined every frame +0.14 ms. Journey middle 3.8 ms, rgb view 3.5 ms.
 CPU in render() 0.2 ms. Shader compile 200-360 ms (parallel). Load of the synthetic pack ~1 s.
 Timer queries count other programs' GPU work in between, so single readings on a busy desk run high.
+
+The real pack (2026-11-17, scale 2, same conditions), haze ms with a step of half a cell -> a cell: u 0 6.55 -> 3.37,
+0.05 8.07 -> 4.06, 0.1 9.5 -> 4.42, 0.15 7.86 -> 4.1, 0.3 5.0 -> 2.3, 0.6 5.65 -> 2.56, 0.85 4.6 -> 2.11, 1 6.5 -> 3.07;
+the frame 12.9 -> 9.7 ms at rest, 15.1 -> 10.0 at u 0.1. Stills within a few levels (mean < 0.1/255); pan, dolly and
+the haze's clock frame by frame against the old march: the same second difference (ratio 1.00). The reflection's
+haze at twice its step drew rings round the lamps' glow on the wet floor, so it keeps a cell of the outer volume.
 
 Stability (pc_graphics `tools/kararlilik.py`, 60 frames, live scale 2 against scale 4 with full-resolution haze and half
 steps; luminance 0..1): camera yaw of 0.25 px/frame: excess flicker mean 0.00075, p99 0.0039 (~1/255), 8x8 blocks

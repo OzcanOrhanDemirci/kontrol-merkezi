@@ -1,7 +1,7 @@
 // The haze pass (docs/SALON.md, "The live renderer", 3): per pixel of a reduced target, a march from the eye to the
 // scene's depth through the baked volumes. In-scatter per group Ls = M + 3 g (F . r) M / lum(M) times C_g k_g, extinction
-// sigma times the live density rho(x, t). Steps are fixed in metres (no jitter): half a cell of the finest volume the
-// point is in, ending exactly on every fine volume's boundary and on the depth, so nothing jumps as the camera moves.
+// sigma times the live density rho(x, t). Steps are fixed in metres (no jitter): a cell of the finest volume the point
+// is in, ending exactly on every fine volume's boundary and on the depth, so nothing jumps as the camera moves.
 // Output: in-scattered light (rgb) and transmittance (a).
 // The reflection's variant (uMirror): the mirrored ray from where it meets the floor, through the outer volume only.
 // COMMON
@@ -13,13 +13,15 @@ uniform vec2 uSize;            // this target's size
 uniform float uSigma;          // the oven's extinction (1/m)
 uniform float uDensity;        // live scale of the density
 uniform float uTime;           // seconds (the haze's own clock)
-uniform float uStepFactor;     // 1: half a cell; smaller is finer
+uniform float uStepFactor;     // 1: a cell; smaller is finer
 uniform int uMaxSteps;
 uniform float uMirror;
 uniform sampler3D uNoise;      // smooth tiled noise, 64^3, period 1 in texture coordinates
 uniform int uFans;
 uniform vec4 uFan[2];          // centre, strength 0..1
 uniform vec4 uFanDir[2];       // the jet's direction (into the gallery), rotor radius
+uniform mat3 uFanM[2];         // the jet's churn at uTime: q (from the centre) to the noise's frame, turned and carried
+uniform vec3 uFanOff[2];       //   c = uFanM q + uFanOff (salon.js, fanChurn)
 
 // rho(x, t): 1 on average, a gentle height falloff and a slow large drift; in each fan's jet more air, churned:
 // tiled noise moved rigidly along the jet and turned about its axis (no shear, so it never winds up into fine
@@ -40,11 +42,7 @@ float density(vec3 p) {
                      (1.0 - smoothstep(0.55 * width, width, rr));
         if (cone <= 0.0) continue;
         float s = uFan[i].w;
-        vec3 b1 = normalize(cross(a, abs(a.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0))), b2 = cross(a, b1);
-        float ang = uTime * (0.15 + 2.4 * s);
-        float cu = cos(ang), su = sin(ang);
-        float u = dot(rad, b1), v = dot(rad, b2);
-        vec3 c = b1 * (cu * u - su * v) + b2 * (su * u + cu * v) + a * (along - uTime * (0.35 + 6.5 * s));
+        vec3 c = uFanM[i] * q + uFanOff[i];
         // billows of a few metres (the noise's lattice: 16 texels = 3.75 m here), strongly contrasted
         float m = texture(uNoise, c * (1.0 / 15.0) + vec3(0.31 * float(i))).r;
         rho += cone * s * (0.3 + 7.0 * smoothstep(0.38, 0.78, m));
@@ -90,13 +88,13 @@ void main() {
     }
     vec3 L = vec3(0.0);
     float T = 1.0;
-    float coarse = 0.5 * uVolLo[outer].w * uStepFactor * (uMirror > 0.5 ? 2.0 : 1.0);
+    float coarse = uVolLo[outer].w * uStepFactor;
     for (int k = 0; k < uMaxSteps; k++) {
         if (t >= t1 - 1e-4 || T < 0.002) break;
         float ds = coarse;
         int fine = NV - 1;
         for (int i = NV - 2; i >= 0; i--) {
-            if (t >= tin[i] - 1e-4 && t < tout[i] - 1e-4) { ds = min(ds, 0.5 * uVolLo[i].w * uStepFactor); fine = i; }
+            if (t >= tin[i] - 1e-4 && t < tout[i] - 1e-4) { ds = min(ds, uVolLo[i].w * uStepFactor); fine = i; }
             else if (tin[i] > t + 1e-4) ds = min(ds, tin[i] - t);
         }
         ds = min(ds, t1 - t);

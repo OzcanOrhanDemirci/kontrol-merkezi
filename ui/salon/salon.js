@@ -141,7 +141,7 @@ async function create(canvas, options = {}) {
   const Q = {                                   // quality settings (setQuality); measured defaults, README.md
     scale: options.scale || 2,                  // supersampling: the scene pass at scale x the canvas' device pixels
     hazeScale: 0.5,                             // the haze pass' resolution, share of the canvas
-    hazeStep: 1,                                // haze steps: 1 = half a cell; 0.5 = twice as many
+    hazeStep: 1,                                // haze steps: 1 = a cell; 0.5 = twice as many
     reflScale: 0.5,                             // the reflection's resolution, share of the scene pass'
     prepass: true,                              // depth prepass before the scene pass
     bands: 6,                                   // flushed horizontal bands of the heavy passes
@@ -1000,8 +1000,19 @@ async function create(canvas, options = {}) {
   function marchSteps(mirror) {
     const o = vols[NV - 1];
     const diag = len(scl(o.n, o.hucre));
-    return Math.ceil(diag / (0.5 * o.hucre * Q.hazeStep * (mirror ? 2 : 1))) +
-      (mirror ? 0 : vols.slice(0, -1).reduce((s, v) => s + Math.ceil(len(scl(v.n, v.hucre)) / (0.5 * v.hucre * Q.hazeStep)) + 2, 0)) + 4;
+    return Math.ceil(diag / (o.hucre * Q.hazeStep)) +
+      (mirror ? 0 : vols.slice(0, -1).reduce((s, v) => s + Math.ceil(len(scl(v.n, v.hucre)) / (v.hucre * Q.hazeStep)) + 2, 0)) + 4;
+  }
+  // a fan's churn in the haze (haze.frag, density): the noise frame turned about the jet's axis a by the angle
+  // time (0.15 + 2.4 s) and carried along it by time (0.35 + 6.5 s); as one matrix (column-major) and an offset, so the
+  // march does no trigonometry per step
+  function fanChurn(a, s) {
+    const b1 = norm(cross(a, Math.abs(a[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), b2 = cross(a, b1);
+    const ang = time * (0.15 + 2.4 * s), cu = Math.cos(ang), su = Math.sin(ang);
+    const e1 = add(scl(b1, cu), scl(b2, su)), e2 = add(scl(b1, -su), scl(b2, cu));
+    const m = [];
+    for (let j = 0; j < 3; j++) m.push(...add(add(scl(e1, b1[j]), scl(e2, b2[j])), scl(a, a[j])));
+    return [m, scl(a, -time * (0.35 + 6.5 * s))];
   }
   function hazePass(c, depthTgt, out, mirror, rows) {
     fullscreen(programs.haze, out, 0, (u, w, h) => {
@@ -1017,7 +1028,7 @@ async function create(canvas, options = {}) {
       gl.uniform1f(u.uStepFactor, Q.hazeStep);
       gl.uniform1i(u.uMaxSteps, marchSteps(mirror));
       gl.uniform1f(u.uMirror, mirror ? 1 : 0);
-      const fans = [], dirs = [];
+      const fans = [], dirs = [], churn = [], offs = [];
       for (const f of (haze.fans || []).slice(0, 2)) {
         const d = dyn.find(x => x.name === f.name + '_rotor' || x.name === f.name);
         const a = anchors[f.name];
@@ -1025,11 +1036,19 @@ async function create(canvas, options = {}) {
         if (!centre) continue;
         let ax = d ? d.axis : norm(a.kutu.x);
         if (dot(ax, sub(fanEye, centre)) < 0) ax = scl(ax, -1);
-        fans.push(...centre, clamp(f.strength || 0, 0, 1));
+        const st = clamp(f.strength || 0, 0, 1);
+        fans.push(...centre, st);
         dirs.push(...ax, d ? (d.def.yaricap || d.rmax || 4) : 4);
+        const [m, off] = fanChurn(ax, st);
+        churn.push(...m); offs.push(...off);
       }
       gl.uniform1i(u.uFans, fans.length / 4);
-      if (fans.length) { gl.uniform4fv(u.uFan, new Float32Array([...fans, 0, 0, 0, 0, 0, 0, 0, 0].slice(0, 8))); gl.uniform4fv(u.uFanDir, new Float32Array([...dirs, 0, 0, 0, 0, 0, 0, 0, 0].slice(0, 8))); }
+      if (fans.length) {
+        gl.uniform4fv(u.uFan, new Float32Array([...fans, 0, 0, 0, 0, 0, 0, 0, 0].slice(0, 8)));
+        gl.uniform4fv(u.uFanDir, new Float32Array([...dirs, 0, 0, 0, 0, 0, 0, 0, 0].slice(0, 8)));
+        gl.uniformMatrix3fv(u.uFanM, false, new Float32Array([...churn, ...new Array(18).fill(0)].slice(0, 18)));
+        gl.uniform3fv(u.uFanOff, new Float32Array([...offs, 0, 0, 0, 0, 0, 0].slice(0, 6)));
+      }
     }, bandsFor(mirror ? 'reflectionHaze' : 'haze'), rows);
   }
   // a 13-tap mip chain (bloom, reflection): level l from level l - 1 of the same texture (the sampled level range
