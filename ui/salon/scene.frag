@@ -25,6 +25,10 @@ layout(std140) uniform Materials {
 uniform int uMat;
 uniform int uPage;
 uniform vec4 uDraw;            // x: live texture on, y: its emission (0: paint), z: hover 0..1, w: lit from the volumes
+uniform vec4 uLensBall[12];     // the stair lamps' lenses (centre, radius): their bodies' received light is held
+uniform int uLensN;
+uniform vec4 uLensBox[2];        // their bounds
+uniform float uLensCap;
 uniform vec3 uLamp;            // a lamp lens' emission (linear radiance)
 uniform float uAlpha;          // the crisp rotor's share while it fades into the blurred disc
 uniform float uMirror;
@@ -172,6 +176,17 @@ void main() {
             vec3 R0 = PI * Y0 * L0;
             vec3 E = max(R0 + (2.0 * PI / 3.0) * Y1 * dot(dir, s.n) * w * (Y1 / Y0) * L0, 0.1 * R0);
             c += uGroup[g] * shadeGroup(s, E, dir, w, w * L0 / Y0, (1.0 - w) * 2.0 * Y0 * L0);
+        }
+    }
+    // a lens drawn at a fraction of its baked radiance (salon.js LENS): the light its own face received in the bake
+    // (its emitter sits on it) would keep it a white disc, so it shows its emission only
+    if ((flags & 4) != 0) c = vec3(0.0);
+    if (all(greaterThan(vP, uLensBox[0].xyz)) && all(lessThan(vP, uLensBox[1].xyz))) for (int i = 0; i < 12; i++) {
+        if (i >= uLensN) break;
+        vec3 d = vP - uLensBall[i].xyz;
+        if (dot(d, d) < uLensBall[i].w * uLensBall[i].w) {
+            float l = lum(c), cap = uLensCap * lum(uGroup[0]);
+            if (l > cap) c *= cap / l;
         }
     }
     // a small lens' emission goes partly or wholly to its footprint (emit.frag): what is left of it here

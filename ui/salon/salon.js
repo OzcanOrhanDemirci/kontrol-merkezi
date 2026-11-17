@@ -218,7 +218,11 @@ async function create(canvas, options = {}) {
   const volDefs = (pack.hacimler || []).filter(v => v.dosya).sort((a, b) => a.hucre - b.hucre);
   if (!volDefs.length) throw fail('sahne.json: pişmiş ışık hacmi yok');
   if (volDefs.length > 8) throw fail('sahne.json: en çok 8 hacim okunabilir');
-  const mats = pack.malzemeler || [];
+  // what a lamp's own face shows, apart from the light it gave the bake: the stair's lamps are faint lamps in the
+  // temperature colour (Özcan, Phase 2), and at the baked 24 their 6 cm lenses clip to white globes. The treads keep
+  // the bake's light; only the lens is drawn at a fraction (options.lensScale overrides, for tuning).
+  const LENS = Object.assign({ merdiven_isik: 0.001 }, options.lensScale || {});
+  const mats = (pack.malzemeler || []).map(m => (LENS[m.ad] != null && m.isima != null ? Object.assign({}, m, { isima: m.isima * LENS[m.ad] }) : m));
   if (mats.length > 64) throw fail('sahne.json: en çok 64 malzeme');
   const dynDefs = pack.dinamik || [];
   const anchorList = pack.capalar || [];
@@ -490,7 +494,7 @@ async function create(canvas, options = {}) {
       }
       const parts = new Map();                  // root -> the piece's triangles (index offsets)
       for (let t = 0; t < idx.length; t += 3) { const r = find(local.get(idx[t])); if (!parts.has(r)) parts.set(r, []); parts.get(r).push(t); }
-      const tint = m.renk || [1, 1, 1], k = m.isima != null ? m.isima : (m.emitScale || 0), e = { group: m.grup, rgb: scl(tint, k) };
+      const tint = m.renk || [1, 1, 1], k = m.isima != null ? m.isima : (m.emitScale || 0), e = { group: m.grup, rgb: scl(tint, k), lens: LENS[m.ad] != null };
       const vidsOf = tris => tris.flatMap(t => [idx[t], idx[t + 1], idx[t + 2]]);
       for (const tris of parts.values()) {
         if (add1(vidsOf(tris), e)) continue;
@@ -715,7 +719,7 @@ async function create(canvas, options = {}) {
     const k = texKey(m);
     matUBO.set([m.uvOlcek || 1, k ? layerOf.get(k) : -1, m.puruz != null ? m.puruz : -1, m.metal != null ? m.metal : -1], i * 4);
     matUBO.set([...(m.renk || [1, 1, 1]), m.isima != null ? m.isima : (m.emitScale || 0)], 256 + i * 4);   // sahne.json: isima = emitScale
-    const fl = (flagOf(m, 'wet') ? 1 : 0) | (flagOf(m, 'levha') ? 2 : 0);
+    const fl = (flagOf(m, 'wet') ? 1 : 0) | (flagOf(m, 'levha') ? 2 : 0) | (LENS[m.ad] != null ? 4 : 0);   // 4: a lens shows its own light only
     const eg = flagOf(m, 'emissive') && m.grup != null ? m.grup : -1;
     matUBO.set([eg, fl, 0, 0], 512 + i * 4);
   });
@@ -995,8 +999,23 @@ async function create(canvas, options = {}) {
     }
     gl.disable(gl.SCISSOR_TEST);
   }
+  // round each LENS lamp the light its own body caught in the bake: its emitter sits millimetres from the cup, whose
+  // 4 cm texels took the disc's full radiance and read as a white globe. Within LENS_R of the lens the received light
+  // is held to LENS_CAP times the group's brightness (the wall beside it keeps its share; the hot texels do not)
+  const LENS_R = 0.13;
+  let lensCap = options.lensCap != null ? options.lensCap : 0.006;
+  const lensBalls = new Float32Array(4 * 12);
+  let lensN = 0;
+  const lensBox = new Float32Array([1e9, 1e9, 1e9, 0, -1e9, -1e9, -1e9, 0]);   // their bounds (most pixels skip the test)
+  for (const e of emitters) {
+    if (!e.lens || lensN >= 12) continue;
+    const c = [0, 1, 2].map(k => { let t = 0; for (let j = k; j < e.pts.length; j += 3) t += e.pts[j]; return t / (e.pts.length / 3); });
+    lensBalls.set([c[0], c[1], c[2], LENS_R], 4 * lensN++);
+    for (let k = 0; k < 3; k++) { lensBox[k] = Math.min(lensBox[k], c[k] - LENS_R); lensBox[4 + k] = Math.max(lensBox[4 + k], c[k] + LENS_R); }
+  }
   function camUniforms(pr, c) {
     const u = pr.u;
+    if (u.uLensBall) { gl.uniform4fv(u.uLensBall, lensBalls); gl.uniform1i(u.uLensN, lensN); gl.uniform1f(u.uLensCap, lensCap); gl.uniform4fv(u.uLensBox, lensBox); }
     if (u.uEye) gl.uniform3fv(u.uEye, c.eye);
     if (u.uCamF) { gl.uniform3fv(u.uCamF, c.F); gl.uniform3fv(u.uCamR, c.R); gl.uniform3fv(u.uCamU, c.U); gl.uniform2f(u.uTan, c.tx, c.ty); }
     if (u.uNearFar) gl.uniform2f(u.uNearFar, NEAR, FAR);
@@ -1913,6 +1932,7 @@ async function create(canvas, options = {}) {
     load: { t0: T0, mark, files, get firstMs() { return firstRenderMs; } },   // the load's phases and files (ms from T0, a performance.now()); the first render's script time
     get frames() { return frames; },
     setCamera(e, t, deg) { eye = e.slice(); look = t.slice(); if (deg) fov = deg; },
+    setLensCap(k) { lensCap = k; },
     setGroup(i, c, k) { if (i >= 0 && i < 3) groups[i] = [Math.max(0, c[0]), Math.max(0, c[1]), Math.max(0, c[2]), Math.max(0, k)]; },
     setRotor(name, angle, omega) { const d = dyn.find(x => x.name === name); if (d) { d.angle = angle; d.omega = omega || 0; } },
     setLever(name, angle) { const d = dyn.find(x => x.name === name); if (d) d.angle = angle; },
