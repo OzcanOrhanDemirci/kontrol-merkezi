@@ -444,14 +444,22 @@ resolution; the light map's B-spline read is applied to plane A only (plane B, t
 rotor is its crisp mesh when slow and the analytic disc when fast, crossfaded.
 
 The opening (11-17, Özcan: "açılışta uzun süre siyah ekran kalıyor [...] yükleme ekranı sahneye de uygun olmalı"):
-the window opens fullscreen on the monitor under the cursor and paints, from its first frame, a picture of the hall
-before its lights strike (`src/Pencere/Acilis.cs`: near-dark haze, the shaft's thin light through a hatch not yet open,
-its small pool where the scene's shaft falls). The page is transparent until it lays the same pixels over it
-(`/acilis.bmp`, `ui/acilis.js`), adds the stencilled line "SALON HAZIRLANIYOR" and a slit of light that opens with the
-load (only opacity and transform move: the compositor plays them through the load's long tasks). Meanwhile the pack's
+the window opens fullscreen on the monitor under the cursor and paints, from its first frame, the hall in the dark
+with its service lamps at an ember (`src/Pencere/Acilis.cs` reads `ui/acilis/taban.jpg`). The page is transparent
+until it lays the same pixels over it (`/acilis.bmp`, `ui/acilis.js`); then the hall's ten lighting circuits strike
+one after another, front to back (Özcan chose this on 11-17 because it does not read as loading: "zaten sahne öyleymiş
+hissi var"; the small board of pilot lamps under the view stays as quiet as it is). Each circuit is a picture of the
+frame as it stands once it is on, at opacity 0 until its strike: only opacity moves, on the compositor, through the
+load's long tasks. The circuits are paced over the last load's length and brought forward by the load's progress; the
+far end waits for the load's last stage. With all on, the picture is the scene's first frame (same eye, exposure and
+lamps): `ui/uygulama.js` holds the world for that frame (`M.held`: rotors and levers at rest, no drift, displays and
+state lamps dark, service lamps full) and wakes it after the hand-over. The pictures are made from the scene and must
+be remade after every bake or change to the first view: `python araclar/acilis_kareler.py` (17 s; it opens the page
+with `#ilk=1`, which holds the first frame). To look at the hand-over in the window, set the environment variable
+`KM_SAYFA` to `devir=4` (a 4 s dissolve) or `ilk=1&devir=kirp` (the last picture blinking over the held frame). Meanwhile the pack's
 big files inflate in workers, each part is built as its files arrive, the page is already connected to the service
-and the levha worker draws the first set of signs. The first frame is drawn under the picture; then the beam swells
-(the hatch opens), the picture dissolves and the scene's own opening (the shaft's strike) runs. Stages are logged once
+and the levha worker draws the first set of signs. The first frame is drawn under the picture; then the picture
+dissolves and the scene's own opening (the shaft's strike) runs. Stages are logged once
 per start (`pencere: açılış` in gunluk.txt); `araclar/acilis-olc.ps1` records and measures it in the real window.
 Measured 11-17 (2560 × 1440): first scene frame 3.5-3.9 s after the process starts (9.8 s before).
 

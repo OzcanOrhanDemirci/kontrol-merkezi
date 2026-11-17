@@ -1,66 +1,58 @@
-// The loading screen's picture: the hall before its lights strike. Near-dark haze, and down the middle the shaft's
-// light through a hatch not yet open: a thin beam from the ceiling onto a small pool on the floor, where the scene's
-// shaft falls once it strikes (the fanlar view: the shaft's column at the centre, its pool at ~73 % of the height).
-// Made once at the window's size, painted by the window from its first frame and handed to the page
-// (/acilis.bmp), which shows the same pixels under its loading screen (ui/index.html, #acilis), so there is no seam
-// between the window, the page and, at the end, the scene's own opening.
+// The loading screen's first picture: the hall in the dark, its service lamps at an ember. It is a frame of the
+// scene itself (ui/acilis/taban.jpg, made by araclar/acilis_kareler.py and embedded with the rest of ui/), drawn once
+// at the window's size, painted by the window from its first frame and handed to the page (/acilis.bmp), which shows
+// the same pixels under its loading screen (ui/index.html, #acilis; ui/acilis.js strikes the hall's lighting circuits
+// over it), so there is no seam between the window, the page and, at the end, the scene's first frame.
 
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using System.Threading.Tasks;
 
 namespace KontrolMerkezi.Pencere;
 
 static class Acilis
 {
-    /// <summary>The field far from the light (the window's background colour).</summary>
+    /// <summary>The field around the picture (the window's background colour).</summary>
     public static readonly Color Zemin = Color.FromArgb(3, 3, 3);
 
-    // geometry in units of the height (the scene's vertical field of view is fixed, so this is the scene's layout on
-    // any aspect): the beam's centre x = 0, the pool's height
-    const double PoolV = 0.735;
-
+    /// <summary>The picture at the window's size: fitted to the height and centred, as the scene is (its vertical
+    /// field of view is fixed) and as the page lays its own pictures (acilis.js, fit). On the 2560x1440 monitor it
+    /// is the file's own pixels. Without the file: the field colour.</summary>
     public static unsafe Bitmap Resim(int w, int h)
     {
         var bmp = new Bitmap(w, h, PixelFormat.Format24bppRgb);
-        var d = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
-        byte* scan0 = (byte*)d.Scan0;
-        int stride = d.Stride;
-        double inv = 1.0 / h;
-        Parallel.For(0, h, y =>
+        try
         {
-            byte* row = scan0 + (long)y * stride;
-            double v = (y + 0.5) * inv;
-            // the beam: thin, widening a little as it falls, dimming towards the floor, ending in the pool
-            double s = 0.0032 + 0.0055 * v;
-            double fall = (1 - 0.35 * Math.Min(1, v / PoolV)) * (1 - Smooth(PoolV - 0.07, PoolV + 0.004, v));
-            double dvPool = v - PoolV;
-            for (int x = 0; x < w; x++)
+            // (a resource under a folder keeps the build's backslash in its name)
+            var asm = typeof(Acilis).Assembly;
+            var name = Array.Find(asm.GetManifestResourceNames(), n => n.Replace((char)92, '/') == "ui/acilis/taban.jpg");
+            using var s = name == null ? null : asm.GetManifestResourceStream(name);
+            using var src = s == null ? null : new Bitmap(s);
+            if (src != null && src.Width == w && src.Height == h)
             {
-                double u = (x + 0.5 - w * 0.5) * inv, u2 = u * u;
-                double haze = 3.0 + 4.2 * Math.Exp(-(u2 / 0.10 + (v - 0.6) * (v - 0.6) / 0.16));
-                double beam = fall * (30 * Math.Exp(-u2 / (2 * s * s)) + 6 * Math.Exp(-u2 / (50 * s * s)) + 2.2 * Math.Exp(-u2 / (2 * 0.05 * 0.05)));
-                double pool = 20 * Math.Exp(-(u2 / (2 * 0.045 * 0.045) + dvPool * dvPool / (2 * 0.007 * 0.007)))
-                            + 5 * Math.Exp(-(u2 / (2 * 0.15 * 0.15) + dvPool * dvPool / (2 * 0.028 * 0.028)));
-                double r = Math.Sqrt(u2 * 0.7 + (v - 0.55) * (v - 0.55) * 1.3);
-                double L = (haze + beam + pool) * (1 - 0.5 * Smooth(0.35, 1.0, r));
-                double n = (Hash(x, y) - 0.5) * 1.5;                       // grain: no banding in the dark steps
-                row[x * 3 + 2] = Byte(L * 1.03 + n);                      // warm grey: R
-                row[x * 3 + 1] = Byte(L + n);                             // G
-                row[x * 3 + 0] = Byte(L * 0.92 + n);                      // B
+                // the monitor's own size: the decoded rows as they are (~10 ms; drawing them through GDI+ took ~100)
+                var all = new Rectangle(0, 0, w, h);
+                var from = src.LockBits(all, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+                var to = bmp.LockBits(all, ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
+                long bytes = (long)Math.Min(from.Stride, to.Stride) * h;
+                Buffer.MemoryCopy((void*)from.Scan0, (void*)to.Scan0, bytes, bytes);
+                bmp.UnlockBits(to);
+                src.UnlockBits(from);
+                return bmp;
             }
-        });
-        bmp.UnlockBits(d);
+            using var g = Graphics.FromImage(bmp);
+            g.Clear(Zemin);
+            if (src == null) return bmp;
+            int dw = (int)Math.Round(src.Width * (double)h / src.Height);
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            g.CompositingMode = CompositingMode.SourceCopy;
+            using var attr = new ImageAttributes();
+            attr.SetWrapMode(WrapMode.TileFlipXY);                        // no dark fringe at the edges when scaled
+            g.DrawImage(src, new Rectangle((w - dw) / 2, 0, dw, h), 0, 0, src.Width, src.Height, GraphicsUnit.Pixel, attr);
+        }
+        catch (Exception ex) { Program.Log("pencere: açılış resmi okunamadı: " + ex.Message); }
         return bmp;
-    }
-
-    static double Smooth(double a, double b, double x) { double t = Math.Max(0, Math.Min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
-    static byte Byte(double v) => (byte)Math.Max(0, Math.Min(255, Math.Round(v)));
-    static double Hash(int x, int y)
-    {
-        uint q = (uint)x * 0x8da6b343u ^ (uint)y * 0xd8163841u;
-        q ^= q >> 15; q *= 0x2c1b3c6du; q ^= q >> 12; q *= 0x297a2d39u; q ^= q >> 15;
-        return (q & 0xffffff) / 16777216.0;
     }
 }
