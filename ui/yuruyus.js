@@ -32,6 +32,8 @@ const C = {
   GRAVITY: 9.81,
   JUMP_H: 1.25,      // jump height (m; 0.45 could not climb out of the roof lamp's 1.44 m pit, 11-17)
   TERMINAL: 50,      // terminal fall speed (m/s; quadratic drag)
+  SQUEEZE: 0.15,     // a body standing already pressed under something lower than TOP moves on under it while pressed
+                     // no deeper than this or than it already is (a ceiling down to 1.80 m: the eye still clears the near plane)
   WALKABLE: 0.64,    // ground normal's y at least this (about 50 degrees)
   LOOK: 0.0031,      // rad per mouse count (0.0022 turned slowly, 11-17)
   PITCH: 1.45,
@@ -417,10 +419,29 @@ function create(o) {
   const timing = new Float32Array(120); let timingN = 0;
   let contactsMax = 0, timeSum = 0;
 
+  // how deep the body standing with its feet at (x, foot, z) is pressed into something over it, or straight under it
+  // (the contacts walls do not cover: a ceiling lower than TOP, the top of a part it stands inside); 0 when clear
+  function pressed(x, foot, z) {
+    const R = C.R, ya = foot + C.STEP + R, yb = foot + C.TOP - R;
+    const n = gather(x - R, ya - R, z - R, x + R, yb + R, z + R);
+    let p = 0;
+    for (let i = 0; i < n; i++) {
+      const d2 = segTri(x, ya, yb, z, CAND[i]);
+      if (d2 >= R * R || d2 < 1e-14) continue;
+      const d = Math.sqrt(d2);
+      if ((H[3] - H[1]) / d < -0.4 || Math.hypot(x - H[0], z - H[2]) / d < 0.05) p = Math.max(p, R - d);
+    }
+    return p;
+  }
+
   // the body against walls and ceilings; returns the remaining deepest penetration
   function resolveBody(x0, z0) {
     const R = C.R;
     let deepest = 0;
+    // on the ground and already pressed where the step began (a jump or a drop put it under something lower than
+    // itself): how deep it may stay pressed while it moves on (C.SQUEEZE); 0 when it was clear
+    let squeeze = B.grounded ? pressed(x0, B.foot, z0) : 0;
+    if (squeeze > 1e-4) squeeze = Math.max(squeeze, C.SQUEEZE); else squeeze = 0;
     const ya0 = B.foot + C.STEP + R, yb0 = B.foot + C.TOP - R;
     const n = gather(B.x - R - 0.15, ya0 - R - 0.05, B.z - R - 0.15, B.x + R + 0.15, yb0 + R + 0.05, B.z + R + 0.15);
     if (n > contactsMax) contactsMax = n;
@@ -444,6 +465,11 @@ function create(o) {
         if (ny < -0.4 && !B.grounded) {           // a ceiling while in the air: down, and the rise stops
           B.x += nx * pen; B.foot += ny * pen; B.z += nz * pen;
           if (B.vy > 0) B.vy = 0;
+        } else if (B.grounded && (hl < 0.05 || ny < -0.4) && pen <= squeeze) {
+          // pressed, and no deeper than it may be: it moves on. Held back or pushed off on every step (the push of
+          // one edge back into the next) such a body could never move again (11-17, salon_cukur.py: between the RGB
+          // console's light bar and its overhang, 1.86 and 1.82 m)
+          continue;
         } else if (hl < 0.05) {                  // straight above or below while on the ground: no way through
           B.x = x0; B.z = z0; B.vx = 0; B.vz = 0;
           if (ny > 0 && !B.grounded) B.foot += pen;
@@ -528,7 +554,11 @@ function create(o) {
           GN[0] = nx; GN[1] = ny; GN[2] = nz; GN[3] = nf;
         }
         if (g > -Infinity) {
-          if (walk) {
+          if (walk && wasGrounded && g > f0 + 1e-3 && pressed(B.x, g, B.z) > pressed(x0, f0, z0) + 1e-4) {
+            // a step up into less room than the body has: a wall (resolveBody saw the head at the old height; the
+            // stair up to the roof hatch's shut lid ends on a landing 1.94 m high, 11-17, salon_cukur.py)
+            B.x = x0; B.z = z0; B.vx = 0; B.vz = 0; B.foot = f0; B.vy = 0;
+          } else if (walk) {
             if (wasGrounded) B.eyeLag = Math.max(-0.5, Math.min(0.5, B.eyeLag - (g - f0)));
             B.foot = g; B.vy = 0; B.grounded = true;
             if (GN[1] > 0.9) B.baseF = g;          // on a tread, not on a nosing: the height a step is measured from
