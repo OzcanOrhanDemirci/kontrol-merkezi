@@ -411,7 +411,7 @@ No TAA, no FXAA/SMAA, no random numbers at run time: every pixel the same sample
 As built (`ui/salon/README.md` has the API and the measured costs): the volumes are recombined with the groups'
 colours into one texture per volume whenever a colour moves (four reads per haze step instead of six; the per-group
 clamp of Ls becomes one clamp of the sum); the reflection is drawn at half the scene pass' resolution and only below
-the horizon, its haze through the outer volume at double steps; bloom starts from the scene composited at the haze's
+the horizon, its haze through the outer volume at the hall's own step (a cell); bloom starts from the scene composited at the haze's
 resolution; the light map's B-spline read is applied to plane A only (plane B, the direction, stays bilinear); the
 rotor is its crisp mesh when slow and the analytic disc when fast, crossfaded.
 

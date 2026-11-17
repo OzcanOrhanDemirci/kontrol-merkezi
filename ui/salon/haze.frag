@@ -1,7 +1,7 @@
 // The haze pass (docs/SALON.md, "The live renderer", 3): per pixel of a reduced target, a march from the eye to the
 // scene's depth through the baked volumes. In-scatter per group Ls = M + 3 g (F . r) M / lum(M) times C_g k_g, extinction
-// sigma times the live density rho(x, t). Steps are fixed in metres (no jitter): half a cell of the finest volume the
-// point is in, ending exactly on every fine volume's boundary and on the depth, so nothing jumps as the camera moves.
+// sigma times the live density rho(x, t). Steps are fixed in metres (no jitter): a cell of the finest volume the point
+// is in, ending exactly on every fine volume's boundary and on the depth, so nothing jumps as the camera moves.
 // Output: in-scattered light (rgb) and transmittance (a).
 // The reflection's variant (uMirror): the mirrored ray from where it meets the floor, through the outer volume only.
 // COMMON
@@ -13,7 +13,7 @@ uniform vec2 uSize;            // this target's size
 uniform float uSigma;          // the oven's extinction (1/m)
 uniform float uDensity;        // live scale of the density
 uniform float uTime;           // seconds (the haze's own clock)
-uniform float uStepFactor;     // 1: half a cell; smaller is finer
+uniform float uStepFactor;     // 1: a cell; smaller is finer
 uniform int uMaxSteps;
 uniform float uMirror;
 uniform sampler3D uNoise;      // smooth tiled noise, 64^3, period 1 in texture coordinates
@@ -90,13 +90,13 @@ void main() {
     }
     vec3 L = vec3(0.0);
     float T = 1.0;
-    float coarse = 0.5 * uVolLo[outer].w * uStepFactor * (uMirror > 0.5 ? 2.0 : 1.0);
+    float coarse = uVolLo[outer].w * uStepFactor;
     for (int k = 0; k < uMaxSteps; k++) {
         if (t >= t1 - 1e-4 || T < 0.002) break;
         float ds = coarse;
         int fine = NV - 1;
         for (int i = NV - 2; i >= 0; i--) {
-            if (t >= tin[i] - 1e-4 && t < tout[i] - 1e-4) { ds = min(ds, 0.5 * uVolLo[i].w * uStepFactor); fine = i; }
+            if (t >= tin[i] - 1e-4 && t < tout[i] - 1e-4) { ds = min(ds, uVolLo[i].w * uStepFactor); fine = i; }
             else if (tin[i] > t + 1e-4) ds = min(ds, tin[i] - t);
         }
         ds = min(ds, t1 - t);

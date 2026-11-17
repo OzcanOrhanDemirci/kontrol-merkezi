@@ -43,7 +43,7 @@ s.voidState()                   // { on, inBlock, noInterior, homeHaze, drawn: [
 s.voidGlow(x, y, r)             // tests: the lamps' float display light round a canvas point (smooth window)
 ```
 
-`s.quality` (defaults): `scale` 2, `hazeScale` 0.5 (haze pass resolution, share of the canvas), `hazeStep` 1 (1 = half a
+`s.quality` (defaults): `scale` 2, `hazeScale` 0.5 (haze pass resolution, share of the canvas), `hazeStep` 1 (1 = a
 cell; 0.5 = twice the steps), `reflScale` 0.5 (of the scene pass), `prepass` true, `bands` 6 (most flushed bands per
 heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cubic` true, `rotor` 'auto'.
 
@@ -65,9 +65,9 @@ heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cub
 |---|---|---|
 | volumes | groups' colours into the volumes (only when a colour changes) | the volumes |
 | reflection | the scene mirrored in y = 0 (depth prepass, discard below the floor), only the rows below the horizon | 0.5 x scene pass |
-| reflectionHaze | haze of the mirrored rays from the floor on (outer volume, double steps), composite, 13-tap mip chain | half of that |
+| reflectionHaze | haze of the mirrored rays from the floor on (outer volume, a cell per step), composite, 13-tap mip chain | half of that |
 | scene | depth prepass, then forward shading (light map + B-spline close up, GGX, wet floor, levha, lamps, rotor discs) | scale x canvas |
-| haze | the march: fixed steps in metres, half a cell of the finest volume at each point, ending on boundaries | 0.5 x canvas |
+| haze | the march: fixed steps in metres, a cell of the finest volume at each point, ending on boundaries | 0.5 x canvas |
 | bloom | Karis-weighted box of the scene composited with the haze, 13-tap down, tent up | 0.5 x canvas |
 | composite | scene x T + in-scatter (joint-bilateral by depth), bloom 4 %, exposure, AgX (Denizaltı's) | scale x canvas |
 | resolve | separable Lanczos-2 in linear light, sRGB, a fixed 64² blue-noise dither of ±0.5/255 | canvas |

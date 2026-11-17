@@ -141,7 +141,7 @@ async function create(canvas, options = {}) {
   const Q = {                                   // quality settings (setQuality); measured defaults, README.md
     scale: options.scale || 2,                  // supersampling: the scene pass at scale x the canvas' device pixels
     hazeScale: 0.5,                             // the haze pass' resolution, share of the canvas
-    hazeStep: 1,                                // haze steps: 1 = half a cell; 0.5 = twice as many
+    hazeStep: 1,                                // haze steps: 1 = a cell; 0.5 = twice as many
     reflScale: 0.5,                             // the reflection's resolution, share of the scene pass'
     prepass: true,                              // depth prepass before the scene pass
     bands: 6,                                   // flushed horizontal bands of the heavy passes
@@ -1000,8 +1000,8 @@ async function create(canvas, options = {}) {
   function marchSteps(mirror) {
     const o = vols[NV - 1];
     const diag = len(scl(o.n, o.hucre));
-    return Math.ceil(diag / (0.5 * o.hucre * Q.hazeStep * (mirror ? 2 : 1))) +
-      (mirror ? 0 : vols.slice(0, -1).reduce((s, v) => s + Math.ceil(len(scl(v.n, v.hucre)) / (0.5 * v.hucre * Q.hazeStep)) + 2, 0)) + 4;
+    return Math.ceil(diag / (o.hucre * Q.hazeStep)) +
+      (mirror ? 0 : vols.slice(0, -1).reduce((s, v) => s + Math.ceil(len(scl(v.n, v.hucre)) / (v.hucre * Q.hazeStep)) + 2, 0)) + 4;
   }
   function hazePass(c, depthTgt, out, mirror, rows) {
     fullscreen(programs.haze, out, 0, (u, w, h) => {
