@@ -22,6 +22,10 @@ s.setRotor(name, angle, omega)  // rotor angle (rad) and speed (rad/s): the fram
 s.setLever(name, angle)         // any dinamik entry turned about its axis (eksen) at its merkez
 s.setLevha(atlas, source, { emissive })   // canvas / ImageBitmap for the faces of the anchors with that atlas name;
                                 // emissive 0: paint (albedo blend by alpha), > 0: a display (linear radiance scale)
+s.setLevhaGlow(atlas, [r, g, b], k)       // a self-lit face whose texture is light only (the console's plates): its
+                                // live colour and strength, multiplied in the shader; no redraw when it changes
+s.setLevhaWake(atlas, k)                  // a self-lit sign's brightness against its own (0: dark glass): the displays
+                                // are dark in the scene's first frame and wake after the loading screen's hand-over
 s.setLamp(anchorName, [r, g, b], k)       // the self-lit lens inside that anchor's box
 s.setHaze({ density, fans: [{ name: 'fan_kasa', strength }] })   // strength 0..1; fan = dinamik name + '_rotor'
 s.setExposure(ev)               // stops
@@ -65,7 +69,11 @@ heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cub
   the same spread, and `emit.vert/.frag` add it to the scene and reflection passes convolved with a Gaussian of 0.65
   (reflection 0.85) canvas px, hidden per sample behind nearer depth. The lens' own emission fades out over a minor
   extent of 6 -> 2.5 px (reflection 8 -> 3.5): a lens of a few pixels keeps its energy and shape at every sub-pixel
-  phase instead of being hit or missed by the samples.
+  phase instead of being hit or missed by the samples. What hides it: a lens a few pixels across takes the share of
+  nine points on it that are seen; a larger footprint is tested per fragment at its nearest point on the lens (an
+  edge uncovers it texel by texel). A flat lens is hidden only by a surface on its emitting side (the texel put back
+  in the world: its own housing and the floor round a floor lamp hide nothing at a grazing angle), and seen from
+  behind it gives no light, so a floor lamp's lens has no mirror image in the wet floor (its housing hides it there).
 
 ## The frame
 

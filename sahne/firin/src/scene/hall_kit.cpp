@@ -14,7 +14,7 @@ const char* const kMatNames[M_COUNT] = {
     "beton_zemin", "beton_duvar", "beton_kolon", "beton_tavan", "beton_anit", "celik_boyali_kasa", "celik_boyali_gpu",
     "celik_kanat", "celik_pasli", "celik_sac", "metal_koyu", "kablo", "cam_lamba", "kemer_isik", "kuyu_isik", "boya",
     "pano_yuz", "ekran_yuz", "tabela_yuz", "mercek", "cekirdek_isik", "merdiven_isik", "dis_zemin", "dis_duvar",
-    "dis_kolon", "dis_koyu", "dis_isik", "dis_fener"};
+    "dis_kolon", "dis_koyu", "dis_isik", "dis_fener", "dis_cam", "konsol_yuz"};
 
 namespace {
 // the exterior's rows are the hall's own texture sets under their own names: the asset step's entry they read
@@ -24,6 +24,7 @@ const char* textureSource(int i) {
         case M_DIS_DUVAR: return "beton_duvar";
         case M_DIS_KOLON: return "beton_kolon";
         case M_DIS_KOYU: return "metal_koyu";
+        case M_KONSOL: return "beton_anit";
         default: return kMatNames[i];
     }
 }
@@ -159,6 +160,8 @@ const Fallback kFallback[M_COUNT] = {
     {{0.032f, 0.024f, 0.017f}, 0.65f, 0.9f, 2.0f}, // dis_koyu (metal_koyu's)
     {{0.80f, 0.80f, 0.80f}, 0.9f, 0.0f, 1.0f},     // dis_isik
     {{0.80f, 0.78f, 0.72f}, 0.2f, 0.0f, 1.0f},     // dis_fener
+    {{0.012f, 0.013f, 0.015f}, 0.12f, 0.0f, 1.0f}, // dis_cam: dark glass, a smooth dielectric (it mirrors the fog)
+    {{0.26f, 0.23f, 0.16f}, 0.8f, 0.0f, 2.7f},     // konsol_yuz (beton_anit's)
 };
 
 }   // namespace
@@ -215,7 +218,7 @@ void loadMaterials(Scene& s, const std::string& assetDir) {
             case M_DIS_ISIK: m.flags = MF_EMISSIVE; m.group = GROUP_KUYU; m.emitScale = kCatiL; break;
             case M_DIS_FENER: m.flags = MF_EMISSIVE; m.group = GROUP_KUYU; m.emitScale = kFenerL; break;
             case M_BOYA: m.flags = MF_NO_OCCLUDE | MF_LEVHA; break;
-            case M_PANO: case M_EKRAN: case M_TABELA: case M_MERCEK: m.flags = MF_LEVHA; break;
+            case M_PANO: case M_EKRAN: case M_TABELA: case M_MERCEK: case M_KONSOL: m.flags = MF_LEVHA; break;
             default: break;
         }
         s.mats.push_back(m);

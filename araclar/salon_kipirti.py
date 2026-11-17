@@ -228,6 +228,7 @@ def main():
     ap.add_argument('--etiket', default='')
     ap.add_argument('--kok', default=None, help='serve ui/ from this folder (an earlier version of the renderer)')
     ap.add_argument('--yalniz-analiz', action='store_true')
+    ap.add_argument('--ayna', action='store_true', help="measure the floor lamps' mirror images instead of the lamps")
     ap.add_argument('--ref-dizin', default=None, help='reuse the reference frames of an earlier run (same view and move)')
     a = ap.parse_args()
     name = f"{a.gorunum.replace(':', '').replace(';', '_').replace('=', '').replace(',', '_')}_{a.hareket}" + (f'_{a.etiket}' if a.etiket else '')
@@ -235,6 +236,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     paket = Path(a.paket if os.path.isabs(a.paket) else os.path.join(ROOT, a.paket)).resolve()
     lamps = lamp_centres(paket)
+    if a.ayna:                           # the floor lamps' mirror images in the wet floor (y -> -y) in their place
+        lamps = [[p[0], -p[1], p[2]] for p in lamps if p[1] < 1]
     if not a.yalniz_analiz:
         sys.path.insert(0, os.path.join(ROOT, 'sahne', 'araclar'))
         import salon_test

@@ -15,6 +15,8 @@ uniform float uPxAngle;        // radians per canvas pixel
 uniform float uSigma;          // the fog's extinction (1/m)
 uniform float uExposure;       // as fener.vert's
 uniform vec3 uFogUp, uFogDown;
+uniform vec4 uBand;            // the cloud band (band.glsl)
+// BAND
 uniform vec3 uMastL;           // the mast's own radiance, lit by the fog (scene units)
 uniform vec3 uMastS;           // its length below the lamp's centre (m), its width (m), the lamp's foot (m)
 out vec2 vP;                   // pixels across the mast's axis, pixels along it from its foot
@@ -55,7 +57,7 @@ void main() {
     float d = length(qm);
     float hw = 0.5 * uMastS.y / d / uPxAngle;
     // its light: the steel through the fog to it, over the fog's own light along the view (the background it hides)
-    float T = exp(-uSigma * d);
+    float T = exp(-uSigma * d - bandTau(uEye.y, qm.y / d, d));
     vCol = agxDisplay((uMastL * T + fogSky(qm.y / d) * (1.0 - T)) * uExposure);
     vShape = vec4(hw, L, dot(qm, uCamF), 0.0);
     // the quad: the segment, a pixel and a half wider each side and a pixel longer each end (the coverage's reach)

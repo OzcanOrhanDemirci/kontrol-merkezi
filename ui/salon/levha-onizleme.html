@@ -77,9 +77,8 @@ window.ORNEKLER = function (name) {
     return [false, true].map(secili => ({ ad: secili ? 'seçili' : 'normal', veri: { ad, derece, renk, secili } }));
   }
   if (name === 'plaka_rgb') return [
-    { ad: 'açık', veri: { acik: true } }, { ad: 'açık · üzerinde', veri: { acik: true, hover: true } },
-    { ad: 'açık · beklemede', veri: { acik: true, bosta: true } }, { ad: 'kapalı', veri: { acik: false } },
-    { ad: 'kapalı · üzerinde', veri: { acik: false, hover: true } }, { ad: 'bilinmiyor', veri: { acik: null } },
+    { ad: 'açık', veri: { acik: true } }, { ad: 'açık · beklemede', veri: { acik: true, bosta: true } },
+    { ad: 'kapalı', veri: { acik: false } }, { ad: 'bilinmiyor', veri: { acik: null } },
   ];
   if (name.startsWith('cihaz_')) return [
     { ad: 'bağlı', veri: { durum: 'bagli' } }, { ad: 'bağlı değil', veri: { durum: 'bagli_degil' } },
@@ -113,9 +112,9 @@ window.HAZIR = KM_LEVHA.ready.then(() => {
     const ornek = ORNEKLER(name), secim = document.createElement('select');
     ornek.forEach((o, i) => secim.append(new Option(o.ad, i))); a.append(secim);
     const meta = document.createElement('div'); meta.className = 'meta';
-    meta.textContent = `${s.w} × ${s.h} · ${s.kind} · ${s.pxPerM} px/m · ${(s.w / s.pxPerM).toFixed(1)} × ${(s.h / s.pxPerM).toFixed(1)} m`;
+    meta.textContent = `${s.w} × ${s.h} · ${s.kind} · ${s.pxPerM.toFixed(0)} px/m · ${(s.w / s.pxPerM).toFixed(1)} × ${(s.h / s.pxPerM).toFixed(1)} m`;
     a.append(meta);
-    const yuzey = document.createElement('div'); yuzey.className = 'surface' + (s.kind === 'ekran' || s.kind === 'pano' ? ' self' : '');
+    const yuzey = document.createElement('div'); yuzey.className = 'surface' + (s.kind !== "levha" && s.kind !== "boya" ? ' self' : '');
     const canvas = document.createElement('canvas'); yuzey.append(canvas); a.append(yuzey);
     document.querySelector('#izgara').append(a);
     const k = { name, ornek, secim, canvas, i: 0 }; kartlar.push(k);

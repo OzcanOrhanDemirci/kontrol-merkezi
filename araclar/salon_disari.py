@@ -2,7 +2,7 @@
 a slow pan for the distant lamps' steadiness, the hatch. Headless Edge on the real GPU, the simulated service; nothing
 touches the app's window.
 
-    python araclar/salon_disari.py --paket C:/dev/kontrol-merkezi/.tmp/paket-on2 [--out DIR] [--yalniz kare,dusus,pan,kapak,zaman]
+    python araclar/salon_disari.py --paket C:/dev/kontrol-merkezi/.tmp/paket-on2 [--out DIR] [--yalniz kare,bosluk,kayma,dusus,pan,kapak,zaman]
                                    [--w 2560 --h 1440] [--olcek 2]
 
 kare_<name>.jpg: stills; dusus/: the fall's frames and dusus.json (its path, the wrap); sarma_*.png: the wrap's frame
@@ -38,10 +38,23 @@ STILLS = [
     ('kapak_ust', (-1.5, 35.0, -334.0), 0, -14),        # standing by the hatch, looking at it and the mast
     ('cati_boyunca', (3.0, 35.0, -330.0), 180, -4),        # along the roof towards the far end (the lamp's pit)
     ('kuyu_lamba', (9.0, 35.0, -22.0), -45, -22),        # the roof's lamp close up (the pit at x 0, z -31)
-    ('kenar_disari', (44.0, 35.0, -170.0), 90, 2),       # at the edge, looking out at the void
-    ('kenar_asagi', (46.5, 35.0, -120.0), 90, -55),      # over the edge, down along the columns
-    ('ufuk_capraz', (40.0, 35.0, -330.0), 135, 0),       # the corner, diagonal into the void
+    ('kenar_disari', (56.0, 35.0, -170.0), 90, 2),       # at the edge, looking out at the void
+    ('kenar_asagi', (57.0, 35.0, -170.0), 90, -55),      # over the edge, down along the columns
+    ('ufuk_capraz', (52.0, 35.0, -356.0), 60, 0),        # the corner, diagonal into the void
     ('merdiven_yukari', (0.0, 30.0, -333.5), 0, 30),   # on the stair under the open hatch, looking up
+]
+
+# views from the void (--yalniz bosluk): name, eye, target; our facility's middle is (0, 10, -171), its deck y 35
+VOID_STILLS = [
+    ('yakin_150', (115.0, 25.0, 79.0), (0.0, 5.0, -171.0)),        # ours from the gap between the rows, 80-250 m
+    ('komsu_300', (115.0, 40.0, 79.0), (230.0, 5.0, -171.0)),      # the neighbour at x 230 from ~280 m, a little above
+    ('sira_uzak', (115.0, 20.0, 79.0), (-500.0, 15.0, 20.0)),      # along the gap: ends of facilities at 100-600 m
+    ('ustten', (115.0, 150.0, 79.0), (0.0, 10.0, -171.0)),         # ours from above
+    ('alttan', (100.0, -150.0, 60.0), (0.0, 0.0, -171.0)),         # ours from below, falling past it
+    # the long side square on, from 260 m: the silhouette. Ours alone: a neighbour stands where this eye is
+    ('yan_cephe', (330.0, -10.0, -171.0), (0.0, -10.0, -171.0), 'tek'),
+    ('uc_cephe', (0.0, -10.0, 260.0), (0.0, -10.0, 0.0), 'tek'),   # the short end square on, ours alone
+    ('dugum_alttan', (104.0, -92.0, -86.0), (52.0, -22.0, -30.0)), # a leg meeting the mass, from below beside it
 ]
 
 JS_PUT = r"""async ([x, foot, z, yaw, pitch, n]) => {
@@ -74,6 +87,10 @@ def main():
     ap.add_argument('--js', default='', help='extra JS run once after load (tuning)')
     ap.add_argument('--varyant', default='', help='JSON list of fog settings: the stills once per setting')
     ap.add_argument('--kareler', default='', help='only these stills')
+    ap.add_argument('--kayma-goz', default='58,36.7,-170', help='kayma: the eye')
+    ap.add_argument('--kayma-hedef', default='240,10,-190', help='kayma: what it looks at at mid turn')
+    ap.add_argument('--kayma-px', type=float, default=0.4)
+    ap.add_argument('--kayma-n', type=int, default=36)
     a = ap.parse_args()
     only = set(a.yalniz.split(','))
     out = Path(a.out)
@@ -191,6 +208,50 @@ def main():
                 imgs.append(shot(pg, out / f'sarma_{"once" if dy == 0 else "sonra"}.png'))
             diff = np.abs(imgs[0] - imgs[1])
             print('sarma: en buyuk fark', diff.max(), 'ortalama', round(float(diff.mean()), 4), 'farkli piksel', int((diff.max(axis=2) > 1).sum()), flush=True)
+        if 'bosluk' in only:
+            # the facility seen from the void: free cameras (eye, target), ours at the origin (its middle at z -171)
+            names = set(a.kareler.split(',')) if a.kareler else None
+            for name, e, t, *how in VOID_STILLS:
+                if names and name not in names:
+                    continue
+                wait_lock()
+                pg.evaluate("""(async ([e, t, solo]) => { const km = window.__km, S = km.S; S.setVoid({ force: true });
+                    for (let i = 0; i < 4; i++) { S.setCamera(e, t, 50); km.V.step(1/30, e);
+                    if (solo) S.setVoid({ list: km.V.facilities(e).filter(f => f.home) });
+                    S.render(1/30, 1/30);
+                    await new Promise(r => requestAnimationFrame(r)); } })""", [list(e), list(t), 'tek' in how])
+                shot(pg, out / f'bos_{name}.png')
+                print('bosluk', name, flush=True)
+            pg.evaluate("window.__km.S.setVoid({ force: null })")
+        if 'kayma' in only:
+            # the neighbours' concrete in motion: a slow turn (--kayma-px display pixels a frame) from the roof's edge
+            # towards the next facility (its legs 100-300 m off in the fog). Frames under kayma/, and the mean second
+            # difference of the luma over time (a steady drift cancels in it; crawling stripes do not)
+            wait_lock()
+            kd = out / 'kayma'
+            kd.mkdir(exist_ok=True)
+            e, t0 = [float(v) for v in a.kayma_goz.split(',')], [float(v) for v in a.kayma_hedef.split(',')]
+            ls = []
+            for i in range(a.kayma_n):
+                pg.evaluate("""(async ([e, t, i, px, n]) => { const km = window.__km, S = km.S; S.setVoid({ force: true });
+                    const H = S.stats().size[1], da = (i - n / 2) * px * 2 * Math.tan(25 * Math.PI / 180) / H;
+                    const d = [t[0] - e[0], t[1] - e[1], t[2] - e[2]], c = Math.cos(da), s = Math.sin(da);
+                    const f = [c * d[0] + s * d[2], d[1], -s * d[0] + c * d[2]];
+                    for (let k = 0; k < (i ? 1 : 6); k++) { S.setCamera(e, [e[0] + f[0], e[1] + f[1], e[2] + f[2]], 50); km.V.step(0, e); S.render(0, 1/30);
+                    await new Promise(r => requestAnimationFrame(r)); } })""", [e, t0, i, a.kayma_px, a.kayma_n])
+                pth = kd / f'k_{i:03d}.png'
+                pg.screenshot(path=str(pth))
+                im = np.asarray(Image.open(pth).convert('RGB')).astype(np.float32) / 255
+                ls.append(im @ np.array([0.2126, 0.7152, 0.0722], np.float32))
+            pg.evaluate("window.__km.S.setVoid({ force: null })")
+            ls = np.stack(ls)
+            d2 = np.abs(ls[2:] - 2 * ls[1:-1] + ls[:-2])
+            d1 = np.abs(np.diff(ls, axis=0))
+            hm = d2.mean(0)
+            Image.fromarray(np.clip(hm / 0.01 * 255, 0, 255).astype(np.uint8)).save(out / 'kayma_isi.png')
+            res['kayma'] = {'d2_ort': float(d2.mean()), 'd2_p999': float(np.percentile(d2, 99.9)), 'd1_ort': float(d1.mean()),
+                            'd2_piksel_p999': float(np.percentile(hm, 99.9)), 'd2_piksel_max': float(hm.max())}
+            print('kayma (luma 0..1):', json.dumps(res['kayma']), flush=True)
         if 'pan' in only:
             # a slow pan from the roof's edge: each distant lamp's peak luminance frame by frame (it must not blink)
             wait_lock()

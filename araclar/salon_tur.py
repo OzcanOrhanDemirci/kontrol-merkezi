@@ -2,7 +2,7 @@
 on the real GPU with the simulated service, or the real window over CDP (start the window with
 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS containing --remote-debugging-port=PORT; salon-denetim.ps1 -Bolum tur does).
 
-    python araclar/salon_tur.py [--cdp 9229] [--paket DIR] [--out DIR] [--kareler]
+    python araclar/salon_tur.py [--cdp 9229] [--paket DIR] [--out DIR] [--kareler] [--yonlu]
 
 Writes tur.json (the steps' log, the path every 0.1 s, where it got stuck) and, headless with --kareler, a still at
 each step that has a name.
@@ -17,6 +17,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 FROM = None
+STEER = False
 JS = (ROOT / 'araclar' / 'salon_tur.js').read_text(encoding='utf-8')
 
 
@@ -26,6 +27,8 @@ def run(pg, out, stills):
         print('yürüyüş çarpışması yüklenmedi', flush=True)
     if FROM:
         pg.evaluate('f => { window.__turFrom = f; }', FROM)
+    if STEER:
+        pg.evaluate('window.__turSteer = true')
     pg.evaluate(JS)
     seen = 0
     t0 = time.time()
@@ -53,9 +56,11 @@ def main():
     ap.add_argument('--out', default=str(ROOT / '.tmp' / 'tur'))
     ap.add_argument('--kareler', action='store_true')
     ap.add_argument('--olcek', default='2.5')
+    ap.add_argument('--yonlu', action='store_true', help='steer the fall outward (Shift+W) to the next facility')
     ap.add_argument('--bas', default='', help='JSON [step, x, foot, z]: start there (tests)')
     a = ap.parse_args()
-    global FROM
+    global FROM, STEER
+    STEER = a.yonlu
     if a.bas:
         v = json.loads(a.bas); FROM = {'i': v[0], 'put': v[1:] or None}
     out = Path(a.out)

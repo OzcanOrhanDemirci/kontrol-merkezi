@@ -23,6 +23,8 @@ uniform sampler2D uDepth;      // the scene's depth (its own resolution)
 uniform float uOcc;            // 1: the scene hides the lamps (0: tests, the lamps' full light)
 uniform float uExposure;       // the composite's exposure x the scene's share beside the bloom (post.frag)
 uniform vec3 uFogUp, uFogDown; // the void's sky (the background a distant lamp is seen against)
+uniform vec4 uBand;            // the cloud band (band.glsl)
+// BAND
 out vec2 vOff;                 // pixels from the centre
 flat out vec4 vCore;           // rgb: the core's peak (radiance), a: its sigma (px)
 flat out vec4 vHalo;           // rgb: the halo's scale, a: the lamp's distance (m)
@@ -64,7 +66,7 @@ void main() {
     float r = aLamp.w;
     float rpx = r / d / uPxAngle;
     float sig = max(1.0, rpx * 0.70710678);
-    float T = exp(-uSigma * uPierce * d);
+    float T = exp(-(uSigma * d + bandTau(uEye.y, q.y / d, d)) * uPierce);
     // the core: the globe's flux L pi r^2 / d^2 (steradian-weighted radiance) spread over a Gaussian of sigma px
     float omegaPx = uPxAngle * uPxAngle;
     float energy = 3.14159265 * r * r / (d * d);

@@ -7,7 +7,7 @@
 # (araclar/salon_tur.js over CDP: the window starts with a remote-debugging port for that run only).
 #
 #   powershell -File araclar\salon-denetim.ps1 [-Bolum acilis|yolculuk|yuruyus|tur|fanlar|sicaklik|hepsi] [-Kaynak <klasör>]
-#              [-Sicaklik 72] [-Ekran 0] [-KayitYok]
+#              [-Sicaklik 72] [-Ekran 0] [-KayitYok] [-TurYonlu]
 #
 #   -Kaynak   bin\Release of this repository (default) or the installed folder (C:\Program Files\KontrolMerkezi)
 #   -Ekran    ddagrab output index of the monitor the window opens on (the one under the mouse)
@@ -35,6 +35,7 @@ param(
     [int]$Ekran = 0,
     [int]$BosSure = 300,
     [switch]$KayitYok,
+    [switch]$TurYonlu,
     [int]$Hz = 30
 )
 $ErrorActionPreference = "Stop"
@@ -425,7 +426,7 @@ try {
         Olay "bölüm: tur (arch, chamber, passage, stair, hatch, roof, fall, back)" -Kare
         $script:imlec = $null                 # the page is driven from outside; no desk check during the tour
         $turLog = Join-Path $cikti "tur.txt"
-        $tp = Start-Process python -ArgumentList "araclar\salon_tur.py --cdp 9229 --out `"$cikti`"" -WorkingDirectory $kok -NoNewWindow -PassThru -RedirectStandardOutput $turLog -RedirectStandardError (Join-Path $cikti "tur-hata.txt")
+        $tp = Start-Process python -ArgumentList ("araclar\salon_tur.py --cdp 9229 --out `"$cikti`"" + $(if ($TurYonlu) { " --yonlu" } else { "" })) -WorkingDirectory $kok -NoNewWindow -PassThru -RedirectStandardOutput $turLog -RedirectStandardError (Join-Path $cikti "tur-hata.txt")
         while (-not $tp.HasExited) { Start-Sleep -Milliseconds 500; if ($p.HasExited) { Bulgu "pencere tur sırasında kapandı"; break } }
         Olay "tur bitti" -Kare
         Get-Content $turLog | ForEach-Object { Olay "tur: $_" }

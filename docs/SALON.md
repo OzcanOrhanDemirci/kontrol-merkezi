@@ -44,9 +44,9 @@ Layout (first version; the builder owns the exact numbers and writes them into t
 | Gallery portal | the gallery's far end z = -44 opens into the hall through a portal 24 m wide, 20 m tall with a two-step frame standing out of the hall's front wall (the gallery is a frame within the frame). |
 | Hall | x ∈ [-30, 30], y ∈ [0, 26], z ∈ [-275, -44]. Drainage channels along both walls (\|x\| 27.6..28.2), pilasters (1.6 × 1 m) at the column lines carrying the beams, a catwalk on the left wall at y = 12 with a caged ladder at its start, a door with a lit frame off the catwalk at z = -150, pipe runs. |
 | Columns | 2 m (x) × 7 m (z) × floor to ceiling, a flared foot (3.1 × 8.1 m at the floor) and a haunch at the top, rows at x = ±8 and ±22, every 20 m from z = -60 to -220 (36 columns), ending ~35 m before the arch to leave it a plaza. The aisle x ∈ [-7, 7] is free: the camera flies through it. Cross beams (1.2 × 2 m) over the column lines z = -60 .. -240, lighter beams (1 × 1.2 m) along the rows. |
-| Arch | a hydraulic monument in raw cast concrete (`hall_arch.cpp`, its massing in constants at the top): two piers x ±7..±20, front z = -255, floor to ceiling (y = 32), in pours of 3.2 m from the sill (a construction joint each); the plinth (top y = 1.2, two steps from z = -247). The opening x ±7, y 1.2..20.4, 8 m deep (to z = -263), closed by a riveted steel sluice gate (skin at z = -260.4, girders every 2.2 m towards +z, end posts, side rollers on rails on the jambs, 0.27 m light gaps at its sides) raised to 40 % (lower edge y = 8.88, top 28.7). Above: the lintel (two pours, y 20.4..26.8, face z = -256) with the display (8 × 2 m at y = 22.4) in a recessed housing (x ±4.5, y 20.9..23.9) and over it the gauge: the five stop lamps in one row at y = 25.85 (x 0, ±2.9, ±5.8, cold to hot from left to right) on a steel rail, their plates (2 × 1 m) under them at y = 24.6, lit by a hooded strip (group 2) between lamps and plates; a railing on the lintel. Over it the hoist bay (y 26.8..32) with the gate's top, two girders and two winches, no lamps and no back wall: it opens into the chamber, so the core's glow silhouettes the hoist high up (the monument reads from the hall's middle). No floodlights: the piers stand dark against the glow. Service doors at x ±17; the console before the steps (front z = -240.6, low: top 1.85..2.0, under the arrival eye's line to the gate's sill; plates 2 × 0.5 m at y ≈ 1.15, the RGB plate at 1.3). Behind the gate the chamber (`chamberInterior`): x ±12, y 1.2 to the ceiling (32), back wall z = -293, four receding concrete portals (z -267, -272, -277, -282) all ending at y = 23.6 so the light passes over them into the bay, the heat core at z = -288: a glowing square column 4 m wide, y 2.6..21, with eight glowing fins out to r 3.4 (both sides emit), inside steel rings r 3.6..4.6 every 2.2 m, on a concrete drum r 5.2, a steel portal (x ±6, girder at y 26.5) with a winch. End wall z = -275, open over the chamber (x ±12, floor to ceiling). |
+| Arch | a hydraulic monument in raw cast concrete (`hall_arch.cpp`, its massing in constants at the top): two piers x ±7..±20, front z = -255, floor to ceiling (y = 32), in pours of 3.2 m from the sill (a construction joint each); the plinth (top y = 1.2, two steps from z = -247). The opening x ±7, y 1.2..20.4, 8 m deep (to z = -263), closed by a riveted steel sluice gate (skin at z = -260.4, girders every 2.2 m towards +z, end posts, side rollers on rails on the jambs, 0.27 m light gaps at its sides) raised to 40 % (lower edge y = 8.88, top 28.7). Above: the lintel (two pours, y 20.4..26.8, face z = -256) with the display (8 × 2 m at y = 22.4) in a recessed housing (x ±4.5, y 20.9..23.9) and over it the gauge: the five stop lamps in one row at y = 25.85 (x 0, ±2.9, ±5.8, cold to hot from left to right) on a steel rail, their plates (2 × 1 m) under them at y = 24.6, lit by a hooded strip (group 2) between lamps and plates; a railing on the lintel. Over it the hoist bay (y 26.8..32) with the gate's top, two girders and two winches, no lamps and no back wall: it opens into the chamber, so the core's glow silhouettes the hoist high up (the monument reads from the hall's middle). No floodlights: the piers stand dark against the glow. Service doors at x ±17; the console before the steps (front z = -240.6, low: top 1.85..2.0, under the arrival eye's line to the gate's sill), cast in the monument's concrete; on its front the switch's plate (2.2 × 1.1 m at x -3.8, under the lever) and the three device plates (2.3 × 0.8 m at x -1.35, 1.2, 3.75, a lamp over each): concrete panels (`konsol_yuz`) whose lettering is lit in the temperature colour, sized for the rgb eye (80 px per metre: capitals 14 px and taller); a steel hood on arms 0.45 m out along its top edge with a light strip under it (group 2) washes the front, which faces away from the core and stood near black without it. Behind the gate the chamber (`chamberInterior`): x ±12, y 1.2 to the ceiling (32), back wall z = -293, four receding concrete portals (z -267, -272, -277, -282) all ending at y = 23.6 so the light passes over them into the bay, the heat core at z = -288: a glowing square column 4 m wide, y 2.6..21, with eight glowing fins out to r 3.4 (both sides emit), inside steel rings r 3.6..4.6 every 2.2 m, on a concrete drum r 5.2, a steel portal (x ±6, girder at y 26.5) with a winch. End wall z = -275, open over the chamber (x ±12, floor to ceiling). |
 | The way up (Phase 2) | see "The way up": side doors in the chamber (z -280..-279), passages x ±12.6..13.6 back to a space behind the chamber (z -293.6..-295.2), one straight stair (x ±0.8, 182 risers) from it to a hatch in the roof deck (y = 35) at z ≈ -341.6..-346.2. |
-| Raised block (Phase 2) | the hall is inside a concrete block x ±48, y -4..35, z -350..8 on eight columns Ø 12 m (x ±30, z -21, -121, -221, -321) down to y = -604; its roof a bare deck, the shaft's lamp in it, a mast with the facility's one lamp behind the hatch. |
+| Raised block (Phase 2) | the hall is inside a concrete block x ±48, y -4..35, z -350..8, wrapped in brutalist trays (the deck's out to x ±58, z 18..-360) and held by eight cores 22 × 26 m (x ±56.5, z -21, -121, -221, -321) down to y = -604, the end four rising as towers (front pair y 64, back pair y 50), each splaying into the mass under the base (haunches and a knee from y -52) with shoulders beside it; its roof a bare deck, the shaft's lamp in it, a mast with the facility's one lamp behind the hatch. |
 
 Views (the builder writes them; the renderer interpolates):
 - `fanlar`: eye (0, 4.65, -3.0), looking at (0, 7.5, -60), vertical FOV 50°.
@@ -63,7 +63,7 @@ Light is baked per group, in white. Live colour of group g is `C_g · k_g` (line
 |---|---|---|---|
 | 0 | `kuyu` | the ceiling shaft's emitter (a horizontal rectangle at the well's top whose normal slants 10° towards -z, lobe 6); since Phase 2 the facility's whole light circuit: the long stair's lamps (`merdiven_isik`), the roof lamp's faint roof-side glow (`dis_isik`) and the mast lamp (`dis_fener`) | the temperature colour (`isik.onizleme`, the colour the case shows or would show), always; intensity animates in the opening |
 | 1 | `kemer` | the arch: the heat core behind the gate (`cekirdek_isik`, 20 RECT emitters: the column's four faces and both sides of its eight fins, ~580 m²), the one light of the place: out under the gate, through its side gaps and over the chamber's portals into the hoist bay; no floodlights | the temperature colour when RGB is on (`isik.cikis`); when off, a faint ember of the temperature colour (the arch is the RGB) |
-| 2 | `lamba` | small fixed service lamps (caged wall lamps, the desks' lamps) | fixed warm white, constant |
+| 2 | `lamba` | small fixed service lamps (caged wall lamps, the desks' lamps, the hooded strips over the gauge's plates and down the console's front) | fixed warm white, constant |
 
 **RGB off** (Özcan, 11-16: "silüet karanlığı yani zifiri değil estetik karanlık [...] kapalı olmasının getirdiği bir
 tekinsizlik"): the whole hall sinks slowly into a darkness you can still see in: shaft and arch fall to a faint ember of
@@ -88,7 +88,8 @@ uv), and flags:
 - `levha`: a face that carries a live-drawn texture (signs, panels, displays): its uv0 runs 0..1 over the face (u from
   the face's left to its right, v from its top to its bottom, as a canvas is drawn, seen from the side its normal
   faces), its uv2 is in metres like every chart's, and the anchor names the atlas rect. Round lenses (`mercek`) map
-  their square.
+  their square. A levha material may have a texture set of its own (`konsol_yuz`: the console's concrete plates): the
+  window lays it in metres over the face (the anchor's `boyut`).
 
 The albedo the baker bounces with is the material's mean linear albedo (computed from the texture the way the renderer
 decodes it: sRGB → linear, mean over the texture).
@@ -321,19 +322,41 @@ Its numbers are the `hall::up` constants in `hall_kit.h`.
   the climber's way. `gecirgenlik` 1: the bake does not see it (the roof's light is that of an open hatch; it is lit
   live from `cati`). Anchors: `kapak` (nokta, the lid's box), `kapak_tik` (tik: reachable from the top treads and from
   the deck), `merdiven` (nokta, the stair's box).
-- **The block.** The hall is not underground: it is inside a concrete block (x ±48, y -4..35, z -350..8, walls cast
-  in 3.25 m lifts) on eight round columns Ø 12 m flaring into 17 m capitals (x ±30; z -21, -121, -221, -321) down to
-  y = -604, open at their feet. The roof is a bare deck (`dis_zemin`, 12 m tiles), no parapet: only a 6 cm steel drip
-  edge round it. Behind the hatch a mast (18 m, three guys) with the facility's one steady lamp (`dis_fener`, a 0.1 m
-  globe at y 53.2, group 0, sphere emitter L 60).
+- **The block.** The hall is not underground: it is inside a concrete block (x ±48, y -4..35, z -350..8). Its outside
+  (11-17, after Özcan's walk: "dikdörtgen çok düz") is brutalist massing read by silhouette and by where each face looks
+  in the fog's light (brighter from above), not by detail: stacked trays round the block, the higher the further out
+  (the deck's tray out 10 m, fascia y 28..35, chamfered underside to y 24; a second out 6 m, y 10..19), a band of dark
+  glazing (`dis_cam`) in the shadow under each, the plain wall below, a base (ledge out 4 m, fascia to y -12, a long
+  chamfer in to an underside at y -24, chamfered girders under it between the legs and two along). Nothing under the
+  deck's edge reaches past it: one jumping off falls clear; the trays' tops are flat ledges under its reach. Every
+  vertical face is cast in 3.25 m lifts from y -4 (one joint line round the whole building). The legs are eight cores
+  of one chamfered section 22 × 26 m (x ±45.5..67.5, z ±13 about -21, -121, -221, -321), constant from y = -604 (the
+  window stretches that ring on down; uv runs round the section and up world y) to their tops; standing 9.5 m proud of
+  the deck's fascia they run up through every tray, the four at the ends rising as towers (the front pair, z -21, to
+  y 64, the back pair to y 50), the four in the middle ending flush with the deck, which runs out over them. Anchors
+  `dis_kolon_0..7` (nokta, the section's box).
+- **The junctions** (11-17, second pass: the cores passed through the trays as separate prisms). Each core is a trunk
+  that branches into the mass, all of it in the legs' concrete (`dis_kolon`, its board marks running up). Beside the
+  trunk, on both flanks, a shoulder: a plain wall x ±45.5..57.5 (3.5 m proud of the second tray, half a metre inside
+  the deck's fascia, so nothing passes the deck's edge), 16 m along the building from the trunk's flank, from 3 m under
+  the base (y -27) up into the deck's tray beside the towers, to a ledge at y 20 beside the middle cores (the upper
+  glazing runs on over it); the end legs' outer shoulders run to the building's corners (z 17.5, -359.5), so the ends
+  are solid masses. Under each shoulder a haunch: its underside rakes from the shoulder's foot down to the trunk at
+  y -52; inwards a knee (7 m wide) does the same under the cross girder, from the trunk's inner face at y -52 up to
+  the long girder's line (x ±24, y -36). From the side the underside of the mass comes down to each leg in a rake;
+  from below each leg is a splayed capital; the long side is trunks, shoulders and three 42 m bays of trays. The
+  window stretches only what lies below y -100 of `dis_kolon` (salon.js `KOLON_Y`): nothing but the shafts does. The
+  roof is a bare deck (`dis_zemin`, 12 m tiles), no parapet: only a 6 cm steel drip edge round it (broken by the cores).
+  Behind the hatch a mast (18 m, three guys) with the facility's one steady lamp (`dis_fener`, a 0.1 m globe at y
+  53.2, group 0, sphere emitter L 60).
 - **The fake daylight.** The shaft's emitter (`hall_gallery.cpp`, the 10 × 10 m rectangle at y 33.5 and its two
   group-0 emitters) is unchanged, so is the hall's light. Over it, in the deck, the lamp's roof side: a 1.5 m pit as
   large as the well's top, lined in steel, its floor the faint roof-side glow (`dis_isik`, group 0, 6 % of the
   daylight's radiance, with a Lambertian emitter so the deck round it is lit in the bake), steel louvres every 0.75 m
   (0.25 m deep, slanted 10° like the beam) and three dividers over it, a rim and two control boxes. From the roof it
   reads as the light, and as it heats it turns colour with the hall's.
-- **The exterior for the window.** Everything seen from outside, and only that, uses the six `dis_*` materials
-  (`dis_zemin`, `dis_duvar`, `dis_kolon`, `dis_koyu`, `dis_isik`, `dis_fener`: the hall's own texture sets under
+- **The exterior for the window.** Everything seen from outside, and only that, uses the seven `dis_*` materials
+  (`dis_zemin`, `dis_duvar`, `dis_kolon`, `dis_koyu`, `dis_isik`, `dis_fener`, and `dis_cam` (constants only): the hall's own texture sets under
   their own names, so the window shares their texture layers); the draw ranges (`geometri.araliklar`) whose material
   name starts with `dis_` are the exterior, the rest is the interior. The hatch's lid is `dinamik` `kapak` (`dis_koyu`).
   The exterior is built and baked once, at the origin: an instance is the same ranges under another transform. Anchors:
@@ -363,6 +386,24 @@ between the columns, lands on a roof, opens its hatch: it is one's own facility.
 - **The wrap.** The fall from our roof lands D below on our own stack's next facility. At mid-fall the walker is moved
   by +D (`W.shift`): the picture is the same before and after (every facility of our stack looks like ours and its
   hatch is shut), so the roof one lands on is ours and its hatch leads down the same stair.
+- **The beams** (`disari.js` `KIRIS`; Özcan, 11-17: "kolonların bittiği son noktalar diğer tesislere bağlansın",
+  the "kirişli ağ"). The columns used to run on into the cloud band and end inside it; from above, the band has no
+  surface (its density rises softly, its light is the fog's), so a column faded out over 20-30 m into an even grey
+  and read as ending in the air. Now every column ends in a node on one level for the whole world, 70 m over the
+  band's middle (y -370 under our deck; clear of the band's top at -385, 10 m of shaft under the lowest facility):
+  a block round its foot, the column's section grown 3 m each side, 18 m deep, its top flush with the beams'. From the
+  nodes run horizontal beams 10 × 14 m in the columns' concrete, from node centre to node centre: across to the next
+  stack in the row (each foot pair with a chance of 0.45) and along to the two stacks of the next row (the front
+  feet to their back feet, 0.6 each; with the staggered rows these run nearly straight on along the column lines);
+  a foot left with neither gets a beam to the next foot on its own side. Deterministic from the stacks' hashes: a web
+  that differs under every stack, with no two beams crossing and none near a facility's body (all of it is under
+  every facility of the period and over the band). Built at run time (no pack change): each stack's beams in its own
+  frame (`beamsOf`), the renderer instances a unit box per node and beam (dis.vert `uKiris`, dis.frag `uBare`: no
+  light map, the fog's light alone) and stretches the columns' shafts into the nodes (dis.vert `uKolonFoot`).
+  They are solid: walk mode stands on their tops and slides along their sides (`W.setBeams`, the stacks round the
+  home); a fall over a beam brakes as over a roof and lands on it (`lastFall.on = 'kiris'`); walking off it the fall
+  goes on (band, wrap, recovery, landing on a roof as before). A beam is never the home: while one walks the beams,
+  the nearest stack becomes the home (an unseen rigid move) so that its columns collide.
 - **The hatch** (`kapak_tik`): opens over 1.5 s (a heavy lid, smootherstep), falls shut with a small thud; its box is a
   moving solid in walk mode's collision. It shuts by itself when one falls 20 m below the deck.
 - **The fall**: gravity with drag to 30 m/s in the void, a brake over the last 140 m to 6 m/s, and in the open gap under
@@ -372,6 +413,11 @@ between the columns, lands on a roof, opens its hatch: it is one's own facility.
   and no mast beyond 260 m; walls, columns, deck and roof lamp beyond 700 m), culled by the fog's reach. The fog is in
   the composite (post.frag, "the void"): homogeneous (σ 0.0028/m: the wrap forbids an absolute height), its light a
   gradient from below (about a quarter) to above, a little blue; the surfaces are lit by the same light as ambient.
+- **Far concrete is calm.** The legs' board marks (0.4 m light and dark bands) are a few pixels wide at 100-300 m: they
+  read as corrugated sheet, not as concrete, and crawl as the view turns. In dis.frag the exterior's textures give way
+  with distance to their own mean (albedo and ARM to their last mip, the normal to the face's): `VOID.fog.calm` =
+  [20 m, 100 m, 0.9], nothing within 20 m, nine tenths from 100 m. Every mark close by, a face of one tone far off,
+  read by where it looks. Measured on a slow turn towards the neighbours (`araclar/salon_disari.py --yalniz kayma`).
 - **Lamps and masts in display light.** A distant lamp is a pixel or two; anything decided per pixel (the tonemap,
   a nearest depth test, the halo's cusp) makes its light change with its place between pixels and it twinkles as the
   view turns. So each lamp is tonemapped once as a whole (fener.vert: its gain from scene light to display light over
@@ -434,14 +480,22 @@ resolution; the light map's B-spline read is applied to plane A only (plane B, t
 rotor is its crisp mesh when slow and the analytic disc when fast, crossfaded.
 
 The opening (11-17, Özcan: "açılışta uzun süre siyah ekran kalıyor [...] yükleme ekranı sahneye de uygun olmalı"):
-the window opens fullscreen on the monitor under the cursor and paints, from its first frame, a picture of the hall
-before its lights strike (`src/Pencere/Acilis.cs`: near-dark haze, the shaft's thin light through a hatch not yet open,
-its small pool where the scene's shaft falls). The page is transparent until it lays the same pixels over it
-(`/acilis.bmp`, `ui/acilis.js`), adds the stencilled line "SALON HAZIRLANIYOR" and a slit of light that opens with the
-load (only opacity and transform move: the compositor plays them through the load's long tasks). Meanwhile the pack's
+the window opens fullscreen on the monitor under the cursor and paints, from its first frame, the hall in the dark
+with its service lamps at an ember (`src/Pencere/Acilis.cs` reads `ui/acilis/taban.jpg`). The page is transparent
+until it lays the same pixels over it (`/acilis.bmp`, `ui/acilis.js`); then the hall's ten lighting circuits strike
+one after another, front to back (Özcan chose this on 11-17 because it does not read as loading: "zaten sahne öyleymiş
+hissi var"; the small board of pilot lamps under the view stays as quiet as it is). Each circuit is a picture of the
+frame as it stands once it is on, at opacity 0 until its strike: only opacity moves, on the compositor, through the
+load's long tasks. The circuits are paced over the last load's length and brought forward by the load's progress; the
+far end waits for the load's last stage. With all on, the picture is the scene's first frame (same eye, exposure and
+lamps): `ui/uygulama.js` holds the world for that frame (`M.held`: rotors and levers at rest, no drift, displays and
+state lamps dark, service lamps full) and wakes it after the hand-over. The pictures are made from the scene and must
+be remade after every bake or change to the first view: `python araclar/acilis_kareler.py` (17 s; it opens the page
+with `#ilk=1`, which holds the first frame). To look at the hand-over in the window, set the environment variable
+`KM_SAYFA` to `devir=4` (a 4 s dissolve) or `ilk=1&devir=kirp` (the last picture blinking over the held frame). Meanwhile the pack's
 big files inflate in workers, each part is built as its files arrive, the page is already connected to the service
-and the levha worker draws the first set of signs. The first frame is drawn under the picture; then the beam swells
-(the hatch opens), the picture dissolves and the scene's own opening (the shaft's strike) runs. Stages are logged once
+and the levha worker draws the first set of signs. The first frame is drawn under the picture; then the picture
+dissolves and the scene's own opening (the shaft's strike) runs. Stages are logged once
 per start (`pencere: açılış` in gunluk.txt); `araclar/acilis-olc.ps1` records and measures it in the real window.
 Measured 11-17 (2560 × 1440): first scene frame 3.5-3.9 s after the process starts (9.8 s before).
 
@@ -483,7 +537,9 @@ The texts the app shows today all exist in the world:
   DEĞİL", the state window dark);
 - RGB at the arch: the lintel's display (average temperature), the stops of the colour scale as a row of five lamps over
   the display with their degrees, the on/off control (a great lever on the console before the arch, with its plate), the three devices'
-  indicator lamps with their names;
+  indicator lamps with their names. The console's lettering is light let into its concrete, in the temperature colour
+  (its hue at full brightness, a little white added to deep blue and red; dimmer but lit with the lights off: the
+  switch is how they come back on); the chosen position of AÇIK / KAPALI is the bright one in a frame;
 - navigation: a hanging steel sign at the gallery's portal "RGB" pointing into the hall; at the arch a sign back
   "FANLAR"; an illuminated exit sign that closes the window; the window drag zone is the top strip (invisible).
 

@@ -25,13 +25,17 @@ const C = {
   STEP: 0.42,        // highest step walked up without a jump (the arch's plinth has 0.4 m steps)
   FOOT_R: 0.28,      // the ground probe's sphere
   SNAP: 0.3,         // how far the feet follow the ground down while walking (stairs down, no hopping)
-  WALK: 1.6, RUN: 4.0,
+  WALK: 2.6, RUN: 6.0,   // m/s (11-17: 1.6 and 4.0 were slow for a tool he uses: "günün sonunda bu uygulama işlevsellik de içeriyor")
   ACCEL_TAU: 0.16, STOP_TAU: 0.11, AIR_TAU: 1.2,   // velocity easing (s)
+  AIR: null,         // the void's fall (disari.js): steering speed across in the air (m/s, Shift x1.6); null: the walk's
+  GLIDE_TAU: 3.0,    // with AIR set and no key held, the body's drift across fades this slowly (s)
   GRAVITY: 9.81,
-  JUMP_H: 0.45,      // jump height (m)
+  JUMP_H: 1.25,      // jump height (m; 0.45 could not climb out of the roof lamp's 1.44 m pit, 11-17)
   TERMINAL: 50,      // terminal fall speed (m/s; quadratic drag)
+  SQUEEZE: 0.15,     // a body standing already pressed under something lower than TOP moves on under it while pressed
+                     // no deeper than this or than it already is (a ceiling down to 1.80 m: the eye still clears the near plane)
   WALKABLE: 0.64,    // ground normal's y at least this (about 50 degrees)
-  LOOK: 0.0022,      // rad per mouse count
+  LOOK: 0.0031,      // rad per mouse count (0.0022 turned slowly, 11-17)
   PITCH: 1.45,
   REACH: 4.0,        // the centre click's reach (m)
   EXIT_S: 1.1,       // glide back onto the journey (s)
@@ -395,7 +399,14 @@ function create(o) {
       if (b > best + 1e-5 || (b > best - 1e-5 && gny > by)) { best = Math.max(b, best); bx = gnx; by = gny; bz = gnz; bf = gfy; }
     }
     GN[0] = bx; GN[1] = by; GN[2] = bz; GN[3] = bf;
-    const f = best - r;
+    let f = best - r;
+    // the void's beams (setBeams): a level top, stood on wherever the centre is over it
+    for (const b of beams) {
+      if (b.y1 < fbot || b.y1 > ftop || b.y1 <= f) continue;
+      const dx = x - b.x, dz = z - b.z;
+      if (Math.abs(dx * b.ux + dz * b.uz) > b.hx || Math.abs(dz * b.ux - dx * b.uz) > b.hz) continue;
+      f = b.y1; GN[0] = 0; GN[1] = 1; GN[2] = 0; GN[3] = 1;
+    }
     return f >= fbot ? f : -Infinity;
   }
 
@@ -403,6 +414,8 @@ function create(o) {
   const B = { x: 0, foot: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: false, yaw: 0, pitch: 0, fov: 50,
               safeX: 0, safeF: 0, safeZ: 0, eyeLag: 0, jumpT: -1, baseF: 0 };
   let active = false, paused = false, pendingPlace = false;
+  let columns = [];          // [{ x, z, hx, hz, y0, y1 }] (setColumns)
+  let beams = [];            // [{ x, z, ux, uz, hx, hz, y0, y1 }] (setBeams): boxes turned about y, local x along (ux, uz)
   let floorY = -40, floorSet = false, fallFn = null, stepFn = null;
   const camEye = new Float64Array(3);
   const enterOff = new Float64Array(3); let enterT = 0, enterDur = 0;
@@ -414,10 +427,29 @@ function create(o) {
   const timing = new Float32Array(120); let timingN = 0;
   let contactsMax = 0, timeSum = 0;
 
+  // how deep the body standing with its feet at (x, foot, z) is pressed into something over it, or straight under it
+  // (the contacts walls do not cover: a ceiling lower than TOP, the top of a part it stands inside); 0 when clear
+  function pressed(x, foot, z) {
+    const R = C.R, ya = foot + C.STEP + R, yb = foot + C.TOP - R;
+    const n = gather(x - R, ya - R, z - R, x + R, yb + R, z + R);
+    let p = 0;
+    for (let i = 0; i < n; i++) {
+      const d2 = segTri(x, ya, yb, z, CAND[i]);
+      if (d2 >= R * R || d2 < 1e-14) continue;
+      const d = Math.sqrt(d2);
+      if ((H[3] - H[1]) / d < -0.4 || Math.hypot(x - H[0], z - H[2]) / d < 0.05) p = Math.max(p, R - d);
+    }
+    return p;
+  }
+
   // the body against walls and ceilings; returns the remaining deepest penetration
   function resolveBody(x0, z0) {
     const R = C.R;
     let deepest = 0;
+    // on the ground and already pressed where the step began (a jump or a drop put it under something lower than
+    // itself): how deep it may stay pressed while it moves on (C.SQUEEZE); 0 when it was clear
+    let squeeze = B.grounded ? pressed(x0, B.foot, z0) : 0;
+    if (squeeze > 1e-4) squeeze = Math.max(squeeze, C.SQUEEZE); else squeeze = 0;
     const ya0 = B.foot + C.STEP + R, yb0 = B.foot + C.TOP - R;
     const n = gather(B.x - R - 0.15, ya0 - R - 0.05, B.z - R - 0.15, B.x + R + 0.15, yb0 + R + 0.05, B.z + R + 0.15);
     if (n > contactsMax) contactsMax = n;
@@ -441,6 +473,11 @@ function create(o) {
         if (ny < -0.4 && !B.grounded) {           // a ceiling while in the air: down, and the rise stops
           B.x += nx * pen; B.foot += ny * pen; B.z += nz * pen;
           if (B.vy > 0) B.vy = 0;
+        } else if (B.grounded && (hl < 0.05 || ny < -0.4) && pen <= squeeze) {
+          // pressed, and no deeper than it may be: it moves on. Held back or pushed off on every step (the push of
+          // one edge back into the next) such a body could never move again (11-17, salon_cukur.py: between the RGB
+          // console's light bar and its overhang, 1.86 and 1.82 m)
+          continue;
         } else if (hl < 0.05) {                  // straight above or below while on the ground: no way through
           B.x = x0; B.z = z0; B.vx = 0; B.vz = 0;
           if (ny > 0 && !B.grounded) B.foot += pen;
@@ -454,6 +491,40 @@ function create(o) {
       }
       if (!moved) break;
     }
+    // the void's columns where they run on below the mesh (setColumns): upright boxes round their section, slid along
+    for (const c of columns) {
+      if (B.foot > c.y1 || B.foot + C.TOP < c.y0) continue;
+      const qx = Math.max(c.x - c.hx, Math.min(c.x + c.hx, B.x)), qz = Math.max(c.z - c.hz, Math.min(c.z + c.hz, B.z));
+      let dx = B.x - qx, dz = B.z - qz, d = Math.hypot(dx, dz);
+      if (d >= R) continue;
+      if (d < 1e-6) {                            // inside: out through the nearest face
+        const ex = c.hx - Math.abs(B.x - c.x), ez = c.hz - Math.abs(B.z - c.z);
+        if (ex < ez) { dx = Math.sign(B.x - c.x) || 1; dz = 0; d = -ex; } else { dz = Math.sign(B.z - c.z) || 1; dx = 0; d = -ez; }
+        B.x += dx * (R - d); B.z += dz * (R - d);
+      } else { dx /= d; dz /= d; B.x = qx + dx * R; B.z = qz + dz * R; }
+      const vn = B.vx * dx + B.vz * dz;
+      if (vn < 0) { B.vx -= vn * dx; B.vz -= vn * dz; }
+      deepest = Math.max(deepest, R - d);
+    }
+    // the void's beams and their nodes: their sides, slid along (their tops are ground: groundCast). One whose feet
+    // were over the top a moment ago (falling onto it, or standing on it) is left to the ground cast
+    for (const b of beams) {
+      if (Math.max(B.foot, B.baseF) >= b.y1 - C.STEP || B.foot + C.TOP < b.y0) continue;
+      const dx = B.x - b.x, dz = B.z - b.z;
+      const a = dx * b.ux + dz * b.uz, c = dz * b.ux - dx * b.uz;        // along, across
+      const qa = Math.max(-b.hx, Math.min(b.hx, a)), qc = Math.max(-b.hz, Math.min(b.hz, c));
+      let na = a - qa, nc = c - qc, d = Math.hypot(na, nc);
+      if (d >= R) continue;
+      if (d < 1e-6) {                            // inside: out through the nearest side
+        const ea = b.hx - Math.abs(a), ec = b.hz - Math.abs(c);
+        if (ea < ec) { na = Math.sign(a) || 1; nc = 0; d = -ea; } else { nc = Math.sign(c) || 1; na = 0; d = -ec; }
+      } else { na /= d; nc /= d; }
+      const hx = na * b.ux - nc * b.uz, hz = na * b.uz + nc * b.ux;       // the push in the world
+      B.x += hx * (R - d); B.z += hz * (R - d);
+      const vn = B.vx * hx + B.vz * hz;
+      if (vn < 0) { B.vx -= vn * hx; B.vz -= vn * hz; }
+      deepest = Math.max(deepest, R - d);
+    }
     return deepest;
   }
 
@@ -463,14 +534,15 @@ function create(o) {
     const sy = Math.sin(B.yaw), cy = Math.cos(B.yaw);
     let tx = fwd * sy + side * cy, tz = -fwd * cy + side * sy;
     const tl = Math.hypot(tx, tz);
-    const speed = keys.shift ? C.RUN : C.WALK;
+    const air = !B.grounded && C.AIR != null;
+    const speed = air ? C.AIR * (keys.shift ? 1.6 : 1) : keys.shift ? C.RUN : C.WALK;
     if (tl > 1e-6) { tx = tx / tl * speed; tz = tz / tl * speed; }
     const vh = Math.max(Math.hypot(B.vx, B.vz), speed * Math.min(1, tl));
     const n = Math.min(12, Math.max(Math.ceil(dt * 120), Math.ceil(vh * dt / 0.1)));
     const h = dt / n;
     const kDrag = C.GRAVITY / (C.TERMINAL * C.TERMINAL);
     for (let s = 0; s < n; s++) {
-      const tau = !B.grounded ? C.AIR_TAU : (tx * tx + tz * tz > B.vx * B.vx + B.vz * B.vz ? C.ACCEL_TAU : C.STOP_TAU);
+      const tau = !B.grounded ? (air && tl < 1e-6 ? C.GLIDE_TAU : C.AIR_TAU) : (tx * tx + tz * tz > B.vx * B.vx + B.vz * B.vz ? C.ACCEL_TAU : C.STOP_TAU);
       const k = 1 - Math.exp(-h / tau);
       B.vx += (tx - B.vx) * k; B.vz += (tz - B.vz) * k;
       if (B.jumpT >= 0) {
@@ -509,7 +581,11 @@ function create(o) {
           GN[0] = nx; GN[1] = ny; GN[2] = nz; GN[3] = nf;
         }
         if (g > -Infinity) {
-          if (walk) {
+          if (walk && wasGrounded && g > f0 + 1e-3 && pressed(B.x, g, B.z) > pressed(x0, f0, z0) + 1e-4) {
+            // a step up into less room than the body has: a wall (resolveBody saw the head at the old height; the
+            // stair up to the roof hatch's shut lid ends on a landing 1.94 m high, 11-17, salon_cukur.py)
+            B.x = x0; B.z = z0; B.vx = 0; B.vz = 0; B.foot = f0; B.vy = 0;
+          } else if (walk) {
             if (wasGrounded) B.eyeLag = Math.max(-0.5, Math.min(0.5, B.eyeLag - (g - f0)));
             B.foot = g; B.vy = 0; B.grounded = true;
             if (GN[1] > 0.9) B.baseF = g;          // on a tread, not on a nosing: the height a step is measured from
@@ -520,6 +596,13 @@ function create(o) {
             if (hl > 1e-6) { const hx = GN[0] / hl, hz = GN[2] / hl, vn = B.vx * hx + B.vz * hz; if (vn < 0) { B.vx -= vn * hx; B.vz -= vn * hz; } }
             else { B.vx = 0; B.vz = 0; }
             if (wasGrounded) { B.foot = f0; B.vy = 0; }
+            else {
+              // in the air against it: the feet still rest on what is under the place kept, or a jump held into a
+              // steep foot (the hall columns' 71-degree skirt) sinks through it to the floor and the wall push then
+              // throws the body into the column (11-17, salon_cukur.py)
+              const g0 = groundCast(B.x, B.z, f0, B.foot);
+              if (g0 > B.foot) { B.foot = g0; B.vy = Math.min(0, B.vy) * 0.5; }
+            }
             B.grounded = wasGrounded;
           } else {                                 // too steep to stand on (or an edge over a drop): rest on it, slide off
             B.foot = g; B.vy = Math.min(0, B.vy) * 0.5; B.grounded = false;
@@ -590,7 +673,8 @@ function create(o) {
     return R[i] + (R[i + 1] - R[i]) * (f - i);
   }
   function eyeTarget(L) {
-    const d = EYE.K * (refAt(walkS) - Math.log2(Math.max(1e-6, L)));
+    // with the lights out the hall is meant to be that much darker (o.dark, stops): the eye does not make it up
+    const d = EYE.K * (refAt(walkS) - (pinnedS == null && o.dark ? o.dark() : 0) - Math.log2(Math.max(1e-6, L)));
     const lift = d > EYE.DARK_FROM ? EYE.DARK_EXTRA * smooth(Math.min(1, (d - EYE.DARK_FROM) / EYE.DARK_SPAN)) : 0;
     const t = o.exposureAt(walkS) + Math.max(-EYE.DOWN, Math.min(EYE.UP, d)) + lift;
     return Math.max(EYE.MIN, Math.min(EYE.MAX + lift, t));
@@ -780,7 +864,20 @@ function create(o) {
     },
     // a moving solid in the collision (the hatch's lid): Float32Array of triangles (9 floats each), or null to remove
     setSolid(name, tris) { if (tris) solids.set(name, tris instanceof Float32Array ? tris : new Float32Array(tris)); else solids.delete(name); writeSolids(); },
-    // the walker's velocity (the void's fall: its guidance and its brake)
+    // a rigid move of the world (the void re-expresses it in another facility's frame): positions through map, the
+    // velocity and the look turned by th (R(th) v = (cos th x + sin th z, y, -sin th x + cos th z); a heading a -> a - th)
+    remap(map, th) {
+      const b = map([B.x, B.foot, B.z]), sf = map([B.safeX, B.safeF, B.safeZ]), ce = map([camEye[0], camEye[1], camEye[2]]);
+      B.baseF += b[1] - B.foot;
+      B.x = b[0]; B.foot = b[1]; B.z = b[2]; B.safeX = sf[0]; B.safeF = sf[1]; B.safeZ = sf[2];
+      camEye[0] = ce[0]; camEye[1] = ce[1]; camEye[2] = ce[2];
+      const c = Math.cos(th), sn = Math.sin(th), vx = B.vx, vz = B.vz;
+      B.vx = c * vx + sn * vz; B.vz = -sn * vx + c * vz;
+      B.yaw -= th;
+    },
+    setColumns(list) { columns = list || []; },
+    setBeams(list) { beams = list || []; },
+    // the walker's velocity (the void's fall: its brake)
     setVelocity(vx, vy, vz) { if (vx != null) B.vx = vx; if (vy != null) B.vy = vy; if (vz != null) B.vz = vz; },
     // hold the journey point the eye's exposure refers to (s in metres, null: the nearest point again)
     pinS(sv) { pinnedS = sv == null ? null : sv; },
@@ -788,6 +885,7 @@ function create(o) {
     onFall(fn) { fallFn = fn || null; },
     onStep(fn) { stepFn = fn || null; },
     state: () => ({ x: B.x, foot: B.foot, z: B.z, vx: B.vx, vy: B.vy, vz: B.vz, grounded: B.grounded, yaw: B.yaw, pitch: B.pitch,
+                    input: !!(keys.w || keys.a || keys.s || keys.d),
                     eye: pose.eye.slice(), hover: M.hover }),
     stats() {
       const a = Array.from(timing.subarray(0, Math.min(timingN, timing.length))).sort((x, y) => x - y);
@@ -801,6 +899,7 @@ function create(o) {
       look(yaw, pitch) { B.yaw = yaw; B.pitch = pitch; },
       put(x, foot, z, vy = 0) { B.x = x; B.foot = foot; B.baseF = foot; B.z = z; B.vx = B.vz = 0; B.vy = vy; B.grounded = false; B.eyeLag = 0; enterOff.fill(0); },
       groundAt: (x, z, top = 100, bot = -100) => groundCast(x, z, top, bot),
+      groundWalkable: () => GN[1] >= C.WALKABLE,      // the last groundAt's contact: steep enough to stand on
       journeyEv: u => o.exposureAt(u * o.journey().total),
       setEye(e) { Object.assign(EYE, e); },
       resetTiming() { timingN = 0; contactsMax = 0; timeSum = 0; },

@@ -9,7 +9,7 @@ const SCRIPT_BASE = new URL('.', document.currentScript ? document.currentScript
 const NO_STORE = { cache: 'no-store' };
 const SHADER_FILES = ['common.glsl', 'scene.vert', 'scene.frag', 'depth.frag', 'rotor.vert', 'rotor.frag', 'quad.vert',
   'haze.frag', 'post.frag', 'combine.frag', 'emit.vert', 'emit.frag', 'dis.vert', 'dis.frag', 'fener.vert', 'fener.frag',
-  'direk.vert', 'direk.frag'];
+  'direk.vert', 'direk.frag', 'band.glsl'];
 
 // ==================================================================== small maths (column-major 4x4)
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -776,7 +776,9 @@ async function create(canvas, options = {}) {
   function build(name, vsFile, fsFile, defines = '', mask = ALL_VOLS) {
     const head = '#version 300 es\n#define NV ' + NV + '\n#define VOL_MASK ' + mask + '\n' + defines;
     const common = src['common.glsl'].replace('// VOLUMES', volCodeFor(mask));
-    const pieces = [[gl.VERTEX_SHADER, vsFile, head + src[vsFile]], [gl.FRAGMENT_SHADER, fsFile, head + src[fsFile].replace('// COMMON', common)]];
+    const band = src['band.glsl'];
+    const pieces = [[gl.VERTEX_SHADER, vsFile, head + src[vsFile].replace('// BAND', band)],
+                    [gl.FRAGMENT_SHADER, fsFile, head + src[fsFile].replace('// COMMON', common).replace('// BAND', band)]];
     const p = own('Program', gl.createProgram());
     const shaders = pieces.map(([type, file, text]) => {
       const s = gl.createShader(type);
@@ -910,7 +912,8 @@ async function create(canvas, options = {}) {
   const groups = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]];
   const groupUniform = new Float32Array(9);
   let exposure = 1, time = 0, haze = { density: 1, fans: [] }, hoverName = null, heat = 0;
-  const levha = new Map();                       // atlas name -> { t, w, h, emissive }
+  const levha = new Map();                       // atlas name -> { t, w, h, emissive, glow }
+  const levhaWake = new Map();                   // atlas name -> setLevhaWake's factor
   const levhaJobs = new Map();                   // atlas name -> { lv, bytes, row, emissive }: strips still to upload
   const LEVHA_BYTES_PER_FRAME = 4 << 20;         // ~1 ms of upload a frame (16 MB measured 3.5 ms, 2 MB 0.2 ms)
   function pumpLevha() {
@@ -934,6 +937,8 @@ async function create(canvas, options = {}) {
       if (budget <= 0) break;
     }
   }
+  const levhaGlow = new Map();                   // atlas name -> [r, g, b] * k: the live colour of a self-lit face
+  const ONE2 = [1, 1], ONE3 = [1, 1, 1];
   const lamps = new Map();                       // anchor name -> [r, g, b] * k
   const hoverAmt = new Map();                    // anchor name -> 0..1 (eased)
   const linked = {};                             // tik anchor name -> the levha/nokta anchors it lifts
@@ -1030,11 +1035,13 @@ async function create(canvas, options = {}) {
     let on = 0, em = 0, hv = 0, lamp = null;
     if (a) {
       const lv = levha.get(a.atlas || a.ad);
-      if (lv) { on = 1; em = lv.emissive; bindTex(UNIT.uLevha, gl.TEXTURE_2D, lv.t); }
+      if (lv) { on = 1; em = lv.emissive > 0 ? Math.max(1e-6, lv.emissive * lv.glow) : 0; bindTex(UNIT.uLevha, gl.TEXTURE_2D, lv.t); }
       hv = hoverAmt.get(a.ad) || 0;
       lamp = lamps.get(a.ad);
     }
     if (u.uDraw) gl.uniform4f(u.uDraw, on, em, hv, item.dynamic ? 1 : 0);
+    if (u.uLevhaM) gl.uniform2fv(u.uLevhaM, (a && a.boyut) || ONE2);
+    if (u.uLevhaGlow) gl.uniform3fv(u.uLevhaGlow, (a && levhaGlow.get(a.atlas || a.ad)) || ONE3);
     if (u.uLamp) gl.uniform3fv(u.uLamp, lamp || [0, 0, 0]);
     if (u.uAlpha) gl.uniform1f(u.uAlpha, alpha);
     drawRaw(item);
@@ -1179,6 +1186,13 @@ async function create(canvas, options = {}) {
         const tg = m ? refl : T.scene;
         if (!tg || !(L[0] + L[1] + L[2] > 0)) continue;
         const P = e.pts, n = Math.min(4096, P.length / 3), ys = m ? -1 : 1, b = e.box;
+        // a flat lens seen from behind gives no light, neither its footprint nor its own faces: a floor lamp's lens
+        // faces up, so its mirror image in the wet floor is its back (the real ray from the puddle meets the lens from
+        // below, through its housing); the footprint drawn there popped on and off with the depth texels under it
+        if (e.flat && (e.flat[0] * (c.eye[0] - b.centre[0]) + ys * e.flat[1] * (c.eye[1] - ys * b.centre[1]) + e.flat[2] * (c.eye[2] - b.centre[2])) <= 0) {
+          emitTab[(6 * 256 + i) * 4 + m] = 0;
+          continue;
+        }
         // its bounding sphere against the view first (most emitters are off screen)
         {
           const bc = [b.centre[0], ys * b.centre[1], b.centre[2]], br = len(b.half);
@@ -1245,6 +1259,8 @@ async function create(canvas, options = {}) {
     bindTex(UNIT.uDepth, gl.TEXTURE_2D, tgt.depth);
     gl.uniformMatrix4fv(pr.u.uVP, false, c.vp);
     gl.uniform2f(pr.u.uNearFar, NEAR, FAR);
+    gl.uniform3fv(pr.u.uEye, c.eye); gl.uniform3fv(pr.u.uCamF, c.F); gl.uniform3fv(pr.u.uCamR, c.R); gl.uniform3fv(pr.u.uCamU, c.U);
+    gl.uniform2f(pr.u.uTan, c.tx, c.ty);
     gl.uniform1i(pr.u.uRow, mirror ? 3 : 0);
     gl.uniform1i(pr.u.uBoxRow, mirror ? 12 : 7);
     gl.uniform2f(pr.u.uTarget, tgt.w, tgt.h);
@@ -1454,11 +1470,20 @@ async function create(canvas, options = {}) {
     list: [],                                   // [{ o: [x, y, z], yaw, col: [r, g, b] (full colour, 0..1), home }]
     lid: 0,                                     // our hatch's lid, radians about its axis (+: open)
     kOthers: 30,                                // the other facilities' group-0 intensity (their lamps are steady)
-    fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
+    fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90,
+           calm: [20, 100, 0.9] },             // dis.frag uTexCalm: far concrete gives way to its mean, from..to (m), at most
+    // the cloud band (band.glsl): its centre y in this frame (disari.js: it moves with the wrap and the home), half
+    // thickness, period, extinction at its middle (1/m); its light is the fog's own
+    band: { y: -440, hw: 75, D: 860, sigma: 0 },
     force: null,                                // tests: true / false overrides the automatic switch
     lampsOff: false,                            // tests: the frame without the lamps' sprites (their own light alone)
     lampsBare: false,                           // tests: the lamps unhidden by the scene (their full light)
     mastsOff: false,                            // tests: without the far masts' lines
+    // the beams under the facilities (disari.js KIRIS: their level over the band, section, nodes); each facility's
+    // list entry carries its own (beams: [cx, cz, yaw, half length] in its frame)
+    kiris: null,
+    kirisOff: false,                            // tests: without the beams and nodes (the columns still end in them)
+    nKiris: 0,
     on: false, inBlock: true, homeHaze: 1, n: 0, lamps: 0, drawn: [0, 0, 0], noInterior: false,
   };
   const voidOn = () => VOID.on;
@@ -1481,14 +1506,19 @@ async function create(canvas, options = {}) {
     return [0, 1, 2].map(i => a[i] * f.amb * 0.5 * (f.up[i] + f.down[i]));
   };
   const bCentre = boundsBox ? scl(add(boundsBox[0], boundsBox[1]), 0.5) : [0, 0, 0];
-  const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) : 1;
+  // + 300 m: the columns run on below the bounds down to their nodes (dis.vert; never past the mesh's bottom ring)
+  const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) + 300 : 1;
+  // the columns' shaft in the mesh (sahne/firin hall_outside.cpp: a constant section from KOLON_Y[0] to its bottom ring;
+  // no dis_kolon vertex lies between the two: the legs' haunches end at y -52)
+  const KOLON_Y = [-100, -604];
+  const bandU = () => { const b = VOID.band; return [b.y, b.hw, b.D, b.sigma]; };
   // the detail by distance: near (every range), mid (no lamp globe: its sprite is it; no mast and dark steel: under
   // a pixel, the mast is drawn as a line instead), far (walls, columns, deck)
   const nameOf = it => (mats[it.malzeme] || {}).ad || '';
   const LOD = [
     disItems,
     disItems.filter(it => !/^dis_(fener|koyu)$/.test(nameOf(it))),   // the mast: a line of its width (direk.vert)
-    disItems.filter(it => /^dis_(duvar|kolon|zemin|isik)$/.test(nameOf(it))),
+    disItems.filter(it => /^dis_(duvar|kolon|zemin|isik|cam)$/.test(nameOf(it))),
   ];
   const LOD_D = [260, 700];                     // nearest distance (m) to a facility's bounds below which near / mid
   const INST_F = 8;                             // floats per instance: offset, yaw, colour (C k), the globe's mesh share
@@ -1509,6 +1539,39 @@ async function create(canvas, options = {}) {
     return vao;
   }
   const geoInstVao = disItems.length ? instancedVao(geo) : null;
+  // the beams and nodes: one unit box (24 corners with their face's normal, 36 indices), instanced (dis.vert uKiris)
+  const kolonFeet = Object.keys(anchors).filter(n => /^dis_kolon_/.test(n)).map(n => {
+    const k = anchors[n].kutu; return { x: k.merkez[0], z: k.merkez[2], hx: Math.abs(k.x[0]) + Math.abs(k.z[0]), hz: Math.abs(k.x[2]) + Math.abs(k.z[2]) };
+  });
+  const kolonMat = mats.findIndex(m => m.ad === 'dis_kolon');
+  const KIRIS_F = 8;                            // per box: centre, yaw, half sizes, 0
+  let kirisData = new Float32Array(KIRIS_F * 256);
+  const kirisBuf = own('Buffer', gl.createBuffer());
+  const kirisVao = kolonFeet.length && kolonMat >= 0 ? (() => {
+    const v = [], ix = [];
+    for (let a = 0; a < 3; a++) for (const sg of [-1, 1]) {
+      const b = (a + 1) % 3, c = (a + 2) % 3, n0 = v.length / 6;
+      for (const [p, q] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const P = [0, 0, 0], N = [0, 0, 0];
+        P[a] = sg; P[b] = p; P[c] = q; N[a] = sg;
+        v.push(...P, ...N);
+      }
+      ix.push(n0, n0 + 1, n0 + 2, n0, n0 + 2, n0 + 3);
+    }
+    const vao = own('VertexArray', gl.createVertexArray());
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, own('Buffer', gl.createBuffer()));
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ARRAY_BUFFER, kirisBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, KIRIS_F * 4, gl.STREAM_DRAW);
+    for (const i of [5, 6]) { gl.enableVertexAttribArray(i); gl.vertexAttribPointer(i, 4, gl.FLOAT, false, KIRIS_F * 4, (i - 5) * 16); gl.vertexAttribDivisor(i, 1); }
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, own('Buffer', gl.createBuffer()));
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ix), gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    return vao;
+  })() : null;
   const lidInstVao = kapakDyn ? instancedVao(kapakDyn.mesh) : null;
   const lampVao = own('VertexArray', gl.createVertexArray());
   gl.bindVertexArray(lampVao);
@@ -1530,12 +1593,14 @@ async function create(canvas, options = {}) {
   }
   // the frame's facilities: culled (the fog's reach, the view's frustum), sorted into the three details; their lamps
   function prepareVoid(c) {
-    VOID.n = 0; VOID.lamps = 0;
+    VOID.n = 0; VOID.lamps = 0; VOID.nKiris = 0;
     if (!VOID.on) return;
     const e = c.eye;
     let dB = 0;
     for (let i = 0; i < 3; i++) dB += Math.pow(Math.max(0, blockBox[0][i] - e[i], e[i] - blockBox[1][i]), 2);
-    VOID.homeHaze = 1 - smoothstep(150, 300, Math.sqrt(dB));
+    // gone before another facility can become the home (disari.js: half the gap between two blocks, less its 12 m
+    // margin): the roof's baked haze must not move with the home
+    VOID.homeHaze = 1 - smoothstep(10, 22, Math.sqrt(dB));
     // the hall can only be seen from outside through the open hatch: skip all of it unless the hatch is open, near
     // enough to show a few pixels of the stair, and in view
     VOID.noInterior = !VOID.inBlock;
@@ -1549,12 +1614,40 @@ async function create(canvas, options = {}) {
     const sx = Math.sqrt(1 + c.tx * c.tx), sy = Math.sqrt(1 + c.ty * c.ty);
     const lists = [[], [], []], lamps = [], lids = [];
     let homeLid = null;
+    const K = kirisVao && !VOID.kirisOff ? VOID.kiris : null, KB = VOID.band;
+    let nk = 0;
+    const kPush = (x, y, z, yaw, hx, hy, hz) => {
+      if (kirisData.length < (nk + 1) * KIRIS_F) { const d = new Float32Array(kirisData.length * 2); d.set(kirisData); kirisData = d; }
+      const o = nk * KIRIS_F;
+      kirisData[o] = x; kirisData[o + 1] = y; kirisData[o + 2] = z; kirisData[o + 3] = yaw;
+      kirisData[o + 4] = hx; kirisData[o + 5] = hy; kirisData[o + 6] = hz; kirisData[o + 7] = 0;
+      nk++;
+    };
     for (const fac of VOID.list) {
       const yaw = fac.yaw || 0, cy = Math.cos(yaw), sn = Math.sin(yaw);
       const rot = p => [cy * p[0] + sn * p[2], p[1], -sn * p[0] + cy * p[2]];
-      const col = fac.home ? ours : scl(fac.col, VOID.kOthers);
+      // our colours: the facility we live in (after landing on another, it keeps its own until we are inside)
+      const col = (fac.ours ?? fac.home) ? ours : scl(fac.col, VOID.kOthers);
       // the offset that turns the facility about its own centre: p' = R p + (o + c - R c), exact for ours (yaw 0)
       const off = yaw ? add(fac.o, sub(bCentre, rot(bCentre))) : fac.o;
+      // its beams and nodes, at the level under it (the same for every stack: the band's, raised by K.top)
+      if (K && fac.beams) {
+        const lat = KB.y + K.top + KB.D * Math.floor((fac.o[1] - KB.y - K.top) / KB.D);
+        const q = sub(add(rot([bCentre[0], 0, bCentre[2]]), off), e), R = K.reach;
+        q[1] = lat - e[1];
+        const z = dot(q, c.F);
+        if (len(q) - R < rGeo && !(z < -R || Math.abs(dot(q, c.R)) > z * c.tx + R * sx || Math.abs(dot(q, c.U)) > z * c.ty + R * sy)) {
+          for (const f of kolonFeet) {
+            const p = add(rot([f.x, 0, f.z]), off);
+            kPush(p[0], lat - K.capD / 2, p[2], yaw, f.hx + K.pad, K.capD / 2, f.hz + K.pad);
+          }
+          const b = fac.beams;
+          for (let i = 0; i < b.length; i += 4) {
+            const p = add(rot([b[i], 0, b[i + 1]]), off);
+            kPush(p[0], lat - K.d / 2, p[2], b[i + 2] + yaw, b[i + 3], K.d / 2, K.w / 2);
+          }
+        }
+      }
       let share = 0, lampAt = -1;
       if (fenerAnchor) {
         const lp = add(rot(fenerAnchor), off);
@@ -1603,6 +1696,12 @@ async function create(canvas, options = {}) {
     gl.bufferData(gl.ARRAY_BUFFER, lampData.subarray(0, Math.max(LAMP_F, lamps.length)), gl.STREAM_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     VOID.drawn = [VG[0].count, VG[1].count, VG[2].count];
+    VOID.nKiris = nk;
+    if (nk) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, kirisBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, kirisData.subarray(0, nk * KIRIS_F), gl.STREAM_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
   }
   function pointInstances(first) {
     gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
@@ -1611,7 +1710,7 @@ async function create(canvas, options = {}) {
   }
   // the exterior's draws inside the scene pass (its prepass and its colour pass: the same vertex shader)
   function drawVoid(c, colour) {
-    if (!VOID.n || !geoInstVao) return;
+    if ((!VOID.n && !VOID.nKiris) || !geoInstVao) return;
     const pr = colour ? programs.dis : programs.disDepth, u = pr.u;
     gl.useProgram(pr.p);
     gl.uniformMatrix4fv(u.uVP, false, c.vp);
@@ -1624,14 +1723,20 @@ async function create(canvas, options = {}) {
       gl.uniform1f(u.uVolLit, 0);
       gl.uniform3fv(u.uFogUp, VOID.fog.up); gl.uniform3fv(u.uFogDown, VOID.fog.down);
       gl.uniform1f(u.uAmb, VOID.fog.amb);
+      gl.uniform3fv(u.uTexCalm, VOID.fog.calm);
     }
     gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
+    gl.uniform4fv(u.uBand, bandU());
+    gl.uniform2fv(u.uKolonY, KOLON_Y);
+    gl.uniform1f(u.uKolonFoot, VOID.kiris ? VOID.kiris.top - VOID.kiris.foot : 0);
+    gl.uniform1f(u.uKiris, 0);
     gl.bindVertexArray(geoInstVao);
     for (let l = 0; l < 3; l++) {
       const g = VG[l];
       if (!g.count) continue;
       pointInstances(g.first);
       for (const it of LOD[l]) {
+        gl.uniform1f(u.uKolon, nameOf(it) === 'dis_kolon' ? 1 : 0);
         if (colour) {
           gl.uniform1i(u.uMat, it.malzeme);
           gl.uniform1i(u.uPage, it.sayfa || 0);
@@ -1642,6 +1747,7 @@ async function create(canvas, options = {}) {
     }
     if (lidInstVao && (VLID.count || VLID.home >= 0)) {
       gl.bindVertexArray(lidInstVao);
+      gl.uniform1f(u.uKolon, 0);
       if (colour) { gl.uniform1f(u.uVolLit, 1); gl.uniform1f(u.uFener, 0); gl.uniform1i(u.uPage, 0); }
       const draw = (first, count, angle) => {
         gl.uniformMatrix4fv(u.uModel, false, frameOf(kapakDyn.axis, kapakDyn.centre, angle).m);
@@ -1655,6 +1761,14 @@ async function create(canvas, options = {}) {
       if (VLID.home >= 0) draw(VLID.home, 1, VOID.lid);
       if (colour) gl.uniform1f(u.uVolLit, 0);
       gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
+    }
+    if (VOID.nKiris) {                                             // the beams and nodes: the columns' concrete, the fog's light
+      gl.bindVertexArray(kirisVao);
+      gl.uniform1f(u.uKiris, 1); gl.uniform1f(u.uKolon, 0);
+      if (colour) { gl.uniform1i(u.uMat, kolonMat); gl.uniform1f(u.uBare, 1); gl.uniform1f(u.uFener, 0); gl.uniform1i(u.uPage, 0); }
+      gl.drawElementsInstanced(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0, VOID.nKiris);
+      gl.uniform1f(u.uKiris, 0);
+      if (colour) gl.uniform1f(u.uBare, 0);
     }
     gl.bindVertexArray(geo.vao);
   }
@@ -1672,6 +1786,7 @@ async function create(canvas, options = {}) {
     gl.uniform2f(u.uSize, T.glow.w, T.glow.h);
     gl.uniform1f(u.uPxAngle, 2 * c.ty / T.glow.h);
     gl.uniform1f(u.uSigma, VOID.fog.sigma);
+    gl.uniform4fv(u.uBand, bandU());
     gl.uniform1f(u.uPierce, VOID.fog.pierce);
     gl.uniform1f(u.uHaloR, VOID.fog.haloR);
     if (u.uHaloK) gl.uniform1f(u.uHaloK, VOID.fog.haloK);
@@ -1689,6 +1804,7 @@ async function create(canvas, options = {}) {
     gl.uniform2f(um.uSize, T.glow.w, T.glow.h);
     gl.uniform1f(um.uPxAngle, 2 * c.ty / T.glow.h);
     gl.uniform1f(um.uSigma, VOID.fog.sigma);
+    gl.uniform4fv(um.uBand, bandU());
     gl.uniform1f(um.uExposure, exposure * (1 - 0.04));
     gl.uniform3fv(um.uFogUp, VOID.fog.up); gl.uniform3fv(um.uFogDown, VOID.fog.down);
     gl.uniform3fv(um.uMastL, mastL());
@@ -1709,6 +1825,7 @@ async function create(canvas, options = {}) {
     if (!VOID.on) return;
     camUniforms(pr, c);
     gl.uniform1f(u.uFogSigma, VOID.fog.sigma);
+    gl.uniform4fv(u.uBand, bandU());
     gl.uniform3fv(u.uFogUp, VOID.fog.up);
     gl.uniform3fv(u.uFogDown, VOID.fog.down);
     gl.uniform3fv(u.uBlockLo, blockBox[0]);
@@ -1944,7 +2061,7 @@ async function create(canvas, options = {}) {
       let lv = levha.get(name);
       if (!lv || lv.w !== source.width || lv.h !== source.height) {
         if (lv) drop(lv.t);
-        lv = { t: tex(gl.TEXTURE_2D, { mips: true, aniso: true, bytes: source.width * source.height * 4 * 4 / 3 }), w: source.width, h: source.height, emissive: 0 };
+        lv = { t: tex(gl.TEXTURE_2D, { mips: true, aniso: true, bytes: source.width * source.height * 4 * 4 / 3 }), w: source.width, h: source.height, emissive: 0, glow: levhaWake.get(name) ?? 1 };
         gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(lv.w, lv.h))) + 1, gl.SRGB8_ALPHA8, lv.w, lv.h);
         levha.set(name, lv);
       }
@@ -1969,6 +2086,11 @@ async function create(canvas, options = {}) {
       else levhaJobs.set(name, { lv, bytes, row: 0, emissive, pending: null });
       return true;
     },
+    // a self-lit face whose texture holds light only (white = full): its colour and strength, live, without a redraw
+    setLevhaGlow(name, c, k) { levhaGlow.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
+    // a self-lit sign's brightness against its own (0: the display is off, dark glass); kept for a sign not yet there.
+    // Not setLevhaGlow: that one colours a face, this one wakes it, and a face can have both (the console's plates)
+    setLevhaWake(name, k) { levhaWake.set(name, k); const lv = levha.get(name); if (lv) lv.glow = k; },
     setLamp(name, c, k) { lamps.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
     setHaze(h) { haze = { ...haze, ...h }; },
     setExposure(ev) { exposure = Math.pow(2, ev || 0); },
@@ -1982,6 +2104,9 @@ async function create(canvas, options = {}) {
       if (o.lid != null) VOID.lid = o.lid;
       if (o.kOthers != null) VOID.kOthers = o.kOthers;
       if (o.fog) Object.assign(VOID.fog, o.fog);
+      if (o.band) Object.assign(VOID.band, o.band);
+      if (o.kiris) VOID.kiris = o.kiris;
+      if ('kirisOff' in o) VOID.kirisOff = !!o.kirisOff;
       if ('force' in o) VOID.force = o.force;
       if ('lampsOff' in o) VOID.lampsOff = !!o.lampsOff;
       if ('lampsBare' in o) VOID.lampsBare = !!o.lampsBare;
@@ -2007,7 +2132,7 @@ async function create(canvas, options = {}) {
       }
       return sum;
     },
-    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog } }),
+    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, kiris: VOID.nKiris, fog: { ...VOID.fog }, band: { ...VOID.band } }),
     setHeat(h) { heat = Math.min(1, Math.max(0, h || 0)); },   // the arch opening's shimmer (0..1, from the temperature)
     setQuality(q) { Object.assign(Q, q); T = null; W = 0; resize(); },
     render,

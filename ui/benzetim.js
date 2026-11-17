@@ -19,10 +19,11 @@ window.KM_BENZETIM = function (deliver) {
     cpu: 47.5, gpu: 36.0, yumusak: 41.8,
     sweep: false, sweepT: 0, hold: null,
     rgb: true,
+    bekle: false,                                               // the 15-minute idle fade (switch stays on)
     kasa: { hedef: 'bios', durum: 'bios', t: 0, n: 0 },
     gpuF: { hedef: 'oto', durum: 'oto', t: 0, n: 0, baska: false },
     afterburner: { calisiyor: true, fanKontrolu: false },
-    cikis: [0, 0, 0], t: 0, onizleme: [0, 0, 0],
+    cikis: [0, 0, 0], t: 0, onizleme: [0, 0, 0], master: 1,
     lastDurum: '', lastSent: 0,
   };
 
@@ -63,7 +64,7 @@ window.KM_BENZETIM = function (deliver) {
         },
       },
       rgb: {
-        acik: S.rgb,
+        acik: S.rgb, beklemede: S.rgb && S.bekle, beklemeDakika: 15,
         cihazlar: [
           { kimlik: 'aio', ad: 'Cooler Master Halo 360', bagli: true, hata: null },
           { kimlik: 'klavye', ad: 'SteelSeries Apex 3', bagli: true, hata: null },
@@ -91,7 +92,8 @@ window.KM_BENZETIM = function (deliver) {
     const base = baseColor();
     S.onizleme = base.map(Math.round);
     const halka = [], klavye = [];
-    let on = S.rgb ? 1 : 0;
+    S.master += ((S.rgb && !S.bekle ? 1 : 0) - S.master) * (1 - Math.exp(-dt / (S.rgb && S.bekle ? 1.5 : 0.3)));
+    let on = S.master;
     for (let i = 0; i < 84; i++) {
       const c = base;
       halka.push(c.map(v => Math.round(clamp(v * on, 0, 255))));

@@ -25,7 +25,9 @@ layout(std140) uniform Materials {
 uniform int uMat;
 uniform int uPage;
 uniform vec4 uDraw;            // x: live texture on, y: its emission (0: paint), z: hover 0..1, w: lit from the volumes
-uniform vec4 uLensBall[12];     // the stair lamps' lenses (centre, radius): their bodies' received light is held
+uniform vec2 uLevhaM;          // a levha face's size (m): its uv runs 0..1, its material's own texture set in metres
+uniform vec3 uLevhaGlow;       // the live colour a self-lit face's light is multiplied by (setLevhaGlow; else 1)
+uniform vec4 uLensBall[12];    // the stair lamps' lenses (centre, radius): their bodies' received light is held
 uniform int uLensN;
 uniform vec4 uLensBox[2];        // their bounds
 uniform float uLensCap;
@@ -85,7 +87,9 @@ void main() {
     float roughCoarse = 0.7;
     vec3 nCoarse = Ng;
     if (A.y >= 0.0) {
-        vec3 tc = vec3(vec2(vUv.x, -vUv.y) / A.x, A.y);    // GL convention: v up (the images are not flipped)
+        // a levha face of a textured material (the console's concrete plates): its 0..1 back to metres over the face
+        vec2 muv = (flags & 2) != 0 ? vUv * uLevhaM : vUv;
+        vec3 tc = vec3(vec2(muv.x, -muv.y) / A.x, A.y);    // GL convention: v up (the images are not flipped)
         vec2 tpx = tc.xy * 2048.0;
         float lodPx = log2(max(max(length(dFdx(tpx)), length(dFdy(tpx))) / uPxScale, 1.0));
         float lodC = max(lodPx + 1.0, 4.0);
@@ -113,7 +117,7 @@ void main() {
     if (uDraw.x > 0.5) {           // the live texture: uv0 runs 0..1 over the face, u right, v down (canvas order, as the
                                    // builder writes it; the canvas is uploaded unflipped, its top row at v = 0)
         vec4 ink = texture(uLevha, vUv);
-        if (uDraw.y > 0.0) emit += ink.rgb * ink.a * uDraw.y;
+        if (uDraw.y > 0.0) emit += ink.rgb * ink.a * uDraw.y * uLevhaGlow;
         else {
             s.albedo = mix(s.albedo, ink.rgb, ink.a);
             s.rough = mix(s.rough, 0.6, ink.a);
