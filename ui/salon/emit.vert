@@ -16,6 +16,9 @@ uniform vec2 uNearFar;
 out vec2 vPx;                  // the fragment's offset from the centre along the rectangle's axes (target px)
 flat out vec3 vL;              // radiance x the footprint's share
 flat out vec3 vShape;          // half sizes h1, h2 and sigma (target px)
+flat out vec4 vSeg;            // the lens' long axis on screen: its two ends (target px)
+flat out vec3 vZ;              // 1 / view depth at the two ends, the depth tolerance (m)
+flat out float vVis;           // the share of the nine points on the lens that are seen
 float lin(float d) { float n = uNearFar.x, f = uNearFar.y; return 2.0 * n * f / (f + n - (2.0 * d - 1.0) * (f - n)); }
 void main() {
     int i = gl_InstanceID;
@@ -48,7 +51,15 @@ void main() {
         vis += lin(texelFetch(uDepth, t, 0).r) >= h.w - (thin + 0.015 + 0.002 * h.w) ? 1.0 / 9.0 : 0.0;
     }
     if (vis <= 0.0) return;
-    vL *= vis;
+    // a small lens keeps the nine points' share (a column's edge sliding over it dims it smoothly); along a long strip
+    // what covers it is tested per fragment (emit.frag): one value for a 13 m strip drew its hidden part over the
+    // shutter and the grille bars that hide it
+    vVis = vis;
+    vec3 ul = l0 >= l1 && l0 >= l2 ? ax[0] : (l1 >= l2 ? ax[1] : ax[2]);
+    vec4 h0 = uVP * vec4(bc - ul, 1.0), h1 = uVP * vec4(bc + ul, 1.0);
+    h0.w = max(h0.w, 1e-3); h1.w = max(h1.w, 1e-3);
+    vSeg = vec4((h0.xy / h0.w * 0.5 + 0.5) * uTarget, (h1.xy / h1.w * 0.5 + 0.5) * uTarget);
+    vZ = vec3(1.0 / h0.w, 1.0 / h1.w, thin + 0.015 + 0.002 * max(h0.w, h1.w));
     int v = gl_VertexID;                                     // two triangles: corners (-1,-1) (1,-1) (1,1) (-1,1)
     vec2 s = vec2(v == 1 || v == 2 || v == 4 ? 1.0 : -1.0, v == 2 || v == 4 || v == 5 ? 1.0 : -1.0);
     vPx = s * (vec2(a.z, a.w) + 3.0 * sig);
