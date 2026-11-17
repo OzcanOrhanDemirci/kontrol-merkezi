@@ -26,9 +26,9 @@
     { go: [0.0, -348.0], run: 0, pitch: 6, r: 0.5, say: 'çatıya çıkış' },
     { look: [70, 0], t: 2.5, say: 'çatı' },
     { go: [20, -336], run: 1 },
-    { go: [44, -322], run: 1, say: 'kenara' },
+    { go: [44, -344], run: 1, say: 'kenara' },      // clear of the tower block over the deck at z -334..-308
     { look: [90, -35], t: 1.2 },
-    { go: [56, -318], run: 1, pitch: -25, r: 2, say: 'atlayış' },
+    { go: [64, -344], run: 1, pitch: -25, r: 2, say: 'atlayış' },   // the deck ends at x 58.5: off it at a run
     { fall: 1, say: 'düşüş' },
     { wait: 1.5, say: 'iniş' },
     { go: [-3.0, -338.0], run: 1, r: 0.8, say: 'kapağa' },
@@ -87,9 +87,10 @@
       V.setOpen(true);
       next = true;
     } else if (step.fall) {
-      W.debug.keys({});
+      // window.__turSteer: fly on outward (Shift+W, the look of the jump) for the whole fall, to a neighbour's roof
+      W.debug.keys(window.__turSteer && !(fallSeen && s.grounded) ? { w: 1, shift: 1 } : {});
       if (!s.grounded) fallSeen = true;
-      if (fallSeen && s.grounded) { fallSeen = false; say('indi: ' + JSON.stringify(V.state ? V.state().lastFall || null : null)); next = true; }
+      if (fallSeen && s.grounded) { fallSeen = false; say('indi: ' + JSON.stringify(V.state ? { ...(V.state().fall || {}).lastFall, home: V.state().home } : null)); next = true; }
       if (sT > 90) { say('düşüş 90 sn bitmedi'); next = true; }
     } else if (step.go) {
       const [tx, tz] = step.go, dx = tx - s.x, dz = tz - s.z, d = Math.hypot(dx, dz);
