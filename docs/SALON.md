@@ -303,6 +303,16 @@ Its numbers are the `hall::up` constants in `hall_kit.h`.
   small lamps on the right wall every 6 m of run, 2 m over the nosings (group 0: dark cups, a 6 cm lens of
   `merdiven_isik` and a Lambertian disc emitter tilted down onto the treads). Group 0 because it is the one circuit
   always in the temperature colour: group 1 is the arch's and falls to an ember with RGB off, group 2 is fixed warm white.
+  In the window (11-17) the lamps are faint, as Özcan described them: the lens is drawn at 0.001 of its baked radiance
+  (`LENS` in salon.js; the bake keeps its full light on the treads), shows only its own emission, and within 13 cm of
+  each lens the light the cup and hood caught in the bake (the disc emitter sits millimetres from them, so their 4 cm
+  texels read as a white globe) is held to `lensCap` (0.006) of group 0's brightness (scene.frag, `uLensBall`).
+- **The passages' light (window, 11-17).** The bake leaves the passages black (their only light is a narrow door at one
+  end and a lamp round the corner at the other): walked in the real window that was ~8 s of black screen. scene.frag
+  adds the core's light seeping in through each side door, fading along the way (`uSeep`: 0.02 of group 1 at the door,
+  8 m falloff measured along the corridor, on into the back space without a seam). Walk mode's eye also opens up to
+  4 EV more in a frame far darker than the journey's (`EYE.DARK_*` in yuruyus.js); every lit place is below that
+  threshold and unchanged. A lamp in each passage in the next bake would replace both.
 - **The hatch.** Where the tunnel's ceiling meets the roof slab (0.6 m) the opening starts: 1.6 × 4.52 m (z -341.64 ..
   -346.16), its concrete curb 0.25 m over the deck; the climber's head reaches the closed lid ~14 steps from the top.
   The lid is the `dinamik` entry `kapak`: built closed, centre (= the hinge) (1.05, 35.285, -343.9) on the curb's

@@ -1,4 +1,4 @@
-# Hall window: state after the night of 11-17 (~03:45)
+# Hall window: state after the night of 11-17 (~04:50)
 
 The night's hall job is done and on main. Read with `docs/salon-gece-plani.md` (the night's diagnoses), `docs/SALON.md`
 (design; "The way up" and "The void" for Phase 2) and the project notebook.
@@ -19,22 +19,49 @@ The night's hall job is done and on main. Read with `docs/salon-gece-plani.md` (
 4. **Puddle burst.** Gone in the real-window recording: four arch trips scanned frame by frame, no single-frame jump.
 5. **Close vs fan.** Fans pick only on their disc (pointer and walk mode share `pickRay`). Straight path to the arch.
 
-Phase 2: walk mode (Y; WASD, mouse, Escape leaves walk) checked in the real window (pointer lock holds in WebView2);
-chamber, passages, 182-riser stair, hatch, roof with the lamp pit, the void with facilities on columns, the 35.6 s
-fall and the wrap: headless only (2560x1440, scale 2.5: outside 4.6-4.7 ms).
+Phase 2: walk mode (Y; WASD, mouse, Escape leaves walk). Since 04:40 the whole loop is walked in the real window,
+fullscreen 2560x1440 at 165 Hz, recorded (`salon-denetim.ps1 -Bolum tur`): arch, under the gate, chamber, side door,
+passage, back space, the 182-riser stair (~28 s up), the hatch, the roof, the jump, the fall (~33 s, the wrap at
+mid-fall), the landing, the hatch, down the stair (~34 s), the other passage, out under the gate into the hall. No
+stuck point, nothing walked through, nobody out of the world; 15 210 frames, every 10 s window p99 <= 18.7 ms, max
+19.1 ms (the only bad window is the opening's loading second, as before).
+
+Fixed on that walk (11-17 ~04:30):
+- **The passages were black** for ~8 s (pixel value 0 on the video, also at +8 EV: the bake leaves them unlit). The
+  core's light now seeps in through each side door and fades along the corridor into the back space (scene.frag
+  `uSeep`), and walk mode's eye opens up to 4 EV more in a frame far darker than the journey's (yuruyus.js
+  `EYE.DARK_*`; no lit place reaches that threshold). A lamp per passage in the next bake would replace both.
+- **The stair lamps' white globes** were not the lens: the disc emitter sits millimetres from the cup and hood, whose
+  4 cm texels took its full radiance in the bake. Within 13 cm of each lens the received light is now held to
+  `lensCap` of group 0, and the lens itself shows only its own emission at 0.001 of the baked radiance (`LENS`). They
+  read as faint lamps in the temperature colour; the treads keep the bake's light. No bake needed.
+- **The dark arch in the 03:35 delivery stills was not a regression:** the service had been in its 15-minute idle
+  since 00:52 (no real input), the LEDs fade, and the arch's light follows the LED colour (`M.col.arch`); the shaft and
+  pillars do not. Code and the 02:44 bake give the accepted look (headless at 64.6 C, real window at 68 C).
+
+## Recording in the real window: wake the lights first
+
+The service ignores injected input (`src/Durum/Girdi.cs`), so after 15 minutes without Özcan every recording shows
+the idle hall (dark arch). For a run: copy `%LOCALAPPDATA%\KontrolMerkezi\ayarlar.json`, set `beklemeDakika` to 0,
+send `{"komut":"ayar-yukle"}` (from Python or bash: PowerShell 5.1 strips the inner quotes of a native argument and the
+command silently fails), wait for "beklemeden çıktı" in gunluk.txt, record, then copy the file back and reload. Also
+pass `-BosSure 20` when the previous run's own keys are the last input.
 
 ## Not done / not checked
 
-- The roof, the void and the fall were never seen in the real window (no way to place the walker there from outside).
 - Presentation: the 165 fps recording shows ~7 % of intervals as 4+2 refresh pairs, the same at rest as in motion;
   capture jitter or real late presents can only be told apart with PresentMon, which needs administrator rights.
 - The installed layout (Program Files) and a real taskbar click; multi-monitor and DPI.
-- Look questions for Özcan: the stair lamps read as bright white globes (he described faint lamps); the roof is sparse.
+- Walk mode with a real mouse and keyboard beyond the hall (the tour sets keys and look through walk mode's debug
+  hooks; the physics, collision, hatch and fall are the real ones).
+- Look questions for Özcan: the roof is plain and empty; the passages' light is a live fill without shadows; in idle
+  the hall half dims (arch dark, shaft full) instead of the even RGB-off look.
 - Phase 2 decisions he has not seen: the fall brakes to ~6 m/s and is carried onto the roof below; the hatch shuts
   behind you (the wrap needs it); our whole stack shows our lamp colour; homogeneous fog; masts vanish beyond ~700 m.
 
 ## Tools
 
-`araclar/salon-denetim.ps1 -Bolum acilis|yolculuk|yuruyus|fanlar|sicaklik|hepsi -Hz 165` (real window; no longer
+`araclar/salon-denetim.ps1 -Bolum acilis|yolculuk|yuruyus|tur|fanlar|sicaklik|hepsi -Hz 165` (real window; no longer
 maximizes, which dropped the borderless fullscreen to the work area), `araclar/salon_kipirti.py` (steadiness
-sequences), `araclar/salon_disari.py` (the void), headless timing as in `ui/salon/README.md`.
+sequences), `araclar/salon_disari.py` (the void), `araclar/salon_tur.py` (the whole loop: headless, `--bas` to start
+at a step, or `--cdp PORT` in the real window), headless timing as in `ui/salon/README.md`.
