@@ -912,7 +912,8 @@ async function create(canvas, options = {}) {
   const groups = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]];
   const groupUniform = new Float32Array(9);
   let exposure = 1, time = 0, haze = { density: 1, fans: [] }, hoverName = null, heat = 0;
-  const levha = new Map();                       // atlas name -> { t, w, h, emissive }
+  const levha = new Map();                       // atlas name -> { t, w, h, emissive, glow }
+  const levhaGlow = new Map();                   // atlas name -> setLevhaGlow's factor
   const levhaJobs = new Map();                   // atlas name -> { lv, bytes, row, emissive }: strips still to upload
   const LEVHA_BYTES_PER_FRAME = 4 << 20;         // ~1 ms of upload a frame (16 MB measured 3.5 ms, 2 MB 0.2 ms)
   function pumpLevha() {
@@ -1032,7 +1033,7 @@ async function create(canvas, options = {}) {
     let on = 0, em = 0, hv = 0, lamp = null;
     if (a) {
       const lv = levha.get(a.atlas || a.ad);
-      if (lv) { on = 1; em = lv.emissive; bindTex(UNIT.uLevha, gl.TEXTURE_2D, lv.t); }
+      if (lv) { on = 1; em = lv.emissive > 0 ? Math.max(1e-6, lv.emissive * lv.glow) : 0; bindTex(UNIT.uLevha, gl.TEXTURE_2D, lv.t); }
       hv = hoverAmt.get(a.ad) || 0;
       lamp = lamps.get(a.ad);
     }
@@ -1972,7 +1973,7 @@ async function create(canvas, options = {}) {
       let lv = levha.get(name);
       if (!lv || lv.w !== source.width || lv.h !== source.height) {
         if (lv) drop(lv.t);
-        lv = { t: tex(gl.TEXTURE_2D, { mips: true, aniso: true, bytes: source.width * source.height * 4 * 4 / 3 }), w: source.width, h: source.height, emissive: 0 };
+        lv = { t: tex(gl.TEXTURE_2D, { mips: true, aniso: true, bytes: source.width * source.height * 4 * 4 / 3 }), w: source.width, h: source.height, emissive: 0, glow: levhaGlow.get(name) ?? 1 };
         gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(lv.w, lv.h))) + 1, gl.SRGB8_ALPHA8, lv.w, lv.h);
         levha.set(name, lv);
       }
@@ -1997,6 +1998,8 @@ async function create(canvas, options = {}) {
       else levhaJobs.set(name, { lv, bytes, row: 0, emissive, pending: null });
       return true;
     },
+    // a self-lit sign's brightness against its own (0: the display is off, dark glass); kept for a sign not yet there
+    setLevhaGlow(name, k) { levhaGlow.set(name, k); const lv = levha.get(name); if (lv) lv.glow = k; },
     setLamp(name, c, k) { lamps.set(name, [c[0] * k, c[1] * k, c[2] * k]); },
     setHaze(h) { haze = { ...haze, ...h }; },
     setExposure(ev) { exposure = Math.pow(2, ev || 0); },

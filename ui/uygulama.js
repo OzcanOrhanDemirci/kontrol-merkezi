@@ -35,6 +35,7 @@ const send = m => {
 const D = { link: host ? 'baslatiliyor' : 'bagli', durum: null, isik: null };
 const M = {
   t: 0, introT: 0, closing: 0,
+  held: true,                      // until the opening's hand-over: the world stands as the loading screen's last picture shows it
   visible: true, focused: true,
   place: 'fanlar',                 // where the journey goes (fanlar | rgb)
   s: 0, v: 0,                      // the camera's arc length along the journey and its speed (m, m/s)
@@ -132,12 +133,13 @@ function stepJourney(dt) {
 const travelling = () => journey && (M.v !== 0 || (M.place === 'rgb' ? M.s < journey.total : M.s > 0));
 const atPlace = p => !travelling() && M.place === p;
 
-// the resting camera's slow steady drift (two incommensurate periods, a few centimetres)
+// the resting camera's slow steady drift (two incommensurate periods, a few centimetres). It is held through the
+// opening's hand-over (the loading screen's last picture is the scene from the undrifted eye) and eases in after it
 function drift(pose) {
-  const t = M.t;
+  const t = M.t, k = smooth((M.introT - 0.9) / 4);
   const r = norm([pose.dir[2], 0, -pose.dir[0]]);
-  const o = add(mul(r, 0.16 * Math.sin(t * 2 * Math.PI / 23)), [0, 0.07 * Math.sin(t * 2 * Math.PI / 31 + 1.3), 0]);
-  const look = add(mul(r, 0.010 * Math.sin(t * 2 * Math.PI / 29 + 0.4)), [0, 0.006 * Math.sin(t * 2 * Math.PI / 37), 0]);
+  const o = add(mul(r, k * 0.16 * Math.sin(t * 2 * Math.PI / 23)), [0, k * 0.07 * Math.sin(t * 2 * Math.PI / 31 + 1.3), 0]);
+  const look = add(mul(r, k * 0.010 * Math.sin(t * 2 * Math.PI / 29 + 0.4)), [0, k * 0.006 * Math.sin(t * 2 * Math.PI / 37), 0]);
   return { eye: add(pose.eye, o), dir: norm(add(pose.dir, look)), fov: pose.fov };
 }
 
@@ -176,7 +178,7 @@ function updateLights(dt) {
   // arch fall to a faint ember of the temperature colour, the service lamps to pools at the columns' feet that keep
   // the silhouettes (DIM). Idle sinks as slowly as the LEDs fade; the first touch brings everything back in a second
   const idle = rgbOn() && !!D.durum.rgb.beklemede, lit = (rgbOn() && !idle) || !linked();
-  M.lit = approach(M.lit == null ? 1 : M.lit, lit ? 1 : 0, dt, lit ? 0.5 : idle ? 2.5 : 1.4);
+  M.lit = M.held ? 1 : approach(M.lit == null ? 1 : M.lit, lit ? 1 : 0, dt, lit ? 0.5 : idle ? 2.5 : 1.4);
   if (!S) return;
   S.setGroup(0, M.col.temp, GK[0] * strike * conn * close * lerp(DIM.shaft, 1, M.lit));
   // the heat core: brighter and more alive as it gets hotter (0 at the coldest stop, 1 at the hottest), breathing
@@ -186,7 +188,9 @@ function updateLights(dt) {
   const breath = 1 + (0.03 + 0.05 * M.heat) * Math.sin(M.t * 2 * Math.PI / 7);
   S.setGroup(1, add(M.col.arch, mul(M.col.temp, 0.06)), GK[1] * archIn * conn * close * lerp(0.75, 1.45, M.heat) * breath);
   if (S.setHeat) S.setHeat(M.heat * (rgbOn() ? 1 : 0.3));
-  S.setGroup(2, NEUTRAL_LAMP, GK[2] * smooth((it - 0.1) / 0.5) * close * lerp(DIM.lamps, 1, M.lit));
+  // the service lamps are on from the first frame: the loading screen strikes them, circuit by circuit, and its last
+  // picture is this frame (ui/acilis.js)
+  S.setGroup(2, NEUTRAL_LAMP, GK[2] * close * lerp(DIM.lamps, 1, M.lit));
 }
 
 // rotors: the giant fans turn at a share of the real fans' speed, with the inertia of their size
@@ -202,6 +206,7 @@ function rotorTarget(i) {
   return g > 50 ? FAN_REV * Math.pow(clamp(g / 3000, 0, 1.15), 1.35) : 0;
 }
 function stepRotors(dt) {
+  if (M.held) return;
   [['fan_kasa_rotor', 0], ['fan_gpu_rotor', 1]].forEach(([n, i]) => {
     const wt = rotorTarget(i) * 2 * Math.PI;
     M.w[n] = approach(M.w[n], wt, dt, wt > M.w[n] ? 2.4 : 4.2);
@@ -210,6 +215,7 @@ function stepRotors(dt) {
 }
 // levers: down (pulled) = max / lights on; a spring that answers the hand at once and the state when it comes
 function stepLevers(dt) {
+  if (M.held) return;
   const fan = linked() && D.durum && D.durum.fan;
   const want = {
     kol_kasa: (M.down === 'fan_kasa' || M.down === 'masa_kasa' ? 0.25 : 0) + (fan && fan.kasa && fan.kasa.durum === 'max' ? 1 : 0),
@@ -377,22 +383,28 @@ function stopSlots(n) {               // which of the gauge's five lamps carries
   if (n >= SLOTS) return [...Array(SLOTS).keys()];
   return [...Array(n).keys()].map(i => (n === 1 ? 0 : Math.round(i * (SLOTS - 1) / (n - 1))));
 }
+// What shows the service's state (the desks' and the arch's displays, the stop and device lamps) is dark in the
+// scene's first frame and comes on just after it: the loading screen's last picture is that frame, and a picture
+// cannot know the state (ui/acilis.js)
+const SCREENS = ['masa_ekran_kasa', 'masa_ekran_gpu', 'kilit_tasi_ekran'];
+const awake = () => smooth((M.introT - 0.3) / 0.5);
 function updateLamps() {
   if (!S) return;
+  if (S.setLevhaGlow && M.introT < 3) for (const n of SCREENS) S.setLevhaGlow(n, awake());
   const st = (stops() || []).filter(s => !s.gizli).slice(0, STOP_LAMPS);
   const on = rgbOn(), valid = linked() && D.durum && D.durum.isi && (D.durum.isi.yumusak != null || D.durum.isi.ort != null);
   const slots = stopSlots(st.length), used = new Set(slots);
   st.forEach((s, i) => {
     const lit = valid && M.temp >= s.c ? 1 : 0;
     const part = valid && !lit && i > 0 && M.temp > st[i - 1].c ? clamp((M.temp - st[i - 1].c) / (s.c - st[i - 1].c), 0, 1) * 0.35 : 0;
-    S.setLamp('durak_' + slots[i], window.KM_RENK.full(window.KM_RENK.fromSrgb(s.renk)), (0.04 + 0.96 * Math.max(lit, part)) * (on ? 3.0 : 0.6));
+    S.setLamp('durak_' + slots[i], window.KM_RENK.full(window.KM_RENK.fromSrgb(s.renk)), (0.04 + 0.96 * Math.max(lit, part)) * (on ? 3.0 : 0.6) * awake());
   });
   for (let k = 0; k < STOP_LAMPS; k++) if (!used.has(k)) S.setLamp('durak_' + k, [0, 0, 0], 0);
   const devs = (D.durum && D.durum.rgb && D.durum.rgb.cihazlar) || [];
   [['aio', 'lamba_aio'], ['klavye', 'lamba_klavye'], ['gpu', 'lamba_gpu']].forEach(([k, n]) => {
     const s = deviceState(devs.find(c => c.kimlik === k));
     const c = s.durum === 'bagli' ? [0.2, 1.0, 0.35] : s.durum === 'kilitli' ? [1.0, 0.6, 0.15] : s.durum === 'hata' ? [1.0, 0.12, 0.05] : [0, 0, 0];
-    S.setLamp(n, c, linked() ? 2.0 : 0);
+    S.setLamp(n, c, linked() ? 2.0 * awake() : 0);
   });
 }
 function updateHaze() {
@@ -673,6 +685,7 @@ window.__km = {
     const pin = () => { M.s = clamp(u, 0, 1) * journey.total; M.v = 0; M.place = u >= 1 ? 'rgb' : 'fanlar'; };
     pin();
     if (opts.introT != null) M.introT = opts.introT; else M.introT = 99;
+    M.held = false;
     // let the smoothed colours, rotors and levers settle (seconds of simulated time, the camera held in place)
     for (let i = 0, n = Math.round((opts.settle || 0) / 0.05); i < n; i++) { step(0.05); pin(); }
     step(opts.dt || 1 / 60);
@@ -686,11 +699,12 @@ window.__km = {
 const T_START = params.has('t0') ? +params.get('t0') : performance.timeOrigin;
 const sinceStart = t => Math.round(performance.timeOrigin + t - T_START);
 function reportOpening(marks) {
-  const L = S.load, at = v => sinceStart(L.t0 + v);
+  const L = S.load, at = v => sinceStart(L.t0 + v), A = window.KM_ACILIS && KM_ACILIS.marks;
   const big = Object.entries(L.files).sort((a, b) => b[1][1] - a[1][1]).slice(0, 8)
     .map(([f, [t, n]]) => f.replace(/\.bin\.z$|_2k\.png$/, '') + '=' + at(t) + '/' + Math.round(n / 1048576) + 'MB');
   const tex = Object.entries(L.files).filter(([f]) => /\.png$/.test(f)).map(([, [t]]) => t);
   send('perf:acilis ' + Object.entries(marks).map(([k, v]) => k + '=' + sinceStart(v)).join(' ') +
+       (A && A.resimler ? ' | acilis resimler=' + sinceStart(A.resimler) + ' devreler=' + A.devre.map(sinceStart).join(',') : '') +
        ' | yukleme ' + Object.entries(L.mark).map(([k, v]) => k + '=' + at(v)).join(' ') +
        ' | dosyalar ' + big.join(' ') + (tex.length ? ' son-doku=' + at(Math.max(...tex)) : '') +
        (L.firstMs != null ? ' | ilk-cizim-betik=' + Math.round(L.firstMs) + 'ms' : '') +
@@ -748,7 +762,16 @@ function reportOpening(marks) {
     marks.gorundu = performance.now();
     // the loading screen opens onto the scene; the scene's own opening (the shaft's strike) starts with it
     M.introT = 0;
-    if (window.KM_ACILIS) KM_ACILIS.end();
+    M.held = false;
+    if (params.has('ilk')) {
+      // #ilk: the scene's first frame, held with no loading screen over it (araclar/acilis_kareler.py makes the loading
+      // screen's pictures from it); with devir=kirp the screen's last picture blinks over the held frame, and whatever
+      // differs between them jumps out
+      cancelAnimationFrame(raf); raf = -1;
+      if (window.KM_ACILIS) params.get('devir') === 'kirp' ? KM_ACILIS.end() : KM_ACILIS.skip();
+      window.__km.ilk = true;
+    }
+    else if (window.KM_ACILIS) KM_ACILIS.end();
     reportOpening(marks);
   }
 })();
