@@ -3,9 +3,10 @@
 # monitor with ffmpeg ddagrab from before the window appears (so the opening is on the video), drives it by keyboard
 # (Tab = journey, Left/Right = which fan lever, Enter = pull it), takes PrintWindow screenshots, toggles the real fans
 # and puts them back, holds a hot preview temperature on the real lights and clears it, then closes the window and
-# writes the frame pacing the page logged plus the freezes visible on the video.
+# writes the frame pacing the page logged plus the freezes visible on the video. -Bolum tur walks Phase 2's whole loop
+# (araclar/salon_tur.js over CDP: the window starts with a remote-debugging port for that run only).
 #
-#   powershell -File araclar\salon-denetim.ps1 [-Bolum acilis|yolculuk|fanlar|sicaklik|hepsi] [-Kaynak <klasör>]
+#   powershell -File araclar\salon-denetim.ps1 [-Bolum acilis|yolculuk|yuruyus|tur|fanlar|sicaklik|hepsi] [-Kaynak <klasör>]
 #              [-Sicaklik 72] [-Ekran 0] [-KayitYok]
 #
 #   -Kaynak   bin\Release of this repository (default) or the installed folder (C:\Program Files\KontrolMerkezi)
@@ -28,7 +29,7 @@
 # the real devices, the GPU's light included) and the RGB on/off state are restored in finally too. The service is
 # never stopped or restarted.
 param(
-    [ValidateSet("acilis", "yolculuk", "yuruyus", "fanlar", "sicaklik", "hepsi")][string]$Bolum = "hepsi",
+    [ValidateSet("acilis", "yolculuk", "yuruyus", "tur", "fanlar", "sicaklik", "hepsi")][string]$Bolum = "hepsi",
     [string]$Kaynak = "",
     [double]$Sicaklik = 72,
     [int]$Ekran = 0,
@@ -334,7 +335,10 @@ try {
         Olay "kayıt başladı"
         Bekle 1
     }
+    # the tour drives walk mode from outside over CDP (araclar/salon_tur.py); the window's own browser argument kept
+    if ($Bolum -eq "tur") { $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--autoplay-policy=no-user-gesture-required --remote-debugging-port=9229" }
     $p = Start-Process $exe -PassThru
+    if ($Bolum -eq "tur") { Remove-Item Env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS }
     $pencereZaman = Get-Date
     Olay "pencere başlatıldı" -Kare
     for ($i = 0; $i -lt 100 -and $script:h -eq [IntPtr]::Zero; $i++) { Bekle 0.1; $p.Refresh(); $script:h = $p.MainWindowHandle }
@@ -414,6 +418,18 @@ try {
         $e = Kare "yuruyus-cikis"
         if ($p.HasExited) { Bulgu "Escape pencereyi kapattı" } else { Olay "Escape sonrası pencere açık" }
         Olay ("yürüyüş: çıkışta ilk görünümden fark {0}" -f [Dn]::Diff($once, $e).ToString("0.0", $inv))
+    }
+
+    # ---------------------------------------------------------- Phase 2's whole loop, walked by script (salon_tur.js)
+    if ($Bolum -eq "tur") {
+        Olay "bölüm: tur (arch, chamber, passage, stair, hatch, roof, fall, back)" -Kare
+        $script:imlec = $null                 # the page is driven from outside; no desk check during the tour
+        $turLog = Join-Path $cikti "tur.txt"
+        $tp = Start-Process python -ArgumentList "araclar\salon_tur.py --cdp 9229 --out `"$cikti`"" -WorkingDirectory $kok -NoNewWindow -PassThru -RedirectStandardOutput $turLog -RedirectStandardError (Join-Path $cikti "tur-hata.txt")
+        while (-not $tp.HasExited) { Start-Sleep -Milliseconds 500; if ($p.HasExited) { Bulgu "pencere tur sırasında kapandı"; break } }
+        Olay "tur bitti" -Kare
+        Get-Content $turLog | ForEach-Object { Olay "tur: $_" }
+        Bekle 2
     }
 
     # ---------------------------------------------------------- the fans, both states, through the window's levers
