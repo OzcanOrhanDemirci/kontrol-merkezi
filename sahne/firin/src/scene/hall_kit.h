@@ -87,9 +87,10 @@ enum MatId : int {
     M_DIS_KOYU,      // dis_koyu: steel outside (the hatch, its curb, the roof lamp's louvres and frame, the mast)
     M_DIS_ISIK,      // dis_isik: the roof lamp's faint roof-side glow (emissive, group 0)
     M_DIS_FENER,     // dis_fener: the mast lamp, the one steady lamp each facility shows (emissive, group 0)
+    M_DIS_CAM,       // dis_cam: the dark glazing of the window bands under the trays (no texture set)
     M_COUNT
 };
-constexpr int M_DIS_FIRST = M_DIS_ZEMIN, M_DIS_END = M_DIS_FENER + 1;   // the exterior's materials: [first, end)
+constexpr int M_DIS_FIRST = M_DIS_ZEMIN, M_DIS_END = M_DIS_CAM + 1;   // the exterior's materials: [first, end)
 extern const char* const kMatNames[M_COUNT];
 
 // fills s.mats from sahne/varlik/varlik.json (the asset step's manifest); constants where an entry is missing

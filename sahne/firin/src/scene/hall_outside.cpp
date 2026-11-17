@@ -1,11 +1,22 @@
 // Phase 2, the outside (docs/SALON.md "The way up"): the hall is not underground. It is inside a raised concrete block
-// (x +-48, y -4..35, z -350..8) standing on eight round columns that descend 600 m into the fog, like an offshore
-// platform's legs; its roof is a bare walkable deck, no parapet: from it one can jump in any direction. On the deck,
+// (x +-48, y -4..35, z -350..8) held up by eight cores that run 600 m down into the fog, like an offshore platform's
+// legs; its roof is a bare walkable deck, no parapet: from it one can jump in any direction. On the deck,
 // exactly over the gallery's shaft, the lamp that lights the hall's grate: the shaft's emitter (hall_gallery.cpp, the
 // "daylight") seen from its other side, a 10 x 10 m pit of deep steel louvres sunk in the deck, glowing faintly in the
 // same group (0): the daylight inside is fake, and from up here it gives itself away. Behind the hatch a tall thin mast
 // with one dim steady lamp, the facility's one light seen from afar. The window instances all of it as the facility
 // in the void: only the dis_* materials are used here (and nowhere else), so the exterior is its own draw ranges.
+//
+// The massing (11-17, after Özcan's walk: "dikdörtgen çok düz"): brutalist concrete in the manner of the National
+// Theatre and Boston City Hall, read by its silhouette and by light and shadow on its masses, not by detail. The block
+// is wrapped in stacked horizontal trays, each cantilevering further out the higher it is (the deck's tray widest, so
+// one jumping from its edge falls clear of everything below), each with a board-marked fascia, a chamfered underside
+// and a band of dark glazing in the shadow under it; under the block a heavy base whose chamfered underside runs in
+// towards the legs. The legs are eight cores of one chamfered square section, the same from their feet in the fog to
+// their tops: on the long sides they stand proud of every tray and run up through them, the four at the ends rising
+// above the deck as towers, the two in the middle of each side ending flush with it (the deck carried on them). In
+// this light (the fog's, brighter from above) a face reads by where it looks: tray tops light, fascias and cores mid,
+// chamfers and undersides dark, the glazing darker still.
 #include "scene/hall_kit.h"
 
 #include <algorithm>
@@ -23,10 +34,56 @@ const float3 X = {1, 0, 0}, Y = {0, 1, 0}, Z = {0, 0, 1};
 constexpr float kLampX = 5.0f, kLampZ0 = -26.0f, kLampZ1 = -36.0f, kLampY = 33.5f, kRim = 0.2f;
 // the mast behind the hatch
 constexpr float kMastX = 2.6f, kMastZ = -348.0f, kMastH = 18.0f;
-// the columns
-constexpr float kLegR = 6.0f, kCapR = 8.5f, kLegBottom = -604.0f;
-const float kLegX[2] = {-30.0f, 30.0f};
+
+// ---- the massing. Offsets are outward from the block's outline (x +-48, z 8..-350), heights are y.
+// the deck's tray: its fascia at offset 10 from the deck down to kT1F, a chamfer in to (kT1C, kT1Y), its underside
+constexpr float kDeckOff = 10.0f, kT1F = 28.0f, kT1C = 6.0f, kT1Y = 24.0f;
+constexpr float kDeckW = kBlockHW + kDeckOff, kDeckZ0 = kBlockZ0 + kDeckOff, kDeckZ1 = kBlockZ1 - kDeckOff;
+// the second tray (a glazing band over and under it)
+constexpr float kT2Top = 19.0f, kT2Off = 6.0f, kT2F = 12.0f, kT2C = 4.0f, kT2Y = 10.0f;
+// the base under the block (whose floor slab ends at y -4): a ledge out to kBaseOff, its fascia down to kBaseF, a long
+// chamfer in towards the legs to its underside at kBaseY
+constexpr float kBaseOff = 4.0f, kBaseF = -12.0f, kBaseIn = -6.0f, kBaseY = -24.0f;
+// the legs: cores of one chamfered square section, x 45.5..67.5 (their inner faces in the block's wall, clear of the
+// hall's at 45), z +-13 about their lines; the ones at the ends rise above the deck, the middle ones end flush with it
+constexpr float kLegHX = 11.0f, kLegHZ = 13.0f, kLegC = 3.5f, kLegX = 56.5f, kLegBottom = -604.0f, kTowerTop = 50.0f;
 const float kLegZ[4] = {-21.0f, -121.0f, -221.0f, -321.0f};
+
+// four faces round the block's outline between (offset o0, y0) and (o1, y1), facing (outward nOut, up nUp): a ring of
+// a tray's chamfer, underside or top. Each face its own chart, uv in metres
+void ring(Hall& h, float o0, float y0, float o1, float y1, float nOut, float nUp, int mat, float maxEdge = 12.0f) {
+    auto P = [&](int side, float o, float y, bool end) {   // side 0 +x, 1 -x, 2 front (+z), 3 back (-z)
+        const float x = kBlockHW + o, z0 = kBlockZ0 + o, z1 = kBlockZ1 - o;
+        switch (side) {
+            case 0: return v3(x, y, end ? z1 : z0);
+            case 1: return v3(-x, y, end ? z0 : z1);
+            case 2: return v3(end ? x : -x, y, z0);
+            default: return v3(end ? -x : x, y, z1);
+        }
+    };
+    const float3 n[4] = {v3(nOut, nUp, 0), v3(-nOut, nUp, 0), v3(0, nUp, nOut), v3(0, nUp, -nOut)};
+    for (int s = 0; s < 4; ++s) h.patch(P(s, o0, y0, false), P(s, o0, y0, true), P(s, o1, y1, false), P(s, o1, y1, true), normalize(n[s]), mat, maxEdge);
+}
+
+// four vertical cast faces round the outline at offset o from y0 to y1, in the walls' lifts (3.25 m from the block's
+// underside: one joint line runs round the whole building, trays and walls)
+void band(Hall& h, float o, float y0, float y1, int mat) {
+    Formwork f;
+    f.pu = 0.0f;
+    f.pv = 3.25f;
+    f.ov = kBlockY0;
+    f.depth = 0.05f;
+    f.halfWidth = 0.07f;
+    const float x = kBlockHW + o, z0 = kBlockZ0 + o, z1 = kBlockZ1 - o;
+    if (mat != M_DIS_CAM) {
+        h.formworkFace(axes(v3(x, 0, 0), v3(0, 0, -1), Y, X), -z0, -z1, y0, y1, f, mat, 12.0f);
+        h.formworkFace(axes(v3(-x, 0, 0), Z, Y, v3(-1, 0, 0)), z1, z0, y0, y1, f, mat, 12.0f);
+        h.formworkFace(axes(v3(0, 0, z0), X, Y, Z), -x, x, y0, y1, f, mat, 12.0f);
+        h.formworkFace(axes(v3(0, 0, z1), v3(-1, 0, 0), Y, v3(0, 0, -1)), -x, x, y0, y1, f, mat, 12.0f);
+    } else {
+        ring(h, o, y0, o, y1, 1.0f, 0.0f, mat, 24.0f);
+    }
+}
 
 // a rectangle of the deck split into tiles of at most 12 m, each its own light map chart (the density follows the
 // distance to the hatch and the lamp tile by tile)
@@ -43,65 +100,114 @@ void deck(Hall& h, float x0, float x1, float z0, float z1) {
         }
 }
 
+bool tower(int j) { return j == 0 || j == 3; }
+
 void roofDeck(Hall& h) {
-    const float W = kBlockHW;
+    const float W = kDeckW;
     const float lx = kLampX + kRim, lz0 = kLampZ0 + kRim, lz1 = kLampZ1 - kRim;                        // the lamp's pit
     const float hx = kStairHW + kCurbT, hz0 = kHatchZ0 + kCurbT, hz1 = kHatchZ1 - kCurbT;               // the hatch's curb
-    deck(h, -W, W, kBlockZ0, lz0);
+    deck(h, -W, W, kDeckZ0, lz0);
     deck(h, -W, -lx, lz0, lz1);
     deck(h, lx, W, lz0, lz1);
     deck(h, -W, W, lz1, hz0);
     deck(h, -W, -hx, hz0, hz1);
     deck(h, hx, W, hz0, hz1);
-    deck(h, -W, W, hz1, kBlockZ1);
+    deck(h, -W, W, hz1, kDeckZ1);
+    // over the middle cores the deck runs out onto their tops (they stand 4 m proud of its fascia), their chamfers too
+    for (int j = 0; j < 4; ++j) {
+        if (tower(j)) continue;
+        for (int s : {-1, 1}) {
+            const float zc = kLegZ[j], xa = s * W, xb = s * (kLegX + kLegHX - kLegC), xc = s * (kLegX + kLegHX);
+            const size_t vm = h.vmark();
+            h.patch(v3(xa, kRoof, zc + kLegHZ), v3(xb, kRoof, zc + kLegHZ), v3(xa, kRoof, zc - kLegHZ), v3(xb, kRoof, zc - kLegHZ), Y, M_DIS_ZEMIN, 12.0f);
+            h.patch(v3(xb, kRoof, zc + kLegHZ), v3(xc, kRoof, zc + kLegHZ - kLegC), v3(xb, kRoof, zc - kLegHZ), v3(xc, kRoof, zc - kLegHZ + kLegC), Y,
+                    M_DIS_ZEMIN, 12.0f);
+            for (size_t k = vm; k < h.s.mesh.v.size(); ++k) h.s.mesh.v[k].uv = make_float2(h.s.mesh.v[k].p.x, -h.s.mesh.v[k].p.z);
+        }
+    }
 }
 
+// a tray round the block: its top from the wall out to offset `off` at yTop (none for the deck's: the deck is its top),
+// its fascia down to yF, a chamfer in and down to (oC, yC), its underside back to the wall (none for the base's)
+void tray(Hall& h, float yTop, float off, float yF, float oC, float yC, bool top, bool soffit) {
+    if (top) ring(h, 0.0f, yTop, off, yTop, 0.0f, 1.0f, M_DIS_DUVAR);
+    band(h, off, yF, yTop, M_DIS_DUVAR);
+    ring(h, off, yF, oC, yC, yF - yC, oC - off, M_DIS_DUVAR, 24.0f);
+    if (soffit) ring(h, oC, yC, 0.0f, yC, 0.0f, -1.0f, M_DIS_DUVAR);
+}
+
+// a band of dark glazing in a tray's shadow, the wall behind it (what shows where the far detail has no glass)
+void glazing(Hall& h, float y0, float y1) {
+    band(h, 0.0f, y0, y1, M_DIS_DUVAR);
+    band(h, 0.12f, y0, y1, M_DIS_CAM);
+}
+
+// the trays, the walls between them, the base: the block's whole outside but its legs
 void shell(Hall& h) {
-    // the outer walls: cast in lifts of 3.25 m (twelve from the underside to the deck), the joints as grooves
-    Formwork f;
-    f.pu = 0.0f;
-    f.pv = 3.25f;
-    f.ov = kBlockY0;
-    f.depth = 0.05f;
-    f.halfWidth = 0.07f;
-    const float W = kBlockHW;
-    for (int s : {-1, 1}) {
-        const float3 n = v3(float(s), 0, 0);
-        const Xform t = axes(v3(s * W, 0, 0), cross(Y, n), Y, n);   // u along -z on the right, +z on the left
-        if (s > 0) h.formworkFace(t, -kBlockZ0, -kBlockZ1, kBlockY0, kRoof, f, M_DIS_DUVAR, 12.0f);
-        else h.formworkFace(t, kBlockZ1, kBlockZ0, kBlockY0, kRoof, f, M_DIS_DUVAR, 12.0f);
+    tray(h, kRoof, kDeckOff, kT1F, kT1C, kT1Y, false, true);   // the deck's tray
+    glazing(h, kT2Top, kT1Y);
+    tray(h, kT2Top, kT2Off, kT2F, kT2C, kT2Y, true, true);     // the second, its top a ledge under the deck's reach
+    glazing(h, kT2Y - 4.0f, kT2Y);
+    band(h, 0.0f, kBlockY0, kT2Y - 4.0f, M_DIS_DUVAR);          // the block's plain wall down to its slab
+    // the base: a ledge, its fascia, the long chamfer in towards the legs, the underside seen falling past it
+    tray(h, kBlockY0, kBaseOff, kBaseF, kBaseIn, kBaseY, true, false);
+    {
+        const float x = kBlockHW + kBaseIn, z0 = kBlockZ0 + kBaseIn, z1 = kBlockZ1 - kBaseIn;
+        h.patch(v3(-x, kBaseY, z0), v3(x, kBaseY, z0), v3(-x, kBaseY, z1), v3(x, kBaseY, z1), -Y, M_DIS_DUVAR, 24.0f);
+        // under it the structure it is: deep chamfered girders across between each pair of legs, two along, a coffered
+        // underside seen falling past (each 1 m into the base)
+        for (float z : kLegZ) h.bar(v3(-(kLegX - kLegHX + 1.0f), kBaseY - 4.0f, z), v3(kLegX - kLegHX + 1.0f, kBaseY - 4.0f, z), 8.0f, 10.0f, Y, M_DIS_DUVAR);
+        for (int s : {-1, 1}) h.bar(v3(s * 24.0f, kBaseY - 3.0f, z0), v3(s * 24.0f, kBaseY - 3.0f, z1), 6.0f, 8.0f, Y, M_DIS_DUVAR);
     }
-    h.formworkFace(axes(v3(0, 0, kBlockZ0), X, Y, Z), -W, W, kBlockY0, kRoof, f, M_DIS_DUVAR, 12.0f);
-    h.formworkFace(axes(v3(0, 0, kBlockZ1), v3(-1, 0, 0), Y, v3(0, 0, -1)), -W, W, kBlockY0, kRoof, f, M_DIS_DUVAR, 12.0f);
-    // the underside, seen falling past it
-    h.patch(v3(-W, kBlockY0, kBlockZ0), v3(W, kBlockY0, kBlockZ0), v3(-W, kBlockY0, kBlockZ1), v3(W, kBlockY0, kBlockZ1), -Y, M_DIS_DUVAR, 24.0f);
-    // a drip edge round the deck: a shallow steel angle on the walls' tops (the roof's only edge, ankle high at most)
+    // a drip edge round the deck: a shallow steel angle on the fascia's top (the roof's only edge, ankle high at most);
+    // on the long sides it stops at the cores (the towers rise there, the middle cores carry the deck out)
+    const float W = kDeckW;
     for (int s : {-1, 1}) {
-        h.box(v3(s * (W - 0.03f), kRoof + 0.03f, 0.5f * (kBlockZ0 + kBlockZ1)), v3(0.03f, 0.03f, 0.5f * (kBlockZ0 - kBlockZ1)), 0.008f, M_DIS_KOYU, 24.0f);
-        h.box(v3(0, kRoof + 0.03f, s > 0 ? kBlockZ0 - 0.03f : kBlockZ1 + 0.03f), v3(W - 0.06f, 0.03f, 0.03f), 0.008f, M_DIS_KOYU, 24.0f);
+        h.box(v3(0, kRoof + 0.03f, s > 0 ? kDeckZ0 - 0.03f : kDeckZ1 + 0.03f), v3(W - 0.06f, 0.03f, 0.03f), 0.008f, M_DIS_KOYU, 24.0f);
+        float z = kDeckZ0 - 0.06f;
+        for (int j = 0; j <= 4; ++j) {
+            const float e = j < 4 ? kLegZ[j] + kLegHZ : kDeckZ1 + 0.06f;
+            h.box(v3(s * (W - 0.03f), kRoof + 0.03f, 0.5f * (z + e)), v3(0.03f, 0.03f, 0.5f * (z - e)), 0.008f, M_DIS_KOYU, 24.0f);
+            if (j < 4) z = kLegZ[j] - kLegHZ;
+        }
     }
 }
 
-// a column: round, 12 m across, flaring into a capital 17 m across under the block; open at its foot, which no one sees
-void column(Hall& h, float x, float z) {
-    struct Row { float r, y; };
-    const std::vector<Row> rows = {{kLegR, kLegBottom}, {kLegR, -200.0f}, {kLegR, -40.0f}, {kLegR, -18.0f}, {kLegR + 0.2f, -15.5f},
-                                   {kCapR - 0.9f, -8.0f}, {kCapR, kBlockY0 - 0.6f}, {kCapR, kBlockY0 + 0.05f}};
-    const int nu = 48, nv = int(rows.size()) - 1;
-    std::vector<float> sv(rows.size(), 0.0f);
-    for (size_t j = 1; j < rows.size(); ++j) sv[j] = sv[j - 1] + std::hypot(rows[j].r - rows[j - 1].r, rows[j].y - rows[j - 1].y);
-    h.at(Xform::at(v3(x, 0, z)), M_DIS_KOLON, 1e3f).grid(nu, nv, [&](int i, int j) {
-        const float a = -2.0f * kPi * float(i % nu) / nu, ca = std::cos(a), sa = std::sin(a);   // clockwise from above: faces out
-        const Row& q = rows[j];
-        const Row& p = rows[j == 0 ? 0 : j - 1];
-        const Row& nx = rows[std::min(nv, j + 1)];
-        const float dr = nx.r - p.r, dy = nx.y - p.y, l = std::hypot(dr, dy);
-        Kit::GridPt g;
-        g.p = v3(q.r * ca, q.y, q.r * sa);
-        g.n = normalize(v3(ca * dy / l, -dr / l, sa * dy / l));
-        g.s = make_float2(2.0f * kPi * kLegR * float(i) / nu, sv[j]);
-        return g;
-    });
+// a leg: a core of one chamfered square section from its foot in the fog (y kLegBottom, which the window stretches
+// on down) to its top. One face per side of the octagon, one chart; uv0 runs round the section and up the world's y,
+// so a stretched foot keeps its texture's scale
+void leg(Hall& h, float x, float z, float top, bool cap) {
+    const float a = kLegHX, b = kLegHZ, c = kLegC;
+    const float2 o[8] = {{a, b - c}, {a, -b + c}, {a - c, -b}, {-a + c, -b}, {-a, -b + c}, {-a, b - c}, {-a + c, b}, {a - c, b}};
+    const size_t vm = h.vmark();
+    const uint32_t cm = h.cmark();
+    float u = 0.0f;
+    for (int i = 0; i < 8; ++i) {
+        const float2 p = o[i], q = o[(i + 1) % 8];
+        const float l = std::hypot(q.x - p.x, q.y - p.y);
+        const float3 n = normalize(v3(-(q.y - p.y), 0, q.x - p.x));   // outward
+        const size_t v0 = h.vmark();
+        h.patch(v3(x + p.x, kLegBottom, z + p.y), v3(x + q.x, kLegBottom, z + q.y), v3(x + p.x, top, z + p.y), v3(x + q.x, top, z + q.y), n,
+                M_DIS_KOLON, 1e4f);
+        for (size_t k = v0; k < h.s.mesh.v.size(); ++k) {
+            dz::Vtx& v = h.s.mesh.v[k];
+            const float t = std::hypot(v.p.x - (x + p.x), v.p.z - (z + p.y)) / l;
+            v.uv = make_float2(u + t * l, v.p.y);
+        }
+        u += l + 0.5f;
+    }
+    if (cap) {
+        h.patch(v3(x - a, top, z + b - c), v3(x + a, top, z + b - c), v3(x - a, top, z - b + c), v3(x + a, top, z - b + c), Y, M_DIS_KOLON, 1e4f);
+        for (int s : {-1, 1})
+            h.patch(v3(x - a, top, z + s * (b - c)), v3(x + a, top, z + s * (b - c)), v3(x - a + c, top, z + s * b), v3(x + a - c, top, z + s * b), Y,
+                    M_DIS_KOLON, 1e4f);
+        // the caps' metres lie beside the faces' (one chart)
+        for (size_t k = h.vmark() - 12; k < h.s.mesh.v.size(); ++k) {
+            dz::Vtx& v = h.s.mesh.v[k];
+            v.uv = make_float2(u + 1.0f + (v.p.x - x + a), kLegBottom - 1.0f - 2.0f * b + (v.p.z - z + b));
+        }
+    }
+    h.oneChart(vm, cm);
 }
 
 // the lamp over the shaft as seen from the roof: a pit as large as the well's top, lined in steel, its floor the faint
@@ -212,7 +318,7 @@ void buildOutside(Hall& h) {
     roofDeck(h);
     roof.end = h.cmark();
     h.s.zones.push_back(roof);
-    // far: the walls, the underside, the columns: no light reaches them but the faint spill of the roof's lamps, so
+    // far: the trays, the walls, the base, the legs: no light reaches them but the faint spill of the roof's lamps, so
     // 2.5 m texels (four times the coarsest)
     DensityZone far;
     far.first = h.cmark();
@@ -220,19 +326,26 @@ void buildOutside(Hall& h) {
     far.dMin = 1e4f;
     far.texelMul = 4.0f;
     shell(h);
-    for (float x : kLegX)
-        for (float z : kLegZ) column(h, x, z);
+    int n = 0;
+    for (int s : {-1, 1})
+        for (int j = 0; j < 4; ++j) {
+            const float x = s * kLegX, z = kLegZ[j], top = tower(j) ? kTowerTop : kRoof;
+            leg(h, x, z, top, tower(j));
+            // walk mode collides with the window's continuation of the leg below kLegBottom: the section's box
+            h.anchorBox("dis_kolon_" + std::to_string(n++), "nokta", v3(x - kLegHX, kLegBottom, z - kLegHZ), v3(x + kLegHX, top, z + kLegHZ));
+        }
     far.end = h.cmark();
     h.s.zones.push_back(far);
     const float e = 1.6f;
     h.s.walk.push_back({v3(0, kRoof + e, kTopTread - 1.0f)});                       // out of the hatch
     h.s.walk.push_back({v3(0, kRoof + e, 0.5f * (kLampZ0 + kLampZ1))});              // by the lamp
 
-    // anchors for the window's void: the facility's bounds, the block, the deck one walks and lands on, the lamps
+    // anchors for the window's void: the facility's bounds (legs, towers and mast included), the block that holds the
+    // hall, the deck one walks and lands on, the lamps
     const float W = kBlockHW;
-    h.anchorBox("dis_sinir", "nokta", v3(-W, kLegBottom, kBlockZ1), v3(W, kRoof + kMastH + 0.5f, kBlockZ0));
+    h.anchorBox("dis_sinir", "nokta", v3(-(kLegX + kLegHX), kLegBottom, kDeckZ1), v3(kLegX + kLegHX, kRoof + kMastH + 0.5f, kDeckZ0));
     h.anchorBox("dis_blok", "nokta", v3(-W, kBlockY0, kBlockZ1), v3(W, kRoof, kBlockZ0));
-    h.anchorBox("dis_cati", "nokta", v3(-W, kRoof, kBlockZ1), v3(W, kRoof, kBlockZ0));
+    h.anchorBox("dis_cati", "nokta", v3(-kDeckW, kRoof, kDeckZ1), v3(kDeckW, kRoof, kDeckZ0));
     h.anchorBox("dis_kuyu_lamba", "nokta", v3(-kLampX - kRim, kLampY, kLampZ1 - kRim), v3(kLampX + kRim, kRoof + 0.06f, kLampZ0 + kRim));
 }
 

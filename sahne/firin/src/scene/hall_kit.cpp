@@ -14,7 +14,7 @@ const char* const kMatNames[M_COUNT] = {
     "beton_zemin", "beton_duvar", "beton_kolon", "beton_tavan", "beton_anit", "celik_boyali_kasa", "celik_boyali_gpu",
     "celik_kanat", "celik_pasli", "celik_sac", "metal_koyu", "kablo", "cam_lamba", "kemer_isik", "kuyu_isik", "boya",
     "pano_yuz", "ekran_yuz", "tabela_yuz", "mercek", "cekirdek_isik", "merdiven_isik", "dis_zemin", "dis_duvar",
-    "dis_kolon", "dis_koyu", "dis_isik", "dis_fener"};
+    "dis_kolon", "dis_koyu", "dis_isik", "dis_fener", "dis_cam"};
 
 namespace {
 // the exterior's rows are the hall's own texture sets under their own names: the asset step's entry they read
@@ -159,6 +159,7 @@ const Fallback kFallback[M_COUNT] = {
     {{0.032f, 0.024f, 0.017f}, 0.65f, 0.9f, 2.0f}, // dis_koyu (metal_koyu's)
     {{0.80f, 0.80f, 0.80f}, 0.9f, 0.0f, 1.0f},     // dis_isik
     {{0.80f, 0.78f, 0.72f}, 0.2f, 0.0f, 1.0f},     // dis_fener
+    {{0.012f, 0.013f, 0.015f}, 0.12f, 0.0f, 1.0f}, // dis_cam: dark glass, a smooth dielectric (it mirrors the fog)
 };
 
 }   // namespace
