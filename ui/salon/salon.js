@@ -1465,7 +1465,8 @@ async function create(canvas, options = {}) {
     list: [],                                   // [{ o: [x, y, z], yaw, col: [r, g, b] (full colour, 0..1), home }]
     lid: 0,                                     // our hatch's lid, radians about its axis (+: open)
     kOthers: 30,                                // the other facilities' group-0 intensity (their lamps are steady)
-    fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
+    fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90,
+           calm: [20, 100, 0.9] },             // dis.frag uTexCalm: far concrete gives way to its mean, from..to (m), at most
     // the cloud band (band.glsl): its centre y in this frame (disari.js: it moves with the wrap and the home), half
     // thickness, period, extinction at its middle (1/m); its light is the fog's own
     band: { y: -440, hw: 75, D: 860, sigma: 0 },
@@ -1497,8 +1498,9 @@ async function create(canvas, options = {}) {
   const bCentre = boundsBox ? scl(add(boundsBox[0], boundsBox[1]), 0.5) : [0, 0, 0];
   // + 300 m: the columns run on below the bounds into the band (dis.vert)
   const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) + 300 : 1;
-  // the columns' shaft in the mesh (sahne/firin hall_outside.cpp: a constant section from KOLON_Y[0] to its bottom ring)
-  const KOLON_Y = [-40, -604];
+  // the columns' shaft in the mesh (sahne/firin hall_outside.cpp: a constant section from KOLON_Y[0] to its bottom ring;
+  // no dis_kolon vertex lies between the two: the legs' haunches end at y -52)
+  const KOLON_Y = [-100, -604];
   const bandU = () => { const b = VOID.band; return [b.y, b.hw, b.D, b.sigma]; };
   // the detail by distance: near (every range), mid (no lamp globe: its sprite is it; no mast and dark steel: under
   // a pixel, the mast is drawn as a line instead), far (walls, columns, deck)
@@ -1645,6 +1647,7 @@ async function create(canvas, options = {}) {
       gl.uniform1f(u.uVolLit, 0);
       gl.uniform3fv(u.uFogUp, VOID.fog.up); gl.uniform3fv(u.uFogDown, VOID.fog.down);
       gl.uniform1f(u.uAmb, VOID.fog.amb);
+      gl.uniform3fv(u.uTexCalm, VOID.fog.calm);
     }
     gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
     gl.uniform4fv(u.uBand, bandU());

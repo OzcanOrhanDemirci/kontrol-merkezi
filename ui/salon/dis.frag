@@ -32,6 +32,7 @@ uniform float uCubic;
 uniform vec3 uEyeShade;
 uniform vec3 uFogUp, uFogDown; // the void's light: the fog's radiance looking straight up and straight down
 uniform float uAmb;            // how much of it reaches the surfaces
+uniform vec3 uTexCalm;         // the far concrete's calm: from and to these distances (m), its most (0..1)
 
 vec4 cubicLayer(sampler2DArray t, vec2 uv, float layer) {
     vec2 sz = vec2(textureSize(t, 0).xy);
@@ -70,12 +71,17 @@ void main() {
     s.v = V;
     if (A.y >= 0.0) {
         vec3 tc = vec3(vec2(vUv.x, -vUv.y) / A.x, A.y);
-        s.albedo *= texture(uAlb, tc).rgb;
-        vec3 arm = texture(uArm, tc).rgb;
+        // far concrete is calm: the legs' board marks (bands 0.4 m wide) are a few pixels at 100-300 m, where they read
+        // as corrugated sheet and crawl as the view turns (a fine pattern in motion, no blur). Between uTexCalm.x and
+        // uTexCalm.y metres the texture gives way, by uTexCalm.z at most, to its own mean (its last mip) and the normal
+        // to the face's: near, every mark; far, a face of one tone, read by where it looks
+        float calm = uTexCalm.z * smoothstep(uTexCalm.x, uTexCalm.y, length(uEyeShade - vP));
+        s.albedo *= mix(texture(uAlb, tc).rgb, textureLod(uAlb, tc, 16.0).rgb, calm);
+        vec3 arm = mix(texture(uArm, tc).rgb, textureLod(uArm, tc, 16.0).rgb, calm);
         s.ao = arm.r;
         s.rough = arm.g;
         s.metal = arm.b;
-        vec3 tn = texture(uNrm, tc).xyz * 2.0 - 1.0;
+        vec3 tn = mix(texture(uNrm, tc).xyz * 2.0 - 1.0, vec3(0.0, 0.0, 1.0), calm);
         vec3 T = vT.xyz - Ng * dot(Ng, vT.xyz);
         if (dot(T, T) > 1e-10) {
             T = normalize(T);

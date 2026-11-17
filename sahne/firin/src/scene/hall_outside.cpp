@@ -14,9 +14,18 @@
 // and a band of dark glazing in the shadow under it; under the block a heavy base whose chamfered underside runs in
 // towards the legs. The legs are eight cores of one chamfered square section, the same from their feet in the fog to
 // their tops: on the long sides they stand proud of every tray and run up through them, the four at the ends rising
-// above the deck as towers, the two in the middle of each side ending flush with it (the deck carried on them). In
-// this light (the fog's, brighter from above) a face reads by where it looks: tray tops light, fascias and cores mid,
-// chamfers and undersides dark, the glazing darker still.
+// above the deck as towers (the front pair higher than the back), the two in the middle of each side ending flush with
+// it (the deck carried on them). In this light (the fog's, brighter from above) a face reads by where it looks: tray
+// tops light, fascias and cores mid, chamfers and undersides dark, the glazing darker still.
+//
+// The junctions (11-17, second pass: the cores passed through the trays as separate prisms): each core is a trunk
+// that branches into the mass. Under the base it splays: a haunch along the building on each flank and a knee inwards
+// under the cross girder, all leaving the trunk at one height (kHaunchY), so that from the side the mass's underside
+// comes down to each leg in a rake and from below each leg is a splayed capital. Above the haunches the trunk has
+// shoulders: plain walls in the legs' own concrete, a little proud of the trays' fascias but inside the deck's
+// reach, that stop the trays and the glazing short of the trunk: full height beside the towers and out to the
+// building's corners (the ends are solid masses raking up from the end legs), lower beside the middle cores (the upper
+// glazing runs over them). So the long side is trunks, shoulders and three bays of trays, not one extrusion.
 #include "scene/hall_kit.h"
 
 #include <algorithm>
@@ -46,8 +55,16 @@ constexpr float kT2Top = 19.0f, kT2Off = 6.0f, kT2F = 12.0f, kT2C = 4.0f, kT2Y =
 constexpr float kBaseOff = 4.0f, kBaseF = -12.0f, kBaseIn = -6.0f, kBaseY = -24.0f;
 // the legs: cores of one chamfered square section, x 45.5..67.5 (their inner faces in the block's wall, clear of the
 // hall's at 45), z +-13 about their lines; the ones at the ends rise above the deck, the middle ones end flush with it
-constexpr float kLegHX = 11.0f, kLegHZ = 13.0f, kLegC = 3.5f, kLegX = 56.5f, kLegBottom = -604.0f, kTowerTop = 50.0f;
+constexpr float kLegHX = 11.0f, kLegHZ = 13.0f, kLegC = 3.5f, kLegX = 56.5f, kLegBottom = -604.0f;
 const float kLegZ[4] = {-21.0f, -121.0f, -221.0f, -321.0f};
+const float kLegTop[4] = {64.0f, kRoof, kRoof, 50.0f};   // towers at the ends (the front pair the higher), flush between
+// the junctions. A shoulder: a wall beside the trunk from the legs' inner face out to offset kWingOff (proud of the
+// second tray's fascia, inside the deck's), kWing along the building from the trunk's flank (the end legs' outer ones
+// run to the corner), from its foot kWingLip under the base up into the deck's tray (kWingTop) or, beside the middle
+// cores, to a ledge over the second tray (kWingLow). The haunch under it: its underside rakes from the shoulder's
+// foot down to the trunk at kHaunchY; the knee under the cross girder does the same inwards, to the long girder
+constexpr float kWingOff = 9.5f, kWing = 16.0f, kWingTop = 28.0f, kWingLow = 20.0f, kWingLip = 3.0f, kHaunchY = -52.0f;
+constexpr float kKneeHZ = 3.5f, kKneeX = 24.0f, kKneeTop = -30.0f, kKneeFoot = -36.0f;
 
 // four faces round the block's outline between (offset o0, y0) and (o1, y1), facing (outward nOut, up nUp): a ring of
 // a tray's chamfer, underside or top. Each face its own chart, uv in metres
@@ -100,7 +117,47 @@ void deck(Hall& h, float x0, float x1, float z0, float z1) {
         }
 }
 
-bool tower(int j) { return j == 0 || j == 3; }
+bool tower(int j) { return kLegTop[j] > kRoof; }
+
+// a flat four-cornered face in the legs' concrete whose upper edge t0-t1 is level: the texture's marks run up it as
+// they do on the trunk (uv0 in metres along the upper edge and down the face)
+void face(Hall& h, float3 t0, float3 t1, float3 b0, float3 b1, float3 n) {
+    if (dot(cross(t1 - t0, b0 - t0), n) < 0) {   // patch() would swap its edges: keep the level one first
+        std::swap(t0, t1);
+        std::swap(b0, b1);
+    }
+    h.patch(t0, t1, b0, b1, n, M_DIS_KOLON, 24.0f);
+}
+
+// a leg's junction with the mass (see the constants): its two shoulders with their haunches, its knee
+void junction(Hall& h, int sx, int j) {
+    const float xi = sx * (kLegX - kLegHX), xo = sx * (kBlockHW + kWingOff), foot = kBaseY - kWingLip;
+    const float3 nx = v3(float(sx), 0, 0);
+    for (int s : {-1, 1}) {
+        const float zf = kLegZ[j] + s * kLegHZ;
+        float ze = zf + s * kWing;
+        if (j == 0 && s > 0) ze = kBlockZ0 + kWingOff;      // the corner masses
+        if (j == 3 && s < 0) ze = kBlockZ1 - kWingOff;
+        const float top = tower(j) ? kWingTop : kWingLow;
+        // the outer face: the shoulder and the haunch's side in one
+        face(h, v3(xo, top, zf), v3(xo, top, ze), v3(xo, kHaunchY, zf), v3(xo, foot, ze), nx);
+        // the inner face, where it shows under the base's chamfer
+        face(h, v3(xi, kBaseF, zf), v3(xi, kBaseF, ze), v3(xi, kHaunchY, zf), v3(xi, foot, ze), nx * -1.0f);
+        // its end, the rake under it, its top where it is a ledge
+        face(h, v3(xi, top, ze), v3(xo, top, ze), v3(xi, foot, ze), v3(xo, foot, ze), v3(0, 0, float(s)));
+        face(h, v3(xi, foot, ze), v3(xo, foot, ze), v3(xi, kHaunchY, zf), v3(xo, kHaunchY, zf),
+             normalize(v3(0, -std::fabs(ze - zf), s * (foot - kHaunchY))));
+        if (!tower(j)) face(h, v3(sx * kBlockHW, top, zf), v3(sx * kBlockHW, top, ze), v3(xo, top, zf), v3(xo, top, ze), Y);
+    }
+    // the knee: from the trunk's inner face at kHaunchY up and in under the cross girder to the long girder's line
+    const float z = kLegZ[j], xk = sx * kKneeX;
+    for (int s : {-1, 1})
+        face(h, v3(xi, kKneeTop, z + s * kKneeHZ), v3(xk, kKneeTop, z + s * kKneeHZ), v3(xi, kHaunchY, z + s * kKneeHZ),
+             v3(xk, kKneeFoot, z + s * kKneeHZ), v3(0, 0, float(s)));
+    face(h, v3(xk, kKneeFoot, z - kKneeHZ), v3(xk, kKneeFoot, z + kKneeHZ), v3(xi, kHaunchY, z - kKneeHZ), v3(xi, kHaunchY, z + kKneeHZ),
+         normalize(v3(-sx * (kKneeFoot - kHaunchY), -std::fabs(xi - xk), 0)));
+    face(h, v3(xk, kKneeTop, z - kKneeHZ), v3(xk, kKneeTop, z + kKneeHZ), v3(xk, kKneeFoot, z - kKneeHZ), v3(xk, kKneeFoot, z + kKneeHZ), nx * -1.0f);
+}
 
 void roofDeck(Hall& h) {
     const float W = kDeckW;
@@ -329,8 +386,9 @@ void buildOutside(Hall& h) {
     int n = 0;
     for (int s : {-1, 1})
         for (int j = 0; j < 4; ++j) {
-            const float x = s * kLegX, z = kLegZ[j], top = tower(j) ? kTowerTop : kRoof;
+            const float x = s * kLegX, z = kLegZ[j], top = kLegTop[j];
             leg(h, x, z, top, tower(j));
+            junction(h, s, j);
             // walk mode collides with the window's continuation of the leg below kLegBottom: the section's box
             h.anchorBox("dis_kolon_" + std::to_string(n++), "nokta", v3(x - kLegHX, kLegBottom, z - kLegHZ), v3(x + kLegHX, top, z + kLegHZ));
         }
@@ -343,7 +401,7 @@ void buildOutside(Hall& h) {
     // anchors for the window's void: the facility's bounds (legs, towers and mast included), the block that holds the
     // hall, the deck one walks and lands on, the lamps
     const float W = kBlockHW;
-    h.anchorBox("dis_sinir", "nokta", v3(-(kLegX + kLegHX), kLegBottom, kDeckZ1), v3(kLegX + kLegHX, kRoof + kMastH + 0.5f, kDeckZ0));
+    h.anchorBox("dis_sinir", "nokta", v3(-(kLegX + kLegHX), kLegBottom, kDeckZ1), v3(kLegX + kLegHX, std::max(kRoof + kMastH + 0.5f, *std::max_element(kLegTop, kLegTop + 4)), kDeckZ0));
     h.anchorBox("dis_blok", "nokta", v3(-W, kBlockY0, kBlockZ1), v3(W, kRoof, kBlockZ0));
     h.anchorBox("dis_cati", "nokta", v3(-kDeckW, kRoof, kDeckZ1), v3(kDeckW, kRoof, kDeckZ0));
     h.anchorBox("dis_kuyu_lamba", "nokta", v3(-kLampX - kRim, kLampY, kLampZ1 - kRim), v3(kLampX + kRim, kRoof + 0.06f, kLampZ0 + kRim));
