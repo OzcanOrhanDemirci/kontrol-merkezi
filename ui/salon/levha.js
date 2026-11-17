@@ -12,6 +12,9 @@
  *           UNPACK_PREMULTIPLY_ALPHA_WEBGL and blend premultiplied (rgb of uncovered texels is not kept).
  *   'levha' an opaque plate face (albedo, sRGB); lit by the scene.
  *   'ekran', 'pano' self-lit: rgb = emitted light, sRGB-encoded, <= 1, black where nothing glows.
+ *   'isik'  self-lit lettering let into a surface: light only (white = full, black = the bare surface), no
+ *           colour; the renderer multiplies it by a live colour (salon.js setLevhaGlow), so a colour change
+ *           redraws nothing.
  *
  * Data (every field optional; missing telemetry shows as dashes, never as an invented value):
  *   boya_kasa, boya_gpu, tabela_rgb, tabela_fanlar, cikis_1, cikis_2: {}  (fixed identity / navigation)
@@ -29,9 +32,9 @@
  *     colour; its hue is shown at full brightness), kapali: boolean (RGB off: dimmed, still legible) }
  *   durak_plaka_0..4: { derece: number|null, ad: string, renk: [r,g,b] LINEAR, secili: boolean }
  *   plaka_rgb: { acik: true|false|null (null = unknown, nothing marked), bosta: boolean (lights idle),
- *     beklemeDakika: number (configured idle minutes, default 15), hover: boolean }
+ *     beklemeDakika: number (configured idle minutes, default 15) }
  *   cihaz_aio, cihaz_klavye, cihaz_gpu: { durum: 'bagli' | 'bagli_degil' | 'kilitli' | 'hata',
- *     hata: string (the error text, for 'hata'), ad: string (overrides the device name) }
+ *     hata: string (the error text, for 'hata') }
  * Unknown states throw: a plate never shows a state the service did not report.
  *
  * Cost: plates and paint build their wear once per texture name (cached), boards and displays use canvas ops
@@ -66,8 +69,9 @@
   size(['cikis_1', 'cikis_2'], 1024, 512, 1024, 'ekran');             // 1 × 0.5 m lit exit sign
   size(['kilit_tasi_ekran'], 4096, 1024, 512, 'ekran');               // 8 × 2 m display in the keystone
   size([0, 1, 2, 3, 4, 5].map(i => 'durak_plaka_' + i), 1024, 512, 512, 'levha');  // 2 × 1 m engraved steel plates
-  size(['plaka_rgb'], 2048, 1024, 512, 'levha');                      // 4 × 2 m steel plate of the great switch
-  size(['cihaz_aio', 'cihaz_klavye', 'cihaz_gpu'], 2048, 512, 512, 'levha');       // 4 × 1 m nameplates
+  // the console's plates, read from the rgb eye 20.6 m away (80 screen px per metre at 2560 × 1440)
+  size(['plaka_rgb'], 2048, 1024, 2048 / 2.2, 'isik');                // 2.2 × 1.1 m, the great switch's plate
+  size(['cihaz_aio', 'cihaz_klavye', 'cihaz_gpu'], 1840, 640, 800, 'isik');        // 2.3 × 0.8 m device plates
   Object.freeze(sizes);
 
   // ---------------------------------------------------------------- basics
@@ -763,73 +767,64 @@
     holes.forEach(([x, y], i) => screw(c, x, y, 10, h32(i, 3, seed) * 3));
   }
 
-  // ---- plaka_rgb: the engraved steel plate of the great switch
+  // ---- the console's plates (plaka_rgb, cihaz_*): lettering let into the concrete and lit from within
+  /* The texture is light only: white = full, black = the bare concrete. The renderer multiplies it by the
+     temperature colour and a strength (salon.js setLevhaGlow), so neither a colour change nor the lights going
+     off redraws it. Three levels: FULL what is so now, HALF labels, FAINT the position not chosen. The sizes
+     are set by the rgb view: 80 screen px per metre, so capitals of 0.17 m and more stand 14 px and taller. */
+  const grey = v => `rgb(${enc(v)},${enc(v)},${enc(v)})`;
+  const FULL = grey(1), HALF = grey(.5), FAINT = grey(.17);
+  function litPlate(c, w, h, paint) {
+    c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+    paint(c);
+    // the light's spread in the concrete round the strokes (drawn small, blurred, laid back over)
+    const sm = mk(Math.ceil(w / 8), Math.ceil(h / 8)), s8 = ctxOf(sm);
+    s8.fillStyle = '#000'; s8.fillRect(0, 0, sm.width, sm.height);
+    s8.scale(1 / 8, 1 / 8); paint(s8);
+    const glow = halo(sm, 1, 3);
+    c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = .22;
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'low';
+    c.drawImage(glow, 0, 0, sm.width * 8, sm.height * 8); c.restore();
+  }
   function plakaRgb(c, d, name) {
-    const { w, h } = sizes[name], seed = seedOf(name);
-    const holes = holes4(w, h, 56, 16);
-    c.drawImage(once('plaka|' + name, () => surface(w, h, { paint: '#a3a5a2', under: 'steel', grime: .45, chip: 0, edge: 24, holes, brushed: true, seed })), 0, 0);
-    const wear = once('plaka-f|' + name, () => flakes(w, h, seed, .35, 12));
+    const { w, h } = sizes[name];
     const on = d.acik === true ? 0 : d.acik === false ? 1 : -1;
-    const ink = '#141414', mark = d.hover ? '#fffaf0' : '#e2ddd0';
-    c.drawImage(layer(w, h, p => {
-      p.strokeStyle = ink; p.lineWidth = 7; p.strokeRect(100, 100, w - 200, h - 200);
-      engrave(p, 'IŞIKLAR', w / 2, 270, 'KMKond', 170, ink, 'center', w - 400, 10);
-      // the two positions either side of the switch, ticks pointing in to its spindle
-      [['AÇIK', w * .25], ['KAPALI', w * .75]].forEach(([label, x], i) => {
+    let notes = [];
+    if (d.acik === true && d.bosta) {
+      const minutes = finite(d.beklemeDakika) ? d.beklemeDakika.toLocaleString('tr-TR') : '15';
+      notes = [`${minutes} DAKİKADIR KULLANILMADI`, 'KLAVYE YA DA FARE UYANDIRIR'];
+    } else if (d.acik === false) notes = ['KAPALIYKEN DE', 'RENK HESAPLANIYOR'];
+    // title and the two positions; with a note under them everything moves up to make its room
+    const y = notes.length ? 0 : 120;
+    litPlate(c, w, h, p => {
+      put(p, 'IŞIKLAR', w / 2, 236 + y, 'KMKond', 230, HALF, 'center', w - 300, 14);
+      [['AÇIK', w * .27], ['KAPALI', w * .73]].forEach(([label, x], i) => {
         const sel = on === i;
-        if (sel) { p.fillStyle = mark; p.fillRect(x - 290, 400, 580, 250); p.fillStyle = ink; p.fillRect(x - 290, 400, 580, 8); }
-        engrave(p, label, x, 590, 'KMKond', 210, ink, 'center', 520, 6);
-        p.fillStyle = ink; const tx = i ? x - 330 : x + 330;
-        p.beginPath(); p.moveTo(tx + (i ? 40 : -40), 525); p.lineTo(tx - (i ? 30 : -30), 490); p.lineTo(tx - (i ? 30 : -30), 560); p.closePath(); p.fill();
+        if (sel) { p.strokeStyle = FULL; p.lineWidth = 26; p.lineJoin = 'miter'; p.strokeRect(x - 440, 318 + y, 880, 330); }
+        put(p, label, x, 580 + y, 'KMKond', 280, sel ? FULL : on < 0 ? HALF : FAINT, 'center', 760, 8);
       });
-      if (d.acik === true && d.bosta) {
-        const minutes = finite(d.beklemeDakika) ? d.beklemeDakika.toLocaleString('tr-TR') : '15';
-        engrave(p, `${minutes} DAKİKADIR KLAVYE VE FARE KULLANILMADI`, w / 2, 730, 'KMKond', 84, ink, 'center', w - 360, 2);
-        engrave(p, 'IŞIKLAR YUMUŞAKÇA SÖNDÜ', w / 2, 820, 'KMKond', 84, ink, 'center', w - 360, 2);
-        engrave(p, 'KLAVYEYE YA DA FAREYE DOKUNUNCA YANAR', w / 2, 910, 'KMKond', 78, ink, 'center', w - 360, 2);
-      } else if (d.acik === false) {
-        engrave(p, 'IŞIKLAR KAPALIYKEN DE', w / 2, 782, 'KMKond', 100, ink, 'center', w - 360, 3);
-        engrave(p, 'RENK HESAPLANIYOR', w / 2, 886, 'KMKond', 100, ink, 'center', w - 360, 3);
-      }
-    }, wear), 0, 0);
-    holes.forEach(([x, y], i) => screw(c, x, y, 16, h32(i, 4, seed) * 3));
+      notes.forEach((s, i) => put(p, s, w / 2, 808 + i * 150, 'KMKond', 150, HALF, 'center', w - 220, 4));
+    });
   }
 
-  // ---- cihaz_*: black anodised nameplates with a state flag in a window
-  const DEVICES = { cihaz_aio: 'KASA · COOLER MASTER HALO 360', cihaz_klavye: 'KLAVYE · STEELSERIES APEX 3', cihaz_gpu: 'EKRAN KARTI · MSI RTX 4080' };
-  const FLAGS = {
-    bagli: ['BAĞLI', '#3d7a4b', '#f1efe6'], bagli_degil: ['BAĞLI DEĞİL', '#cf9b2c', '#14120e'],
-    kilitli: ['KİLİTLİ', '#7c7e80', '#121212'], hata: [null, '#9d2b22', '#f4ece4'],
+  const DEVICES = {
+    cihaz_aio: ['KASA', 'COOLER MASTER HALO 360'], cihaz_klavye: ['KLAVYE', 'STEELSERIES APEX 3'],
+    cihaz_gpu: ['EKRAN KARTI', 'MSI RTX 4080'],
   };
+  const FLAGS = { bagli: 'BAĞLI', bagli_degil: 'BAĞLI DEĞİL', kilitli: 'KİLİTLİ · BU DERLEMEDE KARTA YOL YOK', hata: null };
   function cihaz(c, d, name) {
-    const { w, h } = sizes[name], seed = seedOf(name), state = d.durum ?? 'bagli_degil';
+    const { w, h } = sizes[name], state = d.durum ?? 'bagli_degil';
     if (!Object.hasOwn(FLAGS, state)) throw new Error('Unknown device state: ' + state);
-    const holes = [[44, h / 2, 13], [w - 44, h / 2, 13]];
-    c.drawImage(once('cihaz|' + name, () => surface(w, h, { paint: '#1b1c1d', under: 'steel', grime: .2, chip: .06, edge: 10, holes, brushed: true, seed })), 0, 0);
-    const wear = once('cihaz-f|' + name, () => flakes(w, h, seed, .25, 10));
-    const metal = '#c3c6c4';
-    c.drawImage(layer(w, h, p => {
-      p.strokeStyle = metal; p.lineWidth = 8; p.strokeRect(92, 26, w - 184, h - 52);
-      put(p, DEVICES[name], 140, 186, 'KMKond', 128, metal, 'left', w - 280, 3);
-      p.fillStyle = metal; p.fillRect(140, 236, w - 280, 5);
-      put(p, 'DURUM', 140, state === 'kilitli' ? 342 : 380, 'KMMono', 64, metal, 'left', 300, 6);
-      if (state === 'kilitli') put(p, 'BU DERLEMEDE KARTA YOL YOK', w / 2, 458, 'KMKond', 96, metal, 'center', w - 280, 2);
-    }, wear), 0, 0);
-    // the state flag behind a small window
-    const [word, flag, ink] = FLAGS[state], text = word || up(d.hata || 'CİHAZ HATASI');
-    const fx = 420, fy = state === 'kilitli' ? 264 : 284, fw = w - fx - 140, fh = state === 'kilitli' ? 104 : 152;
-    c.fillStyle = '#050505'; c.fillRect(fx - 10, fy - 10, fw + 20, fh + 20);
-    c.fillStyle = flag; c.fillRect(fx, fy, fw, fh);
-    const sh = c.createLinearGradient(0, fy, 0, fy + fh); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(.25, 'rgba(0,0,0,0)');
-    c.fillStyle = sh; c.fillRect(fx, fy, fw, fh);
-    const Lw = wrap(c, text, 'KMKond', Math.min(112, fh * .8), fw - 60, 2);
-    Lw.px = Math.min(Lw.px, Math.floor(fh / (Lw.lines.length * 1.12)));
-    const lh = Lw.px * 1.02;
-    const y0 = fy + fh / 2 - (Lw.lines.length - 1) * lh / 2 + Lw.px * .34;
-    Lw.lines.forEach((s, i) => put(c, s, fx + 30, y0 + i * lh, 'KMKond', Lw.px, ink, 'left', fw - 60, 2));
-    holes.forEach(([x, y], i) => { c.fillStyle = '#0a0a0a'; c.beginPath(); c.arc(x, y, 18, 0, 7); c.fill();
-      const g = c.createRadialGradient(x - 4, y - 5, 2, x, y, 14); g.addColorStop(0, '#e2e4e2'); g.addColorStop(1, '#6d706f');
-      c.fillStyle = g; c.beginPath(); c.arc(x, y, 14, 0, 7); c.fill(); });
+    const [role, model] = DEVICES[name];
+    const text = FLAGS[state] || up(d.hata || 'CİHAZ HATASI');
+    litPlate(c, w, h, p => {
+      put(p, role, w / 2, 150, 'KMKond', 150, HALF, 'center', w - 160, 8);
+      put(p, model, w / 2, 388, 'KMKond', 250, FULL, 'center', w - 120, 6);
+      const L = wrap(p, text, 'KMKond', 170, w - 120, 2);
+      if (L.lines.length > 1) L.px = Math.min(L.px, 98);
+      const y0 = L.lines.length > 1 ? 498 : 580;
+      L.lines.forEach((s, i) => put(p, s, w / 2, y0 + i * 104, 'KMKond', L.px, state === 'bagli' ? FULL : HALF, 'center', w - 120, 4));
+    });
   }
 
   // ================================================================ draw
