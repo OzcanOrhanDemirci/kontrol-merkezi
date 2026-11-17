@@ -28,7 +28,7 @@
 # the real devices, the GPU's light included) and the RGB on/off state are restored in finally too. The service is
 # never stopped or restarted.
 param(
-    [ValidateSet("acilis", "yolculuk", "fanlar", "sicaklik", "hepsi")][string]$Bolum = "hepsi",
+    [ValidateSet("acilis", "yolculuk", "yuruyus", "fanlar", "sicaklik", "hepsi")][string]$Bolum = "hepsi",
     [string]$Kaynak = "",
     [double]$Sicaklik = 72,
     [int]$Ekran = 0,
@@ -82,6 +82,11 @@ public static class Dn {
     SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
   }
   public static void Tap(ushort vk) { Key(vk, false); Thread.Sleep(90); Key(vk, true); }
+  public static void Move(int dx, int dy) {   // a relative mouse move (what pointer lock reads as movementX/Y)
+    var a = new INPUT[1];
+    a[0].type = 0; a[0].u.mi.dx = dx; a[0].u.mi.dy = dy; a[0].u.mi.flags = 1u;
+    SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
+  }
   /// <summary>Brings the window to the front (an Alt tap lets a background process move the foreground).</summary>
   public static bool Front(IntPtr h) {
     for (int i = 0; i < 6 && GetForegroundWindow() != h; i++) {
@@ -383,6 +388,32 @@ try {
         Olay ("dönüş: rgb'den fark {0}, ilk fanlar görünümünden fark {1}" -f $f1.ToString("0.0", $inv), $f2.ToString("0.0", $inv))
         if ($f1 -lt 6) { Bulgu "dönüşte kamera RGB'den ayrılmamış görünüyor" }
         if ($f2 -gt 8) { Bulgu "dönüş sonrası görüntü ilk fanlar görünümünden belirgin farklı (fark $($f2.ToString('0.0', $inv)))" }
+    }
+
+    # ---------------------------------------------------------- walk mode: Y, W held, a turn, Escape (pointer lock)
+    if ($Bolum -eq "yuruyus") {
+        Olay "bölüm: yürüyüş"
+        $once = Kare "yuruyus-once"
+        Tus 0x59 "Y (yürüyüş)"
+        Bekle 2
+        $script:imlec = $null                 # under pointer lock the cursor is held by the page: no desk check now
+        $g = Kare "yuruyus-girdi"
+        Olay ("yürüyüş: girişte fark {0}" -f [Dn]::Diff($once, $g).ToString("0.0", $inv))
+        [Dn]::Key(0x57, $false); Start-Sleep -Milliseconds 2500; [Dn]::Key(0x57, $true)
+        Olay "tuş: W 2.5 sn" -Kare
+        Bekle 0.6
+        $w = Kare "yuruyus-W"
+        Olay ("yürüyüş: W ile fark {0}" -f [Dn]::Diff($g, $w).ToString("0.0", $inv))
+        for ($i = 0; $i -lt 40; $i++) { [Dn]::Move(12, 0); Start-Sleep -Milliseconds 25 }
+        Bekle 0.6
+        $d = Kare "yuruyus-donus"
+        Olay ("yürüyüş: fareyle dönüşte fark {0}" -f [Dn]::Diff($w, $d).ToString("0.0", $inv))
+        if ([Dn]::Diff($w, $d) -lt 4) { Bulgu "fare hareketi görüntüyü döndürmedi (pointer lock tutmamış olabilir)" }
+        Tus 0x1B "Escape (yürüyüşten çık)"
+        Bekle 2.5
+        $e = Kare "yuruyus-cikis"
+        if ($p.HasExited) { Bulgu "Escape pencereyi kapattı" } else { Olay "Escape sonrası pencere açık" }
+        Olay ("yürüyüş: çıkışta ilk görünümden fark {0}" -f [Dn]::Diff($once, $e).ToString("0.0", $inv))
     }
 
     # ---------------------------------------------------------- the fans, both states, through the window's levers
