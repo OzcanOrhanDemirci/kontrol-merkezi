@@ -1181,6 +1181,13 @@ async function create(canvas, options = {}) {
         const tg = m ? refl : T.scene;
         if (!tg || !(L[0] + L[1] + L[2] > 0)) continue;
         const P = e.pts, n = Math.min(4096, P.length / 3), ys = m ? -1 : 1, b = e.box;
+        // a flat lens seen from behind gives no light, neither its footprint nor its own faces: a floor lamp's lens
+        // faces up, so its mirror image in the wet floor is its back (the real ray from the puddle meets the lens from
+        // below, through its housing); the footprint drawn there popped on and off with the depth texels under it
+        if (e.flat && (e.flat[0] * (c.eye[0] - b.centre[0]) + ys * e.flat[1] * (c.eye[1] - ys * b.centre[1]) + e.flat[2] * (c.eye[2] - b.centre[2])) <= 0) {
+          emitTab[(6 * 256 + i) * 4 + m] = 0;
+          continue;
+        }
         // its bounding sphere against the view first (most emitters are off screen)
         {
           const bc = [b.centre[0], ys * b.centre[1], b.centre[2]], br = len(b.half);
@@ -1247,6 +1254,8 @@ async function create(canvas, options = {}) {
     bindTex(UNIT.uDepth, gl.TEXTURE_2D, tgt.depth);
     gl.uniformMatrix4fv(pr.u.uVP, false, c.vp);
     gl.uniform2f(pr.u.uNearFar, NEAR, FAR);
+    gl.uniform3fv(pr.u.uEye, c.eye); gl.uniform3fv(pr.u.uCamF, c.F); gl.uniform3fv(pr.u.uCamR, c.R); gl.uniform3fv(pr.u.uCamU, c.U);
+    gl.uniform2f(pr.u.uTan, c.tx, c.ty);
     gl.uniform1i(pr.u.uRow, mirror ? 3 : 0);
     gl.uniform1i(pr.u.uBoxRow, mirror ? 12 : 7);
     gl.uniform2f(pr.u.uTarget, tgt.w, tgt.h);

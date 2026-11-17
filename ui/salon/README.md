@@ -65,7 +65,11 @@ heavy pass; the actual count is one per ~3 ms of that pass' last GPU time), `cub
   the same spread, and `emit.vert/.frag` add it to the scene and reflection passes convolved with a Gaussian of 0.65
   (reflection 0.85) canvas px, hidden per sample behind nearer depth. The lens' own emission fades out over a minor
   extent of 6 -> 2.5 px (reflection 8 -> 3.5): a lens of a few pixels keeps its energy and shape at every sub-pixel
-  phase instead of being hit or missed by the samples.
+  phase instead of being hit or missed by the samples. What hides it: a lens a few pixels across takes the share of
+  nine points on it that are seen; a larger footprint is tested per fragment at its nearest point on the lens (an
+  edge uncovers it texel by texel). A flat lens is hidden only by a surface on its emitting side (the texel put back
+  in the world: its own housing and the floor round a floor lamp hide nothing at a grazing angle), and seen from
+  behind it gives no light, so a floor lamp's lens has no mirror image in the wet floor (its housing hides it there).
 
 ## The frame
 
