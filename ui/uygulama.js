@@ -598,9 +598,11 @@ function choosePace() {
     const s2 = g.slice().sort((x, y) => x - y), med = s2[s2.length >> 1];
     const need = med * 1.15 + 1.5;
     const k = Math.max(kmin, clamp(Math.ceil(need / PACE.refresh - 0.02), 1, 8));
-    if (!PACE.decided) { PACE.decided = true; PACE.k = k; return; }
+    // the first look is taken on the opening's frames (the strike, the pack still settling), heavier than the hall
+    // will be: start at the fastest cadence, drop those samples and let the steady rule below slow it if it must
+    if (!PACE.decided) { PACE.decided = true; PACE.k = kmin; GPU.length = 0; return; }
     if (k > PACE.k) { PACE.down = 0; if (++PACE.up >= 2) { PACE.k = k; PACE.up = 0; } }
-    else if (k < PACE.k && need < (PACE.k - 1) * PACE.refresh * 0.85) { PACE.up = 0; if (++PACE.down >= 3) { PACE.k = k; PACE.down = 0; } }
+    else if (k < PACE.k && need < (PACE.k - 1) * PACE.refresh * 0.93) { PACE.up = 0; if (++PACE.down >= 3) { PACE.k = k; PACE.down = 0; } }
     else { PACE.up = 0; PACE.down = 0; }
     return;
   }
