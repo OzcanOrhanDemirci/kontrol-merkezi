@@ -38,10 +38,19 @@ STILLS = [
     ('kapak_ust', (-1.5, 35.0, -334.0), 0, -14),        # standing by the hatch, looking at it and the mast
     ('cati_boyunca', (3.0, 35.0, -330.0), 180, -4),        # along the roof towards the far end (the lamp's pit)
     ('kuyu_lamba', (9.0, 35.0, -22.0), -45, -22),        # the roof's lamp close up (the pit at x 0, z -31)
-    ('kenar_disari', (44.0, 35.0, -170.0), 90, 2),       # at the edge, looking out at the void
-    ('kenar_asagi', (46.5, 35.0, -120.0), 90, -55),      # over the edge, down along the columns
-    ('ufuk_capraz', (40.0, 35.0, -330.0), 135, 0),       # the corner, diagonal into the void
+    ('kenar_disari', (56.0, 35.0, -170.0), 90, 2),       # at the edge, looking out at the void
+    ('kenar_asagi', (57.0, 35.0, -170.0), 90, -55),      # over the edge, down along the columns
+    ('ufuk_capraz', (52.0, 35.0, -356.0), 60, 0),        # the corner, diagonal into the void
     ('merdiven_yukari', (0.0, 30.0, -333.5), 0, 30),   # on the stair under the open hatch, looking up
+]
+
+# views from the void (--yalniz bosluk): name, eye, target; our facility's middle is (0, 10, -171), its deck y 35
+VOID_STILLS = [
+    ('yakin_150', (115.0, 25.0, 79.0), (0.0, 5.0, -171.0)),        # ours from the gap between the rows, 80-250 m
+    ('komsu_300', (115.0, 40.0, 79.0), (230.0, 5.0, -171.0)),      # the neighbour at x 230 from ~280 m, a little above
+    ('sira_uzak', (115.0, 20.0, 79.0), (-500.0, 15.0, 20.0)),      # along the gap: ends of facilities at 100-600 m
+    ('ustten', (115.0, 150.0, 79.0), (0.0, 10.0, -171.0)),         # ours from above
+    ('alttan', (100.0, -150.0, 60.0), (0.0, 0.0, -171.0)),         # ours from below, falling past it
 ]
 
 JS_PUT = r"""async ([x, foot, z, yaw, pitch, n]) => {
@@ -191,6 +200,19 @@ def main():
                 imgs.append(shot(pg, out / f'sarma_{"once" if dy == 0 else "sonra"}.png'))
             diff = np.abs(imgs[0] - imgs[1])
             print('sarma: en buyuk fark', diff.max(), 'ortalama', round(float(diff.mean()), 4), 'farkli piksel', int((diff.max(axis=2) > 1).sum()), flush=True)
+        if 'bosluk' in only:
+            # the facility seen from the void: free cameras (eye, target), ours at the origin (its middle at z -171)
+            names = set(a.kareler.split(',')) if a.kareler else None
+            for name, e, t in VOID_STILLS:
+                if names and name not in names:
+                    continue
+                wait_lock()
+                pg.evaluate("""(async ([e, t]) => { const km = window.__km, S = km.S; S.setVoid({ force: true });
+                    for (let i = 0; i < 4; i++) { S.setCamera(e, t, 50); km.V.step(1/30, e); S.render(1/30, 1/30);
+                    await new Promise(r => requestAnimationFrame(r)); } })""", [list(e), list(t)])
+                shot(pg, out / f'bos_{name}.png')
+                print('bosluk', name, flush=True)
+            pg.evaluate("window.__km.S.setVoid({ force: null })")
         if 'pan' in only:
             # a slow pan from the roof's edge: each distant lamp's peak luminance frame by frame (it must not blink)
             wait_lock()
