@@ -32,10 +32,12 @@ vec4 hazeAt(vec2 uv, float z) {
 #endif
 
 // ---- the void (Phase 2, the outside): wherever a view ray runs outside our block (the hall's concrete box on its
-// columns), a dense blue-grey fog, homogeneous (the world wraps: nothing in it may depend on where the camera is), its
-// light a smooth gradient from below to above (the columns sink into a darker depth). Inside the block nothing changes:
-// uVoidOn is 0 there, and a ray that stays inside the box has no fog. The baked haze of our own roof (uHomeHaze) fades
-// with the distance from it, so a facility seen from far is the same with and without it (the wrap).
+// columns), a dense blue-grey fog, its light a smooth gradient from below to above. Over the homogeneous part, every
+// period D of the wrap a cloud band (uBand: its centre, half thickness, D, extinction at its middle): the columns sink
+// into it and end inside it, unseen, and the fall passes through it. Periodic in y and nothing else, so the wrap keeps
+// the picture exact. Its optical depth along a ray is closed form (bandTau). Inside the block nothing changes: uVoidOn
+// is 0 there, and a ray that stays inside the box has no fog. The baked haze of our own roof (uHomeHaze) fades with
+// the distance from it, so a facility seen from far is the same with and without it (the wrap).
 #if defined(PASS_COMPOSE) || defined(PASS_BLOOMPRE)
 uniform float uVoidOn;
 uniform float uFogSigma;
@@ -43,7 +45,9 @@ uniform vec3 uFogUp, uFogDown;
 uniform vec3 uBlockLo, uBlockHi;
 uniform float uCamInside;      // 1: the camera is in the block (the stair under the hatch)
 uniform float uHomeHaze;
+uniform vec4 uBand;            // the cloud band: centre y, half thickness, period D, extinction at its middle (1/m)
 vec3 fogSky(float y) { float t = smoothstep(-0.9, 0.9, y); return mix(uFogDown, uFogUp, t * t); }   // light from above: the horizon a quarter of the way
+// BAND
 // the outside's share of a ray of length dist from the eye: its transmittance and the fog's light
 vec4 voidFog(vec3 rd, float dist) {
     vec3 inv = 1.0 / mix(rd, vec3(1e-9), lessThan(abs(rd), vec3(1e-9)));
@@ -51,7 +55,11 @@ vec4 voidFog(vec3 rd, float dist) {
     vec3 mn = min(a, b), mx = max(a, b);
     float t0 = max(max(mn.x, mn.y), max(mn.z, 0.0)), t1 = min(min(mx.x, mx.y), min(mx.z, dist));
     float out_ = dist - max(t1 - t0, 0.0);
-    float T = exp(-uFogSigma * max(out_, 0.0));
+    float t0d = uFogSigma * max(out_, 0.0);
+    float tb = bandTau(uEye.y, rd.y, min(dist, 2e4));      // the band never crosses the block: the whole ray
+    float T = exp(-t0d - tb);
+    // the band's light is the fog's own along this direction: a thing lost in the band is lost into the same light as
+    // a thing lost in the distance (a band of its own brightness lit the facilities behind it brighter than the sky)
     return vec4(fogSky(rd.y) * (1.0 - T), T);
 }
 // scene colour s with its baked haze h, seen through the void

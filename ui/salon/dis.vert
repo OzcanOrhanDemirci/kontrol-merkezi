@@ -14,6 +14,9 @@ layout(location = 5) in vec4 aInst0;   // offset xyz (m), yaw (rad)
 layout(location = 6) in vec4 aInst1;   // group-0 colour (linear, C k), lamp globe's mesh share
 uniform mat4 uVP;
 uniform mat4 uModel;           // the hatch's lid: its hinge's frame; the static ranges: identity
+uniform float uKolon;          // 1: the columns' range: their shaft runs on down into the cloud band under the facility
+uniform vec2 uKolonY;          // the shaft's top and its bottom ring in the mesh (local y, m)
+uniform vec4 uBand;            // the cloud band: centre y (this frame), half thickness, period, extinction
 out vec3 vP;
 out vec3 vN;
 out vec4 vT;
@@ -24,6 +27,15 @@ flat out vec4 vInst;
 invariant gl_Position;
 void main() {
     vec4 w = uModel * vec4(aPos, 1.0);
+    vec2 uv = aUv;
+    if (uKolon > 0.5 && w.y < uKolonY.x - 1e-3) {
+        // the shaft (a constant section from uKolonY.x down to its bottom ring) stretched or shortened so that its foot
+        // is the middle of the band below this facility: the column never ends where it can be seen
+        float bc = uBand.x + uBand.z * floor((aInst0.y - uBand.x) / uBand.z) - aInst0.y;
+        float y = uKolonY.x + (w.y - uKolonY.x) * (bc - uKolonY.x) / (uKolonY.y - uKolonY.x);
+        uv.y += y - w.y;       // the concrete's texture runs on along the shaft at its own scale
+        w.y = y;
+    }
     mat3 r = mat3(uModel);
     float c = cos(aInst0.w), s = sin(aInst0.w);
     mat3 yaw = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);   // columns: x -> (c, 0, -s), z -> (s, 0, c)
@@ -32,7 +44,7 @@ void main() {
     vLocal = w.xyz;
     vN = yaw * (r * aNrm.xyz);
     vT = vec4(yaw * (r * aTan.xyz), aTan.w < 0.0 ? -1.0 : 1.0);
-    vUv = aUv;
+    vUv = uv;
     vLm = aLm;
     vInst = aInst1;
     gl_Position = uVP * vec4(p, 1.0);

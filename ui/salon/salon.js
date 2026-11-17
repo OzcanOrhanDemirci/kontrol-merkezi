@@ -9,7 +9,7 @@ const SCRIPT_BASE = new URL('.', document.currentScript ? document.currentScript
 const NO_STORE = { cache: 'no-store' };
 const SHADER_FILES = ['common.glsl', 'scene.vert', 'scene.frag', 'depth.frag', 'rotor.vert', 'rotor.frag', 'quad.vert',
   'haze.frag', 'post.frag', 'combine.frag', 'emit.vert', 'emit.frag', 'dis.vert', 'dis.frag', 'fener.vert', 'fener.frag',
-  'direk.vert', 'direk.frag'];
+  'direk.vert', 'direk.frag', 'band.glsl'];
 
 // ==================================================================== small maths (column-major 4x4)
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -776,7 +776,9 @@ async function create(canvas, options = {}) {
   function build(name, vsFile, fsFile, defines = '', mask = ALL_VOLS) {
     const head = '#version 300 es\n#define NV ' + NV + '\n#define VOL_MASK ' + mask + '\n' + defines;
     const common = src['common.glsl'].replace('// VOLUMES', volCodeFor(mask));
-    const pieces = [[gl.VERTEX_SHADER, vsFile, head + src[vsFile]], [gl.FRAGMENT_SHADER, fsFile, head + src[fsFile].replace('// COMMON', common)]];
+    const band = src['band.glsl'];
+    const pieces = [[gl.VERTEX_SHADER, vsFile, head + src[vsFile].replace('// BAND', band)],
+                    [gl.FRAGMENT_SHADER, fsFile, head + src[fsFile].replace('// COMMON', common).replace('// BAND', band)]];
     const p = own('Program', gl.createProgram());
     const shaders = pieces.map(([type, file, text]) => {
       const s = gl.createShader(type);
@@ -1455,6 +1457,9 @@ async function create(canvas, options = {}) {
     lid: 0,                                     // our hatch's lid, radians about its axis (+: open)
     kOthers: 30,                                // the other facilities' group-0 intensity (their lamps are steady)
     fog: { sigma: 0.0028, up: [0.066, 0.086, 0.098], down: [0.018, 0.023, 0.027], amb: 1.6, pierce: 0.55, haloR: 9.0, haloK: 90 },
+    // the cloud band (band.glsl): its centre y in this frame (disari.js: it moves with the wrap and the home), half
+    // thickness, period, extinction at its middle (1/m); its light is the fog's own
+    band: { y: -440, hw: 75, D: 860, sigma: 0 },
     force: null,                                // tests: true / false overrides the automatic switch
     lampsOff: false,                            // tests: the frame without the lamps' sprites (their own light alone)
     lampsBare: false,                           // tests: the lamps unhidden by the scene (their full light)
@@ -1481,7 +1486,11 @@ async function create(canvas, options = {}) {
     return [0, 1, 2].map(i => a[i] * f.amb * 0.5 * (f.up[i] + f.down[i]));
   };
   const bCentre = boundsBox ? scl(add(boundsBox[0], boundsBox[1]), 0.5) : [0, 0, 0];
-  const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) : 1;
+  // + 300 m: the columns run on below the bounds into the band (dis.vert)
+  const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) + 300 : 1;
+  // the columns' shaft in the mesh (sahne/firin hall_outside.cpp: a constant section from KOLON_Y[0] to its bottom ring)
+  const KOLON_Y = [-40, -604];
+  const bandU = () => { const b = VOID.band; return [b.y, b.hw, b.D, b.sigma]; };
   // the detail by distance: near (every range), mid (no lamp globe: its sprite is it; no mast and dark steel: under
   // a pixel, the mast is drawn as a line instead), far (walls, columns, deck)
   const nameOf = it => (mats[it.malzeme] || {}).ad || '';
@@ -1535,7 +1544,9 @@ async function create(canvas, options = {}) {
     const e = c.eye;
     let dB = 0;
     for (let i = 0; i < 3; i++) dB += Math.pow(Math.max(0, blockBox[0][i] - e[i], e[i] - blockBox[1][i]), 2);
-    VOID.homeHaze = 1 - smoothstep(150, 300, Math.sqrt(dB));
+    // gone before another facility can become the home (disari.js: half the gap between two blocks, less its 12 m
+    // margin): the roof's baked haze must not move with the home
+    VOID.homeHaze = 1 - smoothstep(10, 22, Math.sqrt(dB));
     // the hall can only be seen from outside through the open hatch: skip all of it unless the hatch is open, near
     // enough to show a few pixels of the stair, and in view
     VOID.noInterior = !VOID.inBlock;
@@ -1552,7 +1563,8 @@ async function create(canvas, options = {}) {
     for (const fac of VOID.list) {
       const yaw = fac.yaw || 0, cy = Math.cos(yaw), sn = Math.sin(yaw);
       const rot = p => [cy * p[0] + sn * p[2], p[1], -sn * p[0] + cy * p[2]];
-      const col = fac.home ? ours : scl(fac.col, VOID.kOthers);
+      // our colours: the facility we live in (after landing on another, it keeps its own until we are inside)
+      const col = (fac.ours ?? fac.home) ? ours : scl(fac.col, VOID.kOthers);
       // the offset that turns the facility about its own centre: p' = R p + (o + c - R c), exact for ours (yaw 0)
       const off = yaw ? add(fac.o, sub(bCentre, rot(bCentre))) : fac.o;
       let share = 0, lampAt = -1;
@@ -1626,12 +1638,15 @@ async function create(canvas, options = {}) {
       gl.uniform1f(u.uAmb, VOID.fog.amb);
     }
     gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
+    gl.uniform4fv(u.uBand, bandU());
+    gl.uniform2fv(u.uKolonY, KOLON_Y);
     gl.bindVertexArray(geoInstVao);
     for (let l = 0; l < 3; l++) {
       const g = VG[l];
       if (!g.count) continue;
       pointInstances(g.first);
       for (const it of LOD[l]) {
+        gl.uniform1f(u.uKolon, nameOf(it) === 'dis_kolon' ? 1 : 0);
         if (colour) {
           gl.uniform1i(u.uMat, it.malzeme);
           gl.uniform1i(u.uPage, it.sayfa || 0);
@@ -1642,6 +1657,7 @@ async function create(canvas, options = {}) {
     }
     if (lidInstVao && (VLID.count || VLID.home >= 0)) {
       gl.bindVertexArray(lidInstVao);
+      gl.uniform1f(u.uKolon, 0);
       if (colour) { gl.uniform1f(u.uVolLit, 1); gl.uniform1f(u.uFener, 0); gl.uniform1i(u.uPage, 0); }
       const draw = (first, count, angle) => {
         gl.uniformMatrix4fv(u.uModel, false, frameOf(kapakDyn.axis, kapakDyn.centre, angle).m);
@@ -1672,6 +1688,7 @@ async function create(canvas, options = {}) {
     gl.uniform2f(u.uSize, T.glow.w, T.glow.h);
     gl.uniform1f(u.uPxAngle, 2 * c.ty / T.glow.h);
     gl.uniform1f(u.uSigma, VOID.fog.sigma);
+    gl.uniform4fv(u.uBand, bandU());
     gl.uniform1f(u.uPierce, VOID.fog.pierce);
     gl.uniform1f(u.uHaloR, VOID.fog.haloR);
     if (u.uHaloK) gl.uniform1f(u.uHaloK, VOID.fog.haloK);
@@ -1689,6 +1706,7 @@ async function create(canvas, options = {}) {
     gl.uniform2f(um.uSize, T.glow.w, T.glow.h);
     gl.uniform1f(um.uPxAngle, 2 * c.ty / T.glow.h);
     gl.uniform1f(um.uSigma, VOID.fog.sigma);
+    gl.uniform4fv(um.uBand, bandU());
     gl.uniform1f(um.uExposure, exposure * (1 - 0.04));
     gl.uniform3fv(um.uFogUp, VOID.fog.up); gl.uniform3fv(um.uFogDown, VOID.fog.down);
     gl.uniform3fv(um.uMastL, mastL());
@@ -1709,6 +1727,7 @@ async function create(canvas, options = {}) {
     if (!VOID.on) return;
     camUniforms(pr, c);
     gl.uniform1f(u.uFogSigma, VOID.fog.sigma);
+    gl.uniform4fv(u.uBand, bandU());
     gl.uniform3fv(u.uFogUp, VOID.fog.up);
     gl.uniform3fv(u.uFogDown, VOID.fog.down);
     gl.uniform3fv(u.uBlockLo, blockBox[0]);
@@ -1982,6 +2001,7 @@ async function create(canvas, options = {}) {
       if (o.lid != null) VOID.lid = o.lid;
       if (o.kOthers != null) VOID.kOthers = o.kOthers;
       if (o.fog) Object.assign(VOID.fog, o.fog);
+      if (o.band) Object.assign(VOID.band, o.band);
       if ('force' in o) VOID.force = o.force;
       if ('lampsOff' in o) VOID.lampsOff = !!o.lampsOff;
       if ('lampsBare' in o) VOID.lampsBare = !!o.lampsBare;
@@ -2007,7 +2027,7 @@ async function create(canvas, options = {}) {
       }
       return sum;
     },
-    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog } }),
+    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog }, band: { ...VOID.band } }),
     setHeat(h) { heat = Math.min(1, Math.max(0, h || 0)); },   // the arch opening's shimmer (0..1, from the temperature)
     setQuality(q) { Object.assign(Q, q); T = null; W = 0; resize(); },
     render,
