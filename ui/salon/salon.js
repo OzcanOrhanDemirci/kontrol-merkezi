@@ -1497,8 +1497,9 @@ async function create(canvas, options = {}) {
   const bCentre = boundsBox ? scl(add(boundsBox[0], boundsBox[1]), 0.5) : [0, 0, 0];
   // + 300 m: the columns run on below the bounds into the band (dis.vert)
   const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) + 300 : 1;
-  // the columns' shaft in the mesh (sahne/firin hall_outside.cpp: a constant section from KOLON_Y[0] to its bottom ring)
-  const KOLON_Y = [-40, -604];
+  // the columns' shaft in the mesh (sahne/firin hall_outside.cpp: a constant section from KOLON_Y[0] to its bottom ring;
+  // no dis_kolon vertex lies between the two: the legs' haunches end at y -52)
+  const KOLON_Y = [-100, -604];
   const bandU = () => { const b = VOID.band; return [b.y, b.hw, b.D, b.sigma]; };
   // the detail by distance: near (every range), mid (no lamp globe: its sprite is it; no mast and dark steel: under
   // a pixel, the mast is drawn as a line instead), far (walls, columns, deck)
