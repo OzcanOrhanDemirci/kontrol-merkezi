@@ -49,6 +49,10 @@ const C = {
 // exposure by 0.6 EV rms (1.1 EV at the arch, which the journey holds darker than its brightness asks).
 const EYE = {
   K: 0.4, UP: 1.0, DOWN: 2.5, MIN: -3.5, MAX: 2.2, UP_TAU: 0.3, DOWN_TAU: 1.2,
+  // a frame far darker than the journey's (the passages behind the chamber: no light of their own, only their lit
+  // ends) opens the eye further, up to DARK_EXTRA more over DARK_SPAN of d past DARK_FROM: one walks a black corridor
+  // towards its lit end and sees the end, not a black screen. Below DARK_FROM (every lit place) nothing changes
+  DARK_FROM: 2.5, DARK_SPAN: 2.0, DARK_EXTRA: 4.0,
   REF: [-5.96, -4.85, -4.55, -4.46, -4.19, -3.91, -5.18, -7.01, -7.41, -6.67, -7.64, -7.76, -6.94, -7.00, -7.75, -7.49,
         -6.34, -7.25, -7.55, -6.95, -6.12, -6.93, -7.10, -6.16, -6.26, -6.95, -6.89, -5.85, -6.52, -6.76, -6.36, -5.65,
         -6.48, -6.54, -5.76, -5.82, -6.14, -5.70, -4.50, -5.34, -5.31],
@@ -587,8 +591,9 @@ function create(o) {
   }
   function eyeTarget(L) {
     const d = EYE.K * (refAt(walkS) - Math.log2(Math.max(1e-6, L)));
-    const t = o.exposureAt(walkS) + Math.max(-EYE.DOWN, Math.min(EYE.UP, d));
-    return Math.max(EYE.MIN, Math.min(EYE.MAX, t));
+    const lift = d > EYE.DARK_FROM ? EYE.DARK_EXTRA * smooth(Math.min(1, (d - EYE.DARK_FROM) / EYE.DARK_SPAN)) : 0;
+    const t = o.exposureAt(walkS) + Math.max(-EYE.DOWN, Math.min(EYE.UP, d)) + lift;
+    return Math.max(EYE.MIN, Math.min(EYE.MAX + lift, t));
   }
   function adapt(dt) {
     const m = S() && S().meter ? S().meter() : null;

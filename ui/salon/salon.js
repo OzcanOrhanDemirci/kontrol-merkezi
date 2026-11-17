@@ -1003,6 +1003,7 @@ async function create(canvas, options = {}) {
   // 4 cm texels took the disc's full radiance and read as a white globe. Within LENS_R of the lens the received light
   // is held to LENS_CAP times the group's brightness (the wall beside it keeps its share; the hot texels do not)
   const LENS_R = 0.13;
+  let seep = options.seep || [0.02, 0, 8.0];   // scene.frag: the passages' light seeping in at the doors
   let lensCap = options.lensCap != null ? options.lensCap : 0.006;
   const lensBalls = new Float32Array(4 * 12);
   let lensN = 0;
@@ -1015,6 +1016,7 @@ async function create(canvas, options = {}) {
   }
   function camUniforms(pr, c) {
     const u = pr.u;
+    if (u.uSeep) gl.uniform4f(u.uSeep, seep[0], seep[1], seep[2], 1);
     if (u.uLensBall) { gl.uniform4fv(u.uLensBall, lensBalls); gl.uniform1i(u.uLensN, lensN); gl.uniform1f(u.uLensCap, lensCap); gl.uniform4fv(u.uLensBox, lensBox); }
     if (u.uEye) gl.uniform3fv(u.uEye, c.eye);
     if (u.uCamF) { gl.uniform3fv(u.uCamF, c.F); gl.uniform3fv(u.uCamR, c.R); gl.uniform3fv(u.uCamU, c.U); gl.uniform2f(u.uTan, c.tx, c.ty); }
@@ -1933,6 +1935,7 @@ async function create(canvas, options = {}) {
     get frames() { return frames; },
     setCamera(e, t, deg) { eye = e.slice(); look = t.slice(); if (deg) fov = deg; },
     setLensCap(k) { lensCap = k; },
+    setSeep(a) { seep = a; },
     setGroup(i, c, k) { if (i >= 0 && i < 3) groups[i] = [Math.max(0, c[0]), Math.max(0, c[1]), Math.max(0, c[2]), Math.max(0, k)]; },
     setRotor(name, angle, omega) { const d = dyn.find(x => x.name === name); if (d) { d.angle = angle; d.omega = omega || 0; } },
     setLever(name, angle) { const d = dyn.find(x => x.name === name); if (d) d.angle = angle; },

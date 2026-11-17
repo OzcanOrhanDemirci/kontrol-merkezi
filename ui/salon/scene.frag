@@ -29,6 +29,8 @@ uniform vec4 uLensBall[12];     // the stair lamps' lenses (centre, radius): the
 uniform int uLensN;
 uniform vec4 uLensBox[2];        // their bounds
 uniform float uLensCap;
+uniform vec4 uSeep;             // the passages' seeping light: x amount at the door (arch group), z its falloff
+                                // length along the way (m), w on
 uniform vec3 uLamp;            // a lamp lens' emission (linear radiance)
 uniform float uAlpha;          // the crisp rotor's share while it fades into the blurred disc
 uniform float uMirror;
@@ -188,6 +190,16 @@ void main() {
             float l = lum(c), cap = uLensCap * lum(uGroup[0]);
             if (l > cap) c *= cap / l;
         }
+    }
+    // the two passages behind the chamber (|x| 12.6..13.6, z -278.8..-295.2, the walk's way to the stair) and the
+    // space behind it have no light of their own and the bake left the passages black: the core's light seeps in
+    // through the side doors and fades along the way (its length measured along the corridor, so it runs on without
+    // a seam into the back space and dies out towards its middle). No shadows: a 1 m concrete box faces itself
+    if (uSeep.w > 0.5 && vP.y < 4.0 && abs(vP.x) < 13.65 && vP.z < -278.7 && vP.z > -295.3) {
+        float ax = abs(vP.x), path = -1.0;
+        if (ax > 12.55) path = abs(vP.z + 279.5);                       // in a passage
+        if (vP.z < -293.5) path = 14.9 + max(0.0, 13.1 - ax);           // in the back space
+        if (path >= 0.0) c += s.albedo * uGroup[1] * (uSeep.x * exp(-path / uSeep.z)) * s.ao;
     }
     // a small lens' emission goes partly or wholly to its footprint (emit.frag): what is left of it here
     float own = vOwn;
