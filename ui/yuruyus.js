@@ -397,7 +397,14 @@ function create(o) {
       if (b > best + 1e-5 || (b > best - 1e-5 && gny > by)) { best = Math.max(b, best); bx = gnx; by = gny; bz = gnz; bf = gfy; }
     }
     GN[0] = bx; GN[1] = by; GN[2] = bz; GN[3] = bf;
-    const f = best - r;
+    let f = best - r;
+    // the void's beams (setBeams): a level top, stood on wherever the centre is over it
+    for (const b of beams) {
+      if (b.y1 < fbot || b.y1 > ftop || b.y1 <= f) continue;
+      const dx = x - b.x, dz = z - b.z;
+      if (Math.abs(dx * b.ux + dz * b.uz) > b.hx || Math.abs(dz * b.ux - dx * b.uz) > b.hz) continue;
+      f = b.y1; GN[0] = 0; GN[1] = 1; GN[2] = 0; GN[3] = 1;
+    }
     return f >= fbot ? f : -Infinity;
   }
 
@@ -406,6 +413,7 @@ function create(o) {
               safeX: 0, safeF: 0, safeZ: 0, eyeLag: 0, jumpT: -1, baseF: 0 };
   let active = false, paused = false, pendingPlace = false;
   let columns = [];          // [{ x, z, hx, hz, y0, y1 }] (setColumns)
+  let beams = [];            // [{ x, z, ux, uz, hx, hz, y0, y1 }] (setBeams): boxes turned about y, local x along (ux, uz)
   let floorY = -40, floorSet = false, fallFn = null, stepFn = null;
   const camEye = new Float64Array(3);
   const enterOff = new Float64Array(3); let enterT = 0, enterDur = 0;
@@ -470,6 +478,25 @@ function create(o) {
       } else { dx /= d; dz /= d; B.x = qx + dx * R; B.z = qz + dz * R; }
       const vn = B.vx * dx + B.vz * dz;
       if (vn < 0) { B.vx -= vn * dx; B.vz -= vn * dz; }
+      deepest = Math.max(deepest, R - d);
+    }
+    // the void's beams and their nodes: their sides, slid along (their tops are ground: groundCast). One whose feet
+    // were over the top a moment ago (falling onto it, or standing on it) is left to the ground cast
+    for (const b of beams) {
+      if (Math.max(B.foot, B.baseF) >= b.y1 - C.STEP || B.foot + C.TOP < b.y0) continue;
+      const dx = B.x - b.x, dz = B.z - b.z;
+      const a = dx * b.ux + dz * b.uz, c = dz * b.ux - dx * b.uz;        // along, across
+      const qa = Math.max(-b.hx, Math.min(b.hx, a)), qc = Math.max(-b.hz, Math.min(b.hz, c));
+      let na = a - qa, nc = c - qc, d = Math.hypot(na, nc);
+      if (d >= R) continue;
+      if (d < 1e-6) {                            // inside: out through the nearest side
+        const ea = b.hx - Math.abs(a), ec = b.hz - Math.abs(c);
+        if (ea < ec) { na = Math.sign(a) || 1; nc = 0; d = -ea; } else { nc = Math.sign(c) || 1; na = 0; d = -ec; }
+      } else { na /= d; nc /= d; }
+      const hx = na * b.ux - nc * b.uz, hz = na * b.uz + nc * b.ux;       // the push in the world
+      B.x += hx * (R - d); B.z += hz * (R - d);
+      const vn = B.vx * hx + B.vz * hz;
+      if (vn < 0) { B.vx -= vn * hx; B.vz -= vn * hz; }
       deepest = Math.max(deepest, R - d);
     }
     return deepest;
@@ -819,6 +846,7 @@ function create(o) {
       B.yaw -= th;
     },
     setColumns(list) { columns = list || []; },
+    setBeams(list) { beams = list || []; },
     // the walker's velocity (the void's fall: its brake)
     setVelocity(vx, vy, vz) { if (vx != null) B.vx = vx; if (vy != null) B.vy = vy; if (vz != null) B.vz = vz; },
     // hold the journey point the eye's exposure refers to (s in metres, null: the nearest point again)

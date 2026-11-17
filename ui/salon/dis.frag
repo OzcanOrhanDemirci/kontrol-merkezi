@@ -26,6 +26,7 @@ layout(std140) uniform Materials {
 uniform int uMat;
 uniform int uPage;
 uniform float uVolLit;         // 1: lit from the volumes (the lid)
+uniform float uBare;           // 1: no baked light (the void's beams and nodes: the fog's light alone)
 uniform float uFener;          // 1: the lamp's globe (its emission times the instance's mesh share)
 uniform float uPxScale;
 uniform float uCubic;
@@ -106,6 +107,8 @@ void main() {
         float c0 = max(lum(uGroup[0]), 1e-6);
         c = shadeFromVolumes(s, vLocal) * (lum(g0) / c0);
         open = s.ao;
+    } else if (uBare > 0.5) {
+        s.so = s.ao;
     } else {
         vec4 a[3], b[3];
         for (int g = 0; g < 3; g++) {

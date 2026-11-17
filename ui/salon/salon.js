@@ -1479,6 +1479,11 @@ async function create(canvas, options = {}) {
     lampsOff: false,                            // tests: the frame without the lamps' sprites (their own light alone)
     lampsBare: false,                           // tests: the lamps unhidden by the scene (their full light)
     mastsOff: false,                            // tests: without the far masts' lines
+    // the beams under the facilities (disari.js KIRIS: their level over the band, section, nodes); each facility's
+    // list entry carries its own (beams: [cx, cz, yaw, half length] in its frame)
+    kiris: null,
+    kirisOff: false,                            // tests: without the beams and nodes (the columns still end in them)
+    nKiris: 0,
     on: false, inBlock: true, homeHaze: 1, n: 0, lamps: 0, drawn: [0, 0, 0], noInterior: false,
   };
   const voidOn = () => VOID.on;
@@ -1501,7 +1506,7 @@ async function create(canvas, options = {}) {
     return [0, 1, 2].map(i => a[i] * f.amb * 0.5 * (f.up[i] + f.down[i]));
   };
   const bCentre = boundsBox ? scl(add(boundsBox[0], boundsBox[1]), 0.5) : [0, 0, 0];
-  // + 300 m: the columns run on below the bounds into the band (dis.vert)
+  // + 300 m: the columns run on below the bounds down to their nodes (dis.vert; never past the mesh's bottom ring)
   const bRadius = boundsBox ? 0.5 * len(sub(boundsBox[1], boundsBox[0])) + 300 : 1;
   // the columns' shaft in the mesh (sahne/firin hall_outside.cpp: a constant section from KOLON_Y[0] to its bottom ring;
   // no dis_kolon vertex lies between the two: the legs' haunches end at y -52)
@@ -1534,6 +1539,39 @@ async function create(canvas, options = {}) {
     return vao;
   }
   const geoInstVao = disItems.length ? instancedVao(geo) : null;
+  // the beams and nodes: one unit box (24 corners with their face's normal, 36 indices), instanced (dis.vert uKiris)
+  const kolonFeet = Object.keys(anchors).filter(n => /^dis_kolon_/.test(n)).map(n => {
+    const k = anchors[n].kutu; return { x: k.merkez[0], z: k.merkez[2], hx: Math.abs(k.x[0]) + Math.abs(k.z[0]), hz: Math.abs(k.x[2]) + Math.abs(k.z[2]) };
+  });
+  const kolonMat = mats.findIndex(m => m.ad === 'dis_kolon');
+  const KIRIS_F = 8;                            // per box: centre, yaw, half sizes, 0
+  let kirisData = new Float32Array(KIRIS_F * 256);
+  const kirisBuf = own('Buffer', gl.createBuffer());
+  const kirisVao = kolonFeet.length && kolonMat >= 0 ? (() => {
+    const v = [], ix = [];
+    for (let a = 0; a < 3; a++) for (const sg of [-1, 1]) {
+      const b = (a + 1) % 3, c = (a + 2) % 3, n0 = v.length / 6;
+      for (const [p, q] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const P = [0, 0, 0], N = [0, 0, 0];
+        P[a] = sg; P[b] = p; P[c] = q; N[a] = sg;
+        v.push(...P, ...N);
+      }
+      ix.push(n0, n0 + 1, n0 + 2, n0, n0 + 2, n0 + 3);
+    }
+    const vao = own('VertexArray', gl.createVertexArray());
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, own('Buffer', gl.createBuffer()));
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ARRAY_BUFFER, kirisBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, KIRIS_F * 4, gl.STREAM_DRAW);
+    for (const i of [5, 6]) { gl.enableVertexAttribArray(i); gl.vertexAttribPointer(i, 4, gl.FLOAT, false, KIRIS_F * 4, (i - 5) * 16); gl.vertexAttribDivisor(i, 1); }
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, own('Buffer', gl.createBuffer()));
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ix), gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    return vao;
+  })() : null;
   const lidInstVao = kapakDyn ? instancedVao(kapakDyn.mesh) : null;
   const lampVao = own('VertexArray', gl.createVertexArray());
   gl.bindVertexArray(lampVao);
@@ -1555,7 +1593,7 @@ async function create(canvas, options = {}) {
   }
   // the frame's facilities: culled (the fog's reach, the view's frustum), sorted into the three details; their lamps
   function prepareVoid(c) {
-    VOID.n = 0; VOID.lamps = 0;
+    VOID.n = 0; VOID.lamps = 0; VOID.nKiris = 0;
     if (!VOID.on) return;
     const e = c.eye;
     let dB = 0;
@@ -1576,6 +1614,15 @@ async function create(canvas, options = {}) {
     const sx = Math.sqrt(1 + c.tx * c.tx), sy = Math.sqrt(1 + c.ty * c.ty);
     const lists = [[], [], []], lamps = [], lids = [];
     let homeLid = null;
+    const K = kirisVao && !VOID.kirisOff ? VOID.kiris : null, KB = VOID.band;
+    let nk = 0;
+    const kPush = (x, y, z, yaw, hx, hy, hz) => {
+      if (kirisData.length < (nk + 1) * KIRIS_F) { const d = new Float32Array(kirisData.length * 2); d.set(kirisData); kirisData = d; }
+      const o = nk * KIRIS_F;
+      kirisData[o] = x; kirisData[o + 1] = y; kirisData[o + 2] = z; kirisData[o + 3] = yaw;
+      kirisData[o + 4] = hx; kirisData[o + 5] = hy; kirisData[o + 6] = hz; kirisData[o + 7] = 0;
+      nk++;
+    };
     for (const fac of VOID.list) {
       const yaw = fac.yaw || 0, cy = Math.cos(yaw), sn = Math.sin(yaw);
       const rot = p => [cy * p[0] + sn * p[2], p[1], -sn * p[0] + cy * p[2]];
@@ -1583,6 +1630,24 @@ async function create(canvas, options = {}) {
       const col = (fac.ours ?? fac.home) ? ours : scl(fac.col, VOID.kOthers);
       // the offset that turns the facility about its own centre: p' = R p + (o + c - R c), exact for ours (yaw 0)
       const off = yaw ? add(fac.o, sub(bCentre, rot(bCentre))) : fac.o;
+      // its beams and nodes, at the level under it (the same for every stack: the band's, raised by K.top)
+      if (K && fac.beams) {
+        const lat = KB.y + K.top + KB.D * Math.floor((fac.o[1] - KB.y - K.top) / KB.D);
+        const q = sub(add(rot([bCentre[0], 0, bCentre[2]]), off), e), R = K.reach;
+        q[1] = lat - e[1];
+        const z = dot(q, c.F);
+        if (len(q) - R < rGeo && !(z < -R || Math.abs(dot(q, c.R)) > z * c.tx + R * sx || Math.abs(dot(q, c.U)) > z * c.ty + R * sy)) {
+          for (const f of kolonFeet) {
+            const p = add(rot([f.x, 0, f.z]), off);
+            kPush(p[0], lat - K.capD / 2, p[2], yaw, f.hx + K.pad, K.capD / 2, f.hz + K.pad);
+          }
+          const b = fac.beams;
+          for (let i = 0; i < b.length; i += 4) {
+            const p = add(rot([b[i], 0, b[i + 1]]), off);
+            kPush(p[0], lat - K.d / 2, p[2], b[i + 2] + yaw, b[i + 3], K.d / 2, K.w / 2);
+          }
+        }
+      }
       let share = 0, lampAt = -1;
       if (fenerAnchor) {
         const lp = add(rot(fenerAnchor), off);
@@ -1631,6 +1696,12 @@ async function create(canvas, options = {}) {
     gl.bufferData(gl.ARRAY_BUFFER, lampData.subarray(0, Math.max(LAMP_F, lamps.length)), gl.STREAM_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     VOID.drawn = [VG[0].count, VG[1].count, VG[2].count];
+    VOID.nKiris = nk;
+    if (nk) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, kirisBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, kirisData.subarray(0, nk * KIRIS_F), gl.STREAM_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
   }
   function pointInstances(first) {
     gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
@@ -1639,7 +1710,7 @@ async function create(canvas, options = {}) {
   }
   // the exterior's draws inside the scene pass (its prepass and its colour pass: the same vertex shader)
   function drawVoid(c, colour) {
-    if (!VOID.n || !geoInstVao) return;
+    if ((!VOID.n && !VOID.nKiris) || !geoInstVao) return;
     const pr = colour ? programs.dis : programs.disDepth, u = pr.u;
     gl.useProgram(pr.p);
     gl.uniformMatrix4fv(u.uVP, false, c.vp);
@@ -1657,6 +1728,8 @@ async function create(canvas, options = {}) {
     gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
     gl.uniform4fv(u.uBand, bandU());
     gl.uniform2fv(u.uKolonY, KOLON_Y);
+    gl.uniform1f(u.uKolonFoot, VOID.kiris ? VOID.kiris.top - VOID.kiris.foot : 0);
+    gl.uniform1f(u.uKiris, 0);
     gl.bindVertexArray(geoInstVao);
     for (let l = 0; l < 3; l++) {
       const g = VG[l];
@@ -1688,6 +1761,14 @@ async function create(canvas, options = {}) {
       if (VLID.home >= 0) draw(VLID.home, 1, VOID.lid);
       if (colour) gl.uniform1f(u.uVolLit, 0);
       gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
+    }
+    if (VOID.nKiris) {                                             // the beams and nodes: the columns' concrete, the fog's light
+      gl.bindVertexArray(kirisVao);
+      gl.uniform1f(u.uKiris, 1); gl.uniform1f(u.uKolon, 0);
+      if (colour) { gl.uniform1i(u.uMat, kolonMat); gl.uniform1f(u.uBare, 1); gl.uniform1f(u.uFener, 0); gl.uniform1i(u.uPage, 0); }
+      gl.drawElementsInstanced(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0, VOID.nKiris);
+      gl.uniform1f(u.uKiris, 0);
+      if (colour) gl.uniform1f(u.uBare, 0);
     }
     gl.bindVertexArray(geo.vao);
   }
@@ -2024,6 +2105,8 @@ async function create(canvas, options = {}) {
       if (o.kOthers != null) VOID.kOthers = o.kOthers;
       if (o.fog) Object.assign(VOID.fog, o.fog);
       if (o.band) Object.assign(VOID.band, o.band);
+      if (o.kiris) VOID.kiris = o.kiris;
+      if ('kirisOff' in o) VOID.kirisOff = !!o.kirisOff;
       if ('force' in o) VOID.force = o.force;
       if ('lampsOff' in o) VOID.lampsOff = !!o.lampsOff;
       if ('lampsBare' in o) VOID.lampsBare = !!o.lampsBare;
@@ -2049,7 +2132,7 @@ async function create(canvas, options = {}) {
       }
       return sum;
     },
-    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, fog: { ...VOID.fog }, band: { ...VOID.band } }),
+    voidState: () => ({ on: VOID.on, inBlock: VOID.inBlock, noInterior: VOID.noInterior, homeHaze: VOID.homeHaze, drawn: VOID.drawn.slice(), lamps: VOID.lamps, kiris: VOID.nKiris, fog: { ...VOID.fog }, band: { ...VOID.band } }),
     setHeat(h) { heat = Math.min(1, Math.max(0, h || 0)); },   // the arch opening's shimmer (0..1, from the temperature)
     setQuality(q) { Object.assign(Q, q); T = null; W = 0; resize(); },
     render,

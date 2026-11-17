@@ -12,10 +12,18 @@
 // facility of our stack wears our colours and its hatch is shut). Each other stack's one steady lamp has its own fixed
 // temperature colour, hashed from the service's palette (ui/renk.js); ours shows the real one.
 //
-// The band. Every period D a cloud band (salon.js VOID.band, band.glsl): the columns of every facility run on down into
-// the band below it and end inside it, unseen (dis.vert stretches their shaft), so no column ever stops in the air;
-// the stacks' heights keep every facility in the clear air between two bands. The fall passes through a band, and
-// the wrap happens in its middle, where nothing can be seen.
+// The band. Every period D a cloud band (salon.js VOID.band, band.glsl); the stacks' heights keep every facility in
+// the clear air between two bands. The fall passes through a band, and the wrap happens in its middle, where nothing
+// can be seen.
+//
+// The beams (KIRIS; Özcan, 11-17: the columns' ends joined to the other facilities, "kirişli ağ"). The columns used to
+// end inside the band, but from above it has no surface and a column faded out into it as if it ended in the air. Now
+// every column of every facility runs down (dis.vert stretches its shaft) into a node on one level for the whole
+// world, KIRIS.top over the band's middle, and from the nodes horizontal beams run to the neighbouring stacks' nodes:
+// across the gap to the next stack in the row, along to the two of the next row, and a foot left with neither to the
+// next foot on its side (beamsOf: deterministic from the hashes, never two crossing, all under the facilities of the
+// period and over the band). They are solid (walk mode's setBeams): a fall over one brakes as over a roof and stops
+// on it; it is never the home, and walking off it the fall goes on.
 //
 // The fall. Off the deck the walker falls (gravity, quadratic drag to TERMINAL m/s) and steers itself: WASD in the
 // look's frame moves it across at up to AIR m/s (Shift faster); nothing pulls it anywhere (11-17, Özcan: "beni zorla
@@ -37,7 +45,18 @@ const L = {
   ROOF: 35,                  // the deck (m)
   BAND: { y: -440, hw: 55, sigma: 0.2 },    // the band under our deck: centre, half thickness, extinction at its middle
                              // (1/m; an optical depth of 6 from its middle to its edges: nothing is seen in it)
-  KOLON_BOTTOM: -604,        // the columns' bottom ring in the mesh (local y; hall_outside.cpp kLegBottom)
+  KOLON_BOTTOM: -604,
+  KIRIS_LOW: -60,            // under this (the world's y) one is below the facility's body: among the columns and beams        // the columns' bottom ring in the mesh (local y; hall_outside.cpp kLegBottom)
+  // the beams (the lattice under the facilities, see the header): one level for every stack, every period
+  KIRIS: {
+    top: 70,                 // the beams' top over the band's centre (m; -370 under our deck: clear of the band's top
+                             // at -385, and 10 m of shaft under the lowest facility's (H_MIN) column top at -100)
+    w: 10, d: 14,            // a beam's section: width, depth (m; the columns are 22 x 26)
+    pad: 3, capD: 18,        // a node: the column's section grown by pad on every side, capD deep (its top the beams')
+    foot: 9,                 // the column's foot: this far under the beams' top, inside its node
+    pX: 0.45, pZ: 0.6,       // the chance of a beam across to the next stack in the row, per foot; along to the next row
+    reach: 450,              // a stack's beams lie within this of its centre (m: the renderer's culling)
+  },
   TERMINAL: 42,              // terminal fall speed in the void (m/s; it was 30: Özcan wanted the fall faster)
   AIR: 10, AIR_TAU: 0.9,     // steering in the air: speed across (m/s, Shift x1.6) and its easing (s)
   BRAKE_H: 120, LAND: 6,     // over a roof, the brake over the last BRAKE_H metres down to LAND m/s
@@ -92,6 +111,90 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
     }
     return s.col;
   }
+  // ---------------------------------------------------------------- the beams
+  // A stack's feet in its own frame (the columns, see columns()): F[side][row], side 0 at -x, 1 at +x, row 0 the front
+  // (largest z) to 3 the back. Its beams in its own frame: [cx, cz, yaw, half length] each (the box's x along the beam:
+  // (cos yaw, -sin yaw) in x, z, as the renderer turns a facility), from foot centre to foot centre (the ends lie in
+  // the nodes). A stack owns its beams across to the next stack in its row (+x) and along to the two in the next row
+  // (+z); every foot left without one of those (its own or a neighbour's) gets a beam to the next foot on its side.
+  let feetCache = null;
+  function feet() {
+    if (feetCache) return feetCache;
+    const c = columns(), F = [[], []];
+    for (const k of c) F[k.x > 0 ? 1 : 0].push(k);
+    for (const f of F) f.sort((a, b) => b.z - a.z);
+    if (F[0].length !== 4 || F[1].length !== 4) return null;
+    return (feetCache = F);
+  }
+  const xLink = (s, r) => hash(s.i, s.j, 10 + r) < L.KIRIS.pX;                  // s's +x foot r to the next stack's -x foot r
+  const zLink = (s, e) => hash(s.i, s.j, e ? 20 : 21) < L.KIRIS.pZ;            // s's front foot on that side to the next row's
+  const upE = (i, j) => stack(j & 1 ? i + 1 : i, j + 1), upW = (i, j) => stack(j & 1 ? i : i - 1, j + 1);
+  const downE = (i, j) => stack(j & 1 ? i + 1 : i, j - 1), downW = (i, j) => stack(j & 1 ? i : i - 1, j - 1);
+  // a foot of stack t in stack s's frame (both through the lattice)
+  function footIn(s, t, f) {
+    const c = centre();
+    const a = rot(t.yaw, [f.x - c[0], 0, f.z - c[2]]);
+    const r = rot(-s.yaw, [a[0] + t.x - s.x, 0, a[2] + t.z - s.z]);
+    return [r[0] + c[0], r[2] + c[2]];
+  }
+  function beamsOf(s) {
+    if (s.beams) return s.beams;
+    const F = feet();
+    if (!F) return null;
+    const out = [], linked = [[0, 0, 0, 0], [0, 0, 0, 0]];
+    const add = (a, b) => {
+      const dx = b[0] - a[0], dz = b[1] - a[1];
+      out.push(0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1]), Math.atan2(-dz, dx), 0.5 * Math.hypot(dx, dz));
+    };
+    const own = f => [f.x, f.z];
+    const E = stack(s.i + 1, s.j), Wst = stack(s.i - 1, s.j);
+    for (let r = 0; r < 4; r++) {
+      if (xLink(s, r)) { linked[1][r] = 1; add(own(F[1][r]), footIn(s, E, F[0][r])); }
+      if (xLink(Wst, r)) linked[0][r] = 1;
+    }
+    const nE = upE(s.i, s.j), nW = upW(s.i, s.j);
+    if (zLink(s, true)) { linked[1][0] = 1; add(own(F[1][0]), footIn(s, nE, F[0][3])); }
+    if (zLink(s, false)) { linked[0][0] = 1; add(own(F[0][0]), footIn(s, nW, F[1][3])); }
+    if (zLink(downW(s.i, s.j), true)) linked[0][3] = 1;
+    if (zLink(downE(s.i, s.j), false)) linked[1][3] = 1;
+    // the feet left alone: to the next foot on their side (towards one that is linked, else by the hash)
+    for (let side = 0; side < 2; side++) {
+      const done = new Set();
+      for (let r = 0; r < 4; r++) {
+        if (linked[side][r]) continue;
+        let q;
+        if (r === 0) q = 1; else if (r === 3) q = 2;
+        else if (linked[side][r - 1] !== linked[side][r + 1]) q = linked[side][r - 1] ? r - 1 : r + 1;
+        else q = hash(s.i, s.j, 30 + side * 4 + r) < 0.5 ? r - 1 : r + 1;
+        const k = Math.min(r, q);
+        if (done.has(k)) continue;
+        done.add(k);
+        add(own(F[side][r]), own(F[side][q]));
+      }
+    }
+    return (s.beams = new Float32Array(out));
+  }
+  // the beams' top under the home's deck, in the world
+  const latBelow = () => bandBelow() + L.KIRIS.top;
+  // walk mode's boxes: the nodes and beams of the stacks round the home, in the world, at the level under its deck
+  function beamBoxes() {
+    const F = feet();
+    if (!F) return [];
+    const K = L.KIRIS, H = homeStack(), c = centre(), y1 = latBelow(), out = [];
+    const box = (s, x, z, yaw, hx, hz, y0) => {
+      const o = rot(-H.yaw, [s.x - H.x, 0, s.z - H.z]), a = s.yaw - H.yaw;
+      const p = rot(a, [x - c[0], 0, z - c[2]]);
+      const t = yaw + a;
+      out.push({ x: p[0] + c[0] + o[0], z: p[2] + c[2] + o[2], ux: Math.cos(t), uz: -Math.sin(t), hx, hz, y0, y1 });
+    };
+    for (let j = H.j - 1; j <= H.j + 1; j++) for (let i = H.i - 2; i <= H.i + 2; i++) {
+      const s = stack(i, j), b = beamsOf(s);
+      for (const side of F) for (const f of side) box(s, f.x, f.z, 0, f.hx + K.pad, f.hz + K.pad, y1 - K.capD);
+      for (let n = 0; n < b.length; n += 4) box(s, b[n], b[n + 1], b[n + 2], b[n + 3], K.w / 2, y1 - K.d);
+    }
+    return out;
+  }
+
   // ---------------------------------------------------------------- the home: the facility the world is drawn in
   // Lattice space: stack (i, j) at (x, h + k D, z), turned by its yaw about the facility's centre c (the renderer's
   // bounds centre, salon.js bCentre). The world (the renderer's and walk mode's frame) is the home facility's own
@@ -142,7 +245,7 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
           if (y + 60 < e[1] - R || y - 610 > e[1] + R) continue;
           const pl = placed(s, y);
           const ours = s.key === oursKey;
-          list.push({ o: pl.o, yaw: pl.yaw, col: ours ? [1, 1, 1] : colourOf(s), home: s.key === homeKey, ours, key: s.key });
+          list.push({ o: pl.o, yaw: pl.yaw, col: ours ? [1, 1, 1] : colourOf(s), home: s.key === homeKey, ours, key: s.key, beams: beamsOf(s) });
         }
       }
     }
@@ -204,7 +307,7 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
   }
 
   // ---------------------------------------------------------------- the fall
-  const F = { falling: false, wraps: 0, t: 0, lastFall: null, saved: null, still: 0, rebases: 0, recovered: 0 };
+  const F = { falling: false, wraps: 0, t: 0, lastFall: null, saved: null, still: 0, rebases: 0, recovered: 0, beams: 0, vyLast: 0 };
   let box = null;            // the block's, the deck's and the whole outline's x, z bounds (local)
   function bounds() {
     if (box) return box;
@@ -218,8 +321,7 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
   const outside = (q, p, m = 0) => p[0] < q.x0 - m || p[0] > q.x1 + m || p[2] < q.z0 - m || p[2] > q.z1 + m;
   const distXZ = (q, x, z) => Math.hypot(Math.max(q.x0 - x, 0, x - q.x1), Math.max(q.z0 - z, 0, z - q.z1));
   // our columns (anchors dis_kolon_<i>: boxes round their section; without them the eight of the first exterior) for
-  // walk mode where they run on below the mesh's bottom ring (dis.vert), down to the band, where the wrap takes the
-  // walker before it could reach their end
+  // walk mode where they run on below the mesh's bottom ring (dis.vert), down into their nodes (the beams' level)
   let cols = null;
   function columns() {
     if (cols) return cols;
@@ -230,10 +332,22 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
     if (!cols.length) for (const x of [-30, 30]) for (const z of [-21, -121, -221, -321]) cols.push({ x, z, hx: 6, hz: 6 });
     return cols;
   }
+  let beamsW = [];
   function sendColumns(w) {
     if (!w.setColumns) return;
-    const y0 = bandBelow() - 2;
+    const y0 = latBelow() - L.KIRIS.capD;
     w.setColumns(columns().map(c => ({ x: c.x, z: c.z, hx: c.hx, hz: c.hz, y0, y1: L.KOLON_BOTTOM + 1 })));
+    beamsW = beamBoxes();
+    if (w.setBeams) w.setBeams(beamsW);
+  }
+  // the top of the beam or node under (x, z) in the world, within m metres of its edge (-Infinity: none)
+  function beamUnder(x, z, m) {
+    let top = -Infinity;
+    for (const b of beamsW) {
+      const dx = x - b.x, dz = z - b.z;
+      if (Math.abs(dx * b.ux + dz * b.uz) <= b.hx + m && Math.abs(dz * b.ux - dx * b.uz) <= b.hz + m) top = Math.max(top, b.y1);
+    }
+    return top;
   }
   // the walker re-expressed in facility s's frame: the nearest of the stack's copies, its height in the period
   // over that facility's band; a rigid move of everything (the renderer's list follows from the new home)
@@ -255,11 +369,25 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
     F.rebases++;
     sendColumns(w);
   }
+  // the stack nearer the walker than the home by REBASE metres, if any
+  function nearer(st, bx) {
+    const pL = toLattice([st.x, st.foot, st.z]), ci = Math.round(pL[0] / L.PX), cj = Math.round(pL[2] / L.PZ), c = centre();
+    let best = null, bd = distXZ(bx.outline, st.x, st.z) - L.REBASE;
+    for (let j = cj - 1; j <= cj + 1; j++) for (let i = ci - 2; i <= ci + 2; i++) {
+      const s = stack(i, j);
+      if (s.key === homeKey) continue;
+      const r = rot(-s.yaw, [pL[0] - c[0] - s.x, 0, pL[2] - c[2] - s.z]);
+      const d = distXZ(bx.outline, r[0] + c[0], r[2] + c[2]);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
   function onStep(w) {
     const st = w.state(), bx = bounds();
     if (!bx) return;
     const p = [st.x, st.foot, st.z];
-    if (!F.falling && !st.grounded && outside(bx.block, p) && st.foot < L.ROOF - 2) {
+    const low = st.foot < L.KIRIS_LOW;                            // under the facilities: on the beams or among them
+    if (!F.falling && !st.grounded && (outside(bx.block, p) || low) && st.foot < L.ROOF - 2) {
       F.falling = true; F.t = 0; F.wraps = 0; F.still = 0;
       if (!F.saved) {
         const cf = w.config;
@@ -268,15 +396,23 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
       }
     }
     // inside the home's block, under its deck: its lamps wear our colours from now on (nothing outside is seen)
-    if (oursKey !== homeKey && st.grounded && !outside(bx.block, p) && st.foot < L.ROOF - 3) oursKey = homeKey;
-    if (!F.falling) return;
+    if (oursKey !== homeKey && st.grounded && !outside(bx.block, p) && st.foot < L.ROOF - 3 && !low) oursKey = homeKey;
+    if (!F.falling) {
+      // walking the beams: the nearest stack is the home (its columns collide), a rigid move that is not seen
+      if (low && st.grounded) { const s = nearer(st, bx); if (s) rebase(w, s); }
+      return;
+    }
     F.t += lastDt;
     F.still = st.input ? 0 : F.still + lastDt;
     if (st.grounded) {         // landed
-      F.falling = false; F.lastFall = { seconds: +F.t.toFixed(2), wraps: F.wraps, x: st.x, z: st.z, home: homeKey, rebases: F.rebases };
+      F.falling = false;
+      F.lastFall = { seconds: +F.t.toFixed(2), wraps: F.wraps, x: st.x, foot: st.foot, z: st.z, home: homeKey, rebases: F.rebases,
+                     on: low ? 'kiris' : 'cati', vy: +F.vyLast.toFixed(2) };
+      if (low) F.beams++;
       if (F.saved) { Object.assign(w.config, F.saved); F.saved = null; }
       return;
     }
+    F.vyLast = st.vy;
     if (st.foot < L.ROOF - 20) setOpen(false);                    // the hatch shuts behind (unseen: under the slab)
     // the wrap: in the band's middle (nothing can be seen there), the next facility below becomes this one
     if (st.foot < bandBelow()) {
@@ -289,19 +425,14 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
       return;
     }
     // the nearest facility: when another is nearer than ours by REBASE metres, it becomes the home
-    const pL = toLattice(p), ci = Math.round(pL[0] / L.PX), cj = Math.round(pL[2] / L.PZ), c = centre();
-    let best = null, bd = distXZ(bx.outline, st.x, st.z) - L.REBASE;
-    for (let j = cj - 1; j <= cj + 1; j++) for (let i = ci - 2; i <= ci + 2; i++) {
-      const s = stack(i, j);
-      if (s.key === homeKey) continue;
-      const r = rot(-s.yaw, [pL[0] - c[0] - s.x, 0, pL[2] - c[2] - s.z]);
-      const d = distXZ(bx.outline, r[0] + c[0], r[2] + c[2]);
-      if (d < bd) { bd = d; best = s; }
-    }
+    const best = nearer(st, bx);
     if (best) { rebase(w, best); return; }
-    // the brake: over the deck the air thickens over the last metres (the only force not one's own: a soft landing)
-    const hT = st.foot - L.ROOF;
-    if (hT > -1 && hT < L.BRAKE_H && !outside(bx.deck, p, 3)) {
+    // the brake: over the deck, or over a beam, the air thickens over the last metres (the only force not one's own:
+    // a soft landing)
+    let hT = !outside(bx.deck, p, 3) ? st.foot - L.ROOF : Infinity;
+    const bt = beamUnder(st.x, st.z, 3);
+    if (bt > -Infinity && st.foot - bt > -1) hT = Math.min(hT, st.foot - bt);
+    if (hT > -1 && hT < L.BRAKE_H) {
       const want = -(L.LAND + (L.TERMINAL - L.LAND) * smooth(hT / L.BRAKE_H));
       if (st.vy < want) w.setVelocity(null, st.vy + (want - st.vy) * (1 - Math.exp(-lastDt / 0.35)), null);
     }
@@ -318,7 +449,7 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
     const moved = stepHatch(dt);
     if (w && w.setSolid && (moved || !H.sent)) { H.sent = true; w.setSolid('kapak', lidTriangles()); }
     const B = L.BAND;
-    s.setVoid({ list: facilities(eye), lid: H.angle, band: { y: bandBelow(), hw: B.hw, D: L.D, sigma: B.sigma } });
+    s.setVoid({ list: facilities(eye), lid: H.angle, band: { y: bandBelow(), hw: B.hw, D: L.D, sigma: B.sigma }, kiris: L.KIRIS });
     // the eye: while outside (or falling) its exposure refers to one fixed journey point, the same before and after
     // the wrap (the nearest point would jump with the walker's height)
     const out = !!w && w.active && (F.falling || eye[1] > L.ROOF - 0.5 || eye[1] < -4);
@@ -326,6 +457,7 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
   }
   return {
     config: L, step, toggle, setOpen, facilities,
+    beams: () => beamsW,     // tests: walk mode's beam and node boxes round the home (world)
     state: () => ({ hatch: { open: H.open, angle: H.angle, moving: H.moving }, fall: { ...F, saved: undefined }, outside: outsideNow,
                     home: homeKey, ours: oursKey, band: bandBelow() }),
   };

@@ -48,6 +48,7 @@ JS = r"""async (cfg) => {
   if (cfg.jump != null) C.JUMP_H = cfg.jump;
   // the walker alone: no void logic after its steps (leaving the outline is the void here), no centre pick per frame
   W.onStep(null); W.setFloor(null); S.pickRay = () => null;
+  if (W.setBeams) W.setBeams(null);   // the void's beams under the columns are the void here too
   const DT = 1 / 60, JP = { eye: [0, 0, 0], dir: [0, 0, -1], fov: 50 };
   const frame = () => W.camera(DT, JP);
   const cell = cfg.cell, HB = 0.25;
