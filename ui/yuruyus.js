@@ -405,7 +405,7 @@ function create(o) {
   const B = { x: 0, foot: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: false, yaw: 0, pitch: 0, fov: 50,
               safeX: 0, safeF: 0, safeZ: 0, eyeLag: 0, jumpT: -1, baseF: 0 };
   let active = false, paused = false, pendingPlace = false;
-  let columns = [];          // [{ x, z, r, y0, y1 }] (setColumns)
+  let columns = [];          // [{ x, z, hx, hz, y0, y1 }] (setColumns)
   let floorY = -40, floorSet = false, fallFn = null, stepFn = null;
   const camEye = new Float64Array(3);
   const enterOff = new Float64Array(3); let enterT = 0, enterDur = 0;
@@ -457,16 +457,20 @@ function create(o) {
       }
       if (!moved) break;
     }
-    // the void's columns where they run on below the mesh (setColumns): vertical cylinders, slid along
+    // the void's columns where they run on below the mesh (setColumns): upright boxes round their section, slid along
     for (const c of columns) {
       if (B.foot > c.y1 || B.foot + C.TOP < c.y0) continue;
-      const dx = B.x - c.x, dz = B.z - c.z, d = Math.hypot(dx, dz), m = c.r + R;
-      if (d >= m) continue;
-      const nx = d > 1e-6 ? dx / d : 1, nz = d > 1e-6 ? dz / d : 0;
-      B.x = c.x + nx * m; B.z = c.z + nz * m;
-      const vn = B.vx * nx + B.vz * nz;
-      if (vn < 0) { B.vx -= vn * nx; B.vz -= vn * nz; }
-      deepest = Math.max(deepest, m - d);
+      const qx = Math.max(c.x - c.hx, Math.min(c.x + c.hx, B.x)), qz = Math.max(c.z - c.hz, Math.min(c.z + c.hz, B.z));
+      let dx = B.x - qx, dz = B.z - qz, d = Math.hypot(dx, dz);
+      if (d >= R) continue;
+      if (d < 1e-6) {                            // inside: out through the nearest face
+        const ex = c.hx - Math.abs(B.x - c.x), ez = c.hz - Math.abs(B.z - c.z);
+        if (ex < ez) { dx = Math.sign(B.x - c.x) || 1; dz = 0; d = -ex; } else { dz = Math.sign(B.z - c.z) || 1; dx = 0; d = -ez; }
+        B.x += dx * (R - d); B.z += dz * (R - d);
+      } else { dx /= d; dz /= d; B.x = qx + dx * R; B.z = qz + dz * R; }
+      const vn = B.vx * dx + B.vz * dz;
+      if (vn < 0) { B.vx -= vn * dx; B.vz -= vn * dz; }
+      deepest = Math.max(deepest, R - d);
     }
     return deepest;
   }
@@ -829,6 +833,7 @@ function create(o) {
       look(yaw, pitch) { B.yaw = yaw; B.pitch = pitch; },
       put(x, foot, z, vy = 0) { B.x = x; B.foot = foot; B.baseF = foot; B.z = z; B.vx = B.vz = 0; B.vy = vy; B.grounded = false; B.eyeLag = 0; enterOff.fill(0); },
       groundAt: (x, z, top = 100, bot = -100) => groundCast(x, z, top, bot),
+      groundWalkable: () => GN[1] >= C.WALKABLE,      // the last groundAt's contact: steep enough to stand on
       journeyEv: u => o.exposureAt(u * o.journey().total),
       setEye(e) { Object.assign(EYE, e); },
       resetTiming() { timingN = 0; contactsMax = 0; timeSum = 0; },

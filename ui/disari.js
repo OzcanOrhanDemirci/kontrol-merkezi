@@ -37,7 +37,7 @@ const L = {
   ROOF: 35,                  // the deck (m)
   BAND: { y: -440, hw: 55, sigma: 0.2 },    // the band under our deck: centre, half thickness, extinction at its middle
                              // (1/m; an optical depth of 6 from its middle to its edges: nothing is seen in it)
-  KOLON_TOP: -40,            // the columns' shaft starts here (local y; hall_outside.cpp)
+  KOLON_BOTTOM: -604,        // the columns' bottom ring in the mesh (local y; hall_outside.cpp kLegBottom)
   TERMINAL: 42,              // terminal fall speed in the void (m/s; it was 30: Özcan wanted the fall faster)
   AIR: 10, AIR_TAU: 0.9,     // steering in the air: speed across (m/s, Shift x1.6) and its easing (s)
   BRAKE_H: 120, LAND: 6,     // over a roof, the brake over the last BRAKE_H metres down to LAND m/s
@@ -205,34 +205,35 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
 
   // ---------------------------------------------------------------- the fall
   const F = { falling: false, wraps: 0, t: 0, lastFall: null, saved: null, still: 0, rebases: 0, recovered: 0 };
-  let box = null;            // the block's and the deck's x, z bounds (local)
+  let box = null;            // the block's, the deck's and the whole outline's x, z bounds (local)
   function bounds() {
     if (box) return box;
-    const a = S().anchors, b = a.dis_blok && a.dis_blok.kutu, d = (a.dis_cati && a.dis_cati.kutu) || b;
+    const a = S().anchors, b = a.dis_blok && a.dis_blok.kutu, d = (a.dis_cati && a.dis_cati.kutu) || b, o = (a.dis_sinir && a.dis_sinir.kutu) || b;
     if (!b) return null;
     const xz = k => ({ x0: k.merkez[0] - Math.abs(k.x[0]) - Math.abs(k.z[0]), x1: k.merkez[0] + Math.abs(k.x[0]) + Math.abs(k.z[0]),
                        z0: k.merkez[2] - Math.abs(k.z[2]) - Math.abs(k.x[2]), z1: k.merkez[2] + Math.abs(k.z[2]) + Math.abs(k.x[2]) });
-    box = { block: xz(b), deck: xz(d) };
+    box = { block: xz(b), deck: xz(d), outline: xz(o) };
     return box;
   }
   const outside = (q, p, m = 0) => p[0] < q.x0 - m || p[0] > q.x1 + m || p[2] < q.z0 - m || p[2] > q.z1 + m;
   const distXZ = (q, x, z) => Math.hypot(Math.max(q.x0 - x, 0, x - q.x1), Math.max(q.z0 - z, 0, z - q.z1));
-  // our columns (anchors dis_kolon_<i>; without them the eight of the first exterior) for walk mode: from the shaft's
-  // top down to the band, where the wrap takes the walker before it could reach their end
+  // our columns (anchors dis_kolon_<i>: boxes round their section; without them the eight of the first exterior) for
+  // walk mode where they run on below the mesh's bottom ring (dis.vert), down to the band, where the wrap takes the
+  // walker before it could reach their end
   let cols = null;
   function columns() {
     if (cols) return cols;
     const a = S().anchors;
     cols = Object.keys(a).filter(n => /^dis_kolon_/.test(n)).map(n => {
-      const k = a[n].kutu; return { x: k.merkez[0], z: k.merkez[2], r: Math.max(Math.abs(k.x[0]) + Math.abs(k.z[0]), Math.abs(k.x[2]) + Math.abs(k.z[2])) };
+      const k = a[n].kutu; return { x: k.merkez[0], z: k.merkez[2], hx: Math.abs(k.x[0]) + Math.abs(k.z[0]), hz: Math.abs(k.x[2]) + Math.abs(k.z[2]) };
     });
-    if (!cols.length) for (const x of [-30, 30]) for (const z of [-21, -121, -221, -321]) cols.push({ x, z, r: 6 });
+    if (!cols.length) for (const x of [-30, 30]) for (const z of [-21, -121, -221, -321]) cols.push({ x, z, hx: 6, hz: 6 });
     return cols;
   }
   function sendColumns(w) {
     if (!w.setColumns) return;
     const y0 = bandBelow() - 2;
-    w.setColumns(columns().map(c => ({ x: c.x, z: c.z, r: c.r, y0, y1: L.KOLON_TOP })));
+    w.setColumns(columns().map(c => ({ x: c.x, z: c.z, hx: c.hx, hz: c.hz, y0, y1: L.KOLON_BOTTOM + 1 })));
   }
   // the walker re-expressed in facility s's frame: the nearest of the stack's copies, its height in the period
   // over that facility's band; a rigid move of everything (the renderer's list follows from the new home)
@@ -289,12 +290,12 @@ function create(o) {         // { S: () => renderer, W: () => walk mode, stops: 
     }
     // the nearest facility: when another is nearer than ours by REBASE metres, it becomes the home
     const pL = toLattice(p), ci = Math.round(pL[0] / L.PX), cj = Math.round(pL[2] / L.PZ), c = centre();
-    let best = null, bd = distXZ(bx.block, st.x, st.z) - L.REBASE;
+    let best = null, bd = distXZ(bx.outline, st.x, st.z) - L.REBASE;
     for (let j = cj - 1; j <= cj + 1; j++) for (let i = ci - 2; i <= ci + 2; i++) {
       const s = stack(i, j);
       if (s.key === homeKey) continue;
       const r = rot(-s.yaw, [pL[0] - c[0] - s.x, 0, pL[2] - c[2] - s.z]);
-      const d = distXZ(bx.block, r[0] + c[0], r[2] + c[2]);
+      const d = distXZ(bx.outline, r[0] + c[0], r[2] + c[2]);
       if (d < bd) { bd = d; best = s; }
     }
     if (best) { rebase(w, best); return; }

@@ -1497,7 +1497,7 @@ async function create(canvas, options = {}) {
   const LOD = [
     disItems,
     disItems.filter(it => !/^dis_(fener|koyu)$/.test(nameOf(it))),   // the mast: a line of its width (direk.vert)
-    disItems.filter(it => /^dis_(duvar|kolon|zemin|isik)$/.test(nameOf(it))),
+    disItems.filter(it => /^dis_(duvar|kolon|zemin|isik|cam)$/.test(nameOf(it))),
   ];
   const LOD_D = [260, 700];                     // nearest distance (m) to a facility's bounds below which near / mid
   const INST_F = 8;                             // floats per instance: offset, yaw, colour (C k), the globe's mesh share

@@ -58,7 +58,7 @@ def run_way(pg, way, out, video, dt=1 / 30):
         frames.mkdir(parents=True, exist_ok=True)
         for f in frames.glob('*.jpg'):
             f.unlink()
-    pg.evaluate(JS_PUT, [40.0, 35.0, -170.0, math.pi / 2, -0.15])
+    pg.evaluate(JS_PUT, [50.0, 35.0, -170.0, math.pi / 2, -0.15])
     log, n = [], 0
     phase, t, landed_t = 'run', 0.0, None
     state = None
@@ -69,7 +69,7 @@ def run_way(pg, way, out, video, dt=1 / 30):
         keys, yaw, pitch = None, None, None
         if phase == 'run':                       # run to the edge and jump over it
             keys = {'w': 1, 'shift': 1}
-            if state and state['x'] > 46.5:
+            if state and state['x'] > 57.4:
                 pg.evaluate('window.__km.W.debug.jump()')
                 phase = 'air'
                 t_air = t
@@ -85,7 +85,7 @@ def run_way(pg, way, out, video, dt=1 / 30):
                 elif ta < 4.5:                   # looks round for the way back
                     keys, yaw, pitch = {}, math.pi / 2 + math.pi * (ta - 2.5) / 2, -0.6
                 else:                            # steers back over the deck's line, falls, and onto the deck below
-                    over = -48 + 12 < state['x'] < 48 - 12 and -350 + 12 < state['z'] < 8 - 12
+                    over = -58 + 12 < state['x'] < 58 - 12 and -350 + 12 < state['z'] < 8 - 12
                     keys = {} if over else {'w': 1}
                     yaw, pitch = deck_centre_yaw(state), -0.9
             elif way == 'komsu':
@@ -93,7 +93,7 @@ def run_way(pg, way, out, video, dt=1 / 30):
                 if f['rebases'] == 0:
                     keys, yaw, pitch = {'w': 1, 'shift': 1}, math.pi / 2, -0.25
                 else:                            # the next facility is home now: onto its deck, turning as a hand would
-                    over = -48 + 14 < state['x'] < 48 - 14 and -350 + 14 < state['z'] < 8 - 14
+                    over = -58 + 14 < state['x'] < 58 - 14 and -350 + 14 < state['z'] < 8 - 14
                     keys = {} if over else {'w': 1, 'shift': 1}
                     want = deck_centre_yaw(state)
                     dy = (want - state['yaw'] + math.pi) % (2 * math.pi) - math.pi
