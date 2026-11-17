@@ -334,12 +334,13 @@ try {
     Olay "pencere başlatıldı" -Kare
     for ($i = 0; $i -lt 100 -and $script:h -eq [IntPtr]::Zero; $i++) { Bekle 0.1; $p.Refresh(); $script:h = $p.MainWindowHandle }
     if ($script:h -eq [IntPtr]::Zero) { throw "pencere açılmadı" }
-    [void][Dn]::ShowWindow($script:h, 3)
+    # the window opens borderless over the whole monitor by itself; SW_MAXIMIZE (3) would drop it to the work area
+    [void][Dn]::ShowWindow($script:h, 5)
     [Dn]::Topmost($script:h, $true)
     if (-not [Dn]::Front($script:h)) { Olay "pencere öne gelmedi (yine de en üstte)" }
     $script:imlec = New-Object Dn+POINT; [void][Dn]::GetCursorPos([ref]$script:imlec)
     $r = New-Object Dn+RECT; [void][Dn]::GetClientRect($script:h, [ref]$r)
-    Olay "pencere göründü ve büyütüldü: istemci $($r.R - $r.L)x$($r.B - $r.T)" -Kare
+    Olay "pencere göründü: istemci $($r.R - $r.L)x$($r.B - $r.T)" -Kare
     # the opening: the pack loads (~15 s in the first real run), then the lights strike and the arch follows in ~2 s;
     # the first light is found on the screen, the rest is given 8 s
     $basla = Get-Date; $yandi = $null
