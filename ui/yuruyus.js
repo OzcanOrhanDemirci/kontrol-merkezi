@@ -539,6 +539,13 @@ function create(o) {
             if (hl > 1e-6) { const hx = GN[0] / hl, hz = GN[2] / hl, vn = B.vx * hx + B.vz * hz; if (vn < 0) { B.vx -= vn * hx; B.vz -= vn * hz; } }
             else { B.vx = 0; B.vz = 0; }
             if (wasGrounded) { B.foot = f0; B.vy = 0; }
+            else {
+              // in the air against it: the feet still rest on what is under the place kept, or a jump held into a
+              // steep foot (the hall columns' 71-degree skirt) sinks through it to the floor and the wall push then
+              // throws the body into the column (11-17, salon_cukur.py)
+              const g0 = groundCast(B.x, B.z, f0, B.foot);
+              if (g0 > B.foot) { B.foot = g0; B.vy = Math.min(0, B.vy) * 0.5; }
+            }
             B.grounded = wasGrounded;
           } else {                                 // too steep to stand on (or an edge over a drop): rest on it, slide off
             B.foot = g; B.vy = Math.min(0, B.vy) * 0.5; B.grounded = false;
