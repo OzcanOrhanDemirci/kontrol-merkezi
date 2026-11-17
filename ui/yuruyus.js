@@ -609,7 +609,8 @@ function create(o) {
     return R[i] + (R[i + 1] - R[i]) * (f - i);
   }
   function eyeTarget(L) {
-    const d = EYE.K * (refAt(walkS) - Math.log2(Math.max(1e-6, L)));
+    // with the lights out the hall is meant to be that much darker (o.dark, stops): the eye does not make it up
+    const d = EYE.K * (refAt(walkS) - (pinnedS == null && o.dark ? o.dark() : 0) - Math.log2(Math.max(1e-6, L)));
     const lift = d > EYE.DARK_FROM ? EYE.DARK_EXTRA * smooth(Math.min(1, (d - EYE.DARK_FROM) / EYE.DARK_SPAN)) : 0;
     const t = o.exposureAt(walkS) + Math.max(-EYE.DOWN, Math.min(EYE.UP, d)) + lift;
     return Math.max(EYE.MIN, Math.min(EYE.MAX + lift, t));

@@ -152,6 +152,8 @@ function exposureAt(s) {
 const NEUTRAL_LAMP = [1.0, 0.78, 0.52];
 // each light group's intensity against its baked white (the bake's units are each group's own); #k0=..&k1=..&k2=..
 // overrides them for tuning
+// lights off: what is left of the shaft and of the service lamps, and how far the eye opens to it (stops)
+const DIM = { shaft: 0.03, lamps: 0.25, ev: 0.5 };
 const GK = [30, 12, 6].map((d, i) => (params.has('k' + i) ? +params.get('k' + i) : d));
 function stops() { return (D.durum && D.durum.rgb && D.durum.rgb.duraklar && D.durum.rgb.duraklar.length >= 2) ? D.durum.rgb.duraklar : null; }
 const linked = () => D.link === 'bagli';
@@ -169,11 +171,14 @@ function updateLights(dt) {
   const out = iz && iz.cikis && rgbOn() ? linRgb(iz.cikis) : [0, 0, 0];
   M.col.arch = mix3(M.col.arch, out, 1 - Math.exp(-dt / 0.25));
   const conn = linked() ? 1 : 0.55;
-  // RGB off (Özcan, 11-16): the whole hall sinks into a darkness you can still see in, slowly, a little unsettling:
-  // the shaft and the arch fall to a faint ember of the temperature colour, the service lamps keep the silhouettes
-  M.lit = approach(M.lit == null ? 1 : M.lit, rgbOn() || !linked() ? 1 : 0, dt, rgbOn() ? 0.5 : 1.4);
+  // RGB off, by hand or by the 15-minute idle fade (Özcan, 11-17: "ışıkların kapalı olması daha karanlık olsun. İyice
+  // loş olsun"): the whole hall sinks with the LEDs into a deep dimness one can still move through. The shaft and the
+  // arch fall to a faint ember of the temperature colour, the service lamps to pools at the columns' feet that keep
+  // the silhouettes (DIM). Idle sinks as slowly as the LEDs fade; the first touch brings everything back in a second
+  const idle = rgbOn() && !!D.durum.rgb.beklemede, lit = (rgbOn() && !idle) || !linked();
+  M.lit = approach(M.lit == null ? 1 : M.lit, lit ? 1 : 0, dt, lit ? 0.5 : idle ? 2.5 : 1.4);
   if (!S) return;
-  S.setGroup(0, M.col.temp, GK[0] * strike * conn * close * lerp(0.07, 1, M.lit));
+  S.setGroup(0, M.col.temp, GK[0] * strike * conn * close * lerp(DIM.shaft, 1, M.lit));
   // the heat core: brighter and more alive as it gets hotter (0 at the coldest stop, 1 at the hottest), breathing
   // slowly (a 7 s period, a few percent); the shimmer in the opening's air grows with it. Bounded: never blows out
   const st = stops(), c0 = st ? st[0].c : 52, c1 = st ? st[st.length - 1].c : 80.5;
@@ -181,7 +186,7 @@ function updateLights(dt) {
   const breath = 1 + (0.03 + 0.05 * M.heat) * Math.sin(M.t * 2 * Math.PI / 7);
   S.setGroup(1, add(M.col.arch, mul(M.col.temp, 0.06)), GK[1] * archIn * conn * close * lerp(0.75, 1.45, M.heat) * breath);
   if (S.setHeat) S.setHeat(M.heat * (rgbOn() ? 1 : 0.3));
-  S.setGroup(2, NEUTRAL_LAMP, GK[2] * smooth((it - 0.1) / 0.5) * close * lerp(0.7, 1, M.lit));
+  S.setGroup(2, NEUTRAL_LAMP, GK[2] * smooth((it - 0.1) / 0.5) * close * lerp(DIM.lamps, 1, M.lit));
 }
 
 // rotors: the giant fans turn at a share of the real fans' speed, with the inertia of their size
@@ -553,8 +558,8 @@ function step(dt) {
   const pose = W ? W.camera(dt, drift(journey.pose(M.s))) : drift(journey.pose(M.s));
   if (V) V.step(dt, pose.eye);       // the outside: its facilities, the hatch, the fall (ui/disari.js)
   S.setCamera(pose.eye, add(pose.eye, pose.dir), pose.fov);
-  // the eye half adapts to the dark when the lights are out
-  S.setExposure((W ? W.exposure(exposureAt(M.s)) : exposureAt(M.s)) + 0.8 * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
+  // the eye opens a little to the dark when the lights are out
+  S.setExposure((W ? W.exposure(exposureAt(M.s)) : exposureAt(M.s)) + DIM.ev * (1 - (M.lit == null ? 1 : M.lit)) + (params.has('ev') ? +params.get('ev') : 0));
   for (const n of Object.keys(M.rot)) S.setRotor(n, M.rot[n], M.w[n]);
   updateHaze();
   updateLamps();
@@ -712,7 +717,8 @@ function reportOpening(marks) {
     marks.levhaIstendi = performance.now();
     S = await loading;
     journey = buildJourney(S.views);
-    if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick, exposureAt });
+    if (window.KM_YURUYUS) W = KM_YURUYUS.create({ M, canvas, base, get S() { return S; }, journey: () => journey, actions: ACTIONS, pressDown, pressUp, go, kick, exposureAt,
+      dark: () => Math.log2(1 / DIM.lamps) * (1 - (M.lit == null ? 1 : M.lit)) });
     if (window.KM_DISARI) V = KM_DISARI.create({ S: () => S, W: () => W, stops, journeyTotal: () => journey.total });
     S.ready = true;
     marks.hazir = performance.now();
