@@ -59,7 +59,7 @@ static class PencereUygulamasi
     {
         const string HostName = "kontrol.app";
         const string PackHost = "sahne.kontrol.app";
-        const int WM_NCCALCSIZE = 0x83, WM_NCHITTEST = 0x84;
+        const int WM_NCCALCSIZE = 0x83, WM_NCHITTEST = 0x84, WM_NCPAINT = 0x85, WM_NCACTIVATE = 0x86;
         const uint WM_NCLBUTTONDOWN = 0xA1;
         const int HTCLIENT = 1, HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14, HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
 
@@ -225,6 +225,16 @@ static class PencereUygulamasi
                         if (GetMonitorInfo(MonitorFromWindow(Handle, 2), ref mi))
                             Marshal.StructureToPtr(mi.rcWork, m.LParam, false);
                     }
+                    m.Result = IntPtr.Zero;
+                    return;
+                // The window has no frame (WM_NCCALCSIZE above), but on activation DefWindowProc still paints the
+                // classic caption and border over it: 11-17 every opening showed a light title bar for ~0.35 s over
+                // the loading picture. lParam -1 keeps WM_NCACTIVATE from repainting the non-client area; the frame
+                // paint itself has nothing to draw.
+                case WM_NCACTIVATE:
+                    m.LParam = new IntPtr(-1);
+                    break;
+                case WM_NCPAINT:
                     m.Result = IntPtr.Zero;
                     return;
                 case WM_NCHITTEST when WindowState != FormWindowState.Maximized && !_full:
