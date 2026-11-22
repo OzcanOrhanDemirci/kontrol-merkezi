@@ -175,4 +175,4 @@ commit history records the work step by step.
 | `ui/fonts/` | Barlow, Big Shoulders Stencil, IBM Plex Mono, Instrument Serif | SIL Open Font License 1.1 |
 | textures and models in the scene pack | [Poly Haven](https://polyhaven.com) | CC0 |
 
-The repository's own licence has not been chosen yet.
+Kontrol Merkezi is licensed under the GNU General Public License, version 2 or later, with a permission to link NVIDIA's CUDA, OptiX, NvAPI and NVML libraries: see [LICENSE](LICENSE) and [NOTICE](NOTICE). The GPL follows from the two RGB drivers that build on OpenRGB's code.

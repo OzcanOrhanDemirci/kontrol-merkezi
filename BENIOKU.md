@@ -178,4 +178,4 @@ Neyin yapılacağına, nasıl görünüp nasıl davranacağına ben karar verdim
 | `ui/fonts/` | Barlow, Big Shoulders Stencil, IBM Plex Mono, Instrument Serif | SIL Open Font License 1.1 |
 | sahne paketindeki dokular ve modeller | [Poly Haven](https://polyhaven.com) | CC0 |
 
-Deponun kendi lisansı henüz seçilmedi.
+Kontrol Merkezi, GNU Genel Kamu Lisansı sürüm 2 ya da sonrasıyla lisanslıdır; NVIDIA'nın CUDA, OptiX, NvAPI ve NVML kitaplıklarıyla bağlanmaya izin verilir: [LICENSE](LICENSE) ve [NOTICE](NOTICE). GPL, OpenRGB'nin kodu üzerine kurulan iki RGB sürücüsünden gelir.

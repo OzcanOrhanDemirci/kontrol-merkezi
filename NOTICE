@@ -1,0 +1,47 @@
+Kontrol Merkezi
+Copyright (C) 2026 Özcan Orhan Demirci
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 2 of the
+License, or (at your option) any later version. The text of version 2 is in LICENSE.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+Additional permission
+As the copyright holder, I give you permission to link this program with NVIDIA's CUDA runtime,
+OptiX, NvAPI and NVML, and to distribute the result, without those components falling under the
+GPL. You must still obey the GPL in all respects for all of the code other than those components.
+If you modify this program, you may extend this permission to your version, but you are not
+obliged to.
+
+Derived code
+- src/Rgb/CoolerMasterA1.cs and src/Rgb/SteelSeriesApex3.cs follow the protocol and parts of the
+  command sequences of OpenRGB 1.1 (CMARGBGen2A1Controller.cpp by Morgan Guimard, Fabian R and
+  Daniel Clark; SteelSeriesApexTZoneController.cpp), https://gitlab.com/CalcProgrammer1/OpenRGB,
+  GPL-2.0-or-later.
+- The AgX tone-mapping approximation in ui/salon/post.frag, fener.vert and direk.vert follows
+  Benjamin Wrensch's "Minimal AgX implementation".
+
+Bundled binaries (lib/)
+- LibreHardwareMonitorLib 0.9.6, https://github.com/LibreHardwareMonitor/LibreHardwareMonitor,
+  MPL-2.0
+- BlackSharp.Core 1.0.7, DiskInfoToolkit 1.1.2, RAMSPDToolkit-NDD 1.4.2, Florian K.
+  (https://github.com/Blacktempel), MPL-2.0
+  The source of these MPL-2.0 libraries is available at the addresses above.
+- HidSharp 2.6.4, Copyright 2010-2025 James F. Bellinger, Apache-2.0
+- System.Buffers, System.Memory, System.Numerics.Vectors, System.Runtime.CompilerServices.Unsafe,
+  Microsoft.Bcl.HashCode, Copyright Microsoft Corporation, MIT
+
+Vendored source
+- sahne/firin/third_party/xatlas, Copyright 2018-2020 Jonathan Young, MIT (LICENSE in that folder)
+
+Fonts (ui/fonts/), SIL Open Font License 1.1, licence texts beside the fonts
+- Barlow Condensed, Barlow Semi Condensed, Copyright 2017 The Barlow Project Authors
+- Big Shoulders Stencil, Copyright 2019 The Big Shoulders Project Authors
+- IBM Plex Mono, Copyright 2017 IBM Corp.
+- Instrument Serif, Copyright 2022 The Instrument Serif Project Authors
+
+Assets in the scene pack (GitHub releases)
+- Textures and models from Poly Haven (https://polyhaven.com), CC0 1.0.
